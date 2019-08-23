@@ -13,4 +13,4 @@ python main.py
 ```
 
 # License:
-See the LICENSE file in the repo for more details.
+See the [LICENSE](License.md) file in the repo for more details.
