@@ -1,2 +1,2 @@
-# quant_exp
+# Quantifying Exposure Bias
 Experiments to quantify exposure bias.
