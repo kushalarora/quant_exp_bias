@@ -65,12 +65,15 @@ class ArtificialLanguageOracle(OracleBase):
     def sample_training_set(self, num_samples, use_weighted_choice=True):
         """ TODO: Add function doc.
         """
+        # TODO: Reformat the code to move generator to the base class and derived class only overloads generate_sequence method.
+
         return [self._generate_sequence(self.grammar, use_weighted_choice) \
                     for _ in range(num_samples)]
     
     def compute_sent_probs(self, sequences):
         """ TODO: Add function doc.
         """
+        # TODO: Reformat the code to move the for loop in the base class.
         for sequence in sequences:
             parses = list(self.parser.parse(sequence.split()))
             return reduce(lambda a,b: a + b.prob(), parses, 0)/ len(parses) \
