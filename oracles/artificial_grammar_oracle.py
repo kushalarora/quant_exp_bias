@@ -17,7 +17,8 @@ class ArtificialLanguageOracle(OracleBase):
                             q1 -> 'c' q1 [0.3]
                             q1 -> '</s>' [0.1]
                          """
-    def __init__(self, grammar_string=FSA_GRAMMAR_STRING):
+    def __init__(self, 
+                 grammar_string:str=FSA_GRAMMAR_STRING):
         """ TODO: Add function doc.
         """
         OracleBase.__init__(self)
