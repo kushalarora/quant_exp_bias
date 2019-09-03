@@ -6,8 +6,9 @@ from functools import reduce
 import itertools
 import random
 
+
 class ArtificialLanguageOracle(OracleBase):
-    """ 
+    """
     SO: https://stackoverflow.com/questions/15009656/how-to-use-nltk-to-generate-sentences-from-an-induced-grammar
     """
     FSA_GRAMMAR_STRING = """
@@ -17,17 +18,18 @@ class ArtificialLanguageOracle(OracleBase):
                             q1 -> 'c' q1 [0.3]
                             q1 -> '</s>' [0.1]
                          """
-    def __init__(self, 
-                 grammar_string:str=FSA_GRAMMAR_STRING):
+
+    def __init__(self,
+                 grammar_string: str=FSA_GRAMMAR_STRING):
         """ TODO: Add function doc.
         """
         OracleBase.__init__(self)
         self.grammar = PCFG.fromstring(grammar_string)
         self.parser = InsideChartParser(self.grammar)
-    
+
     @classmethod
     def _weighted_choice(cls, productions):
-               """ TODO: Add function doc.
+        """ TODO: Add function doc.
         """
         prods_with_probs = [(prod, prod.prob()) for prod in productions]
         total = sum(prob for prod, prob in prods_with_probs)
@@ -59,7 +61,7 @@ class ArtificialLanguageOracle(OracleBase):
                 if symbol in grammar._lhs_index:
                     all_terminals = False
                     derivations = grammar._lhs_index[symbol]
-                    derivation = choice(derivations)  
+                    derivation = choice(derivations)
                     cls._rewrite_at(position, derivation.rhs(), sentence_list)
         return sentence_list
 
@@ -68,15 +70,15 @@ class ArtificialLanguageOracle(OracleBase):
         """
         # TODO: Reformat the code to move generator to the base class and derived class only overloads generate_sequence method.
 
-        return [self._generate_sequence(self.grammar, use_weighted_choice) \
-                    for _ in range(num_samples)]
-    
+        return [self._generate_sequence(self.grammar, use_weighted_choice)
+                for _ in range(num_samples)]
+
     def compute_sent_probs(self, sequences):
         """ TODO: Add function doc.
         """
         # TODO: Reformat the code to move the for loop in the base class.
+        sent_probs = []
         for sequence in sequences:
             parses = list(self.parser.parse(sequence.split()))
-            return reduce(lambda a,b: a + b.prob(), parses, 0)/ len(parses) \
-                                    if parses else 0
-
+            sent_probs.append(reduce(lambda a, b: a + b.prob(), parses, 0) / len(parses) \
+                if parses else 0)

@@ -58,6 +58,8 @@ class RNNModel(nn.Module):
             return tuple(repackage_hidden(v) for v in h)
 
     def forward(self, input, hidden):
+
+        # TODO: Maybe move this to lm_base to integrate scheduled sampling.
         emb = self.drop(self.encoder(input))
         output, hidden = self.rnn(emb, hidden)
         output = self.drop(output)
