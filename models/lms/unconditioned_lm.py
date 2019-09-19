@@ -18,7 +18,8 @@ class LMQuantExpModel(LMBase):
                  target_namespace: str = "tokens",
                  beam_size: int = None,
                  scheduled_sampling_ratio: float = 0.,
-                 use_bleu: bool = True) -> None:
+                 use_bleu: bool = True,
+                 dropout: float = None) -> None:
         
         super().__init__(vocab=vocab,
                          use_in_seq2seq_mode=False,
@@ -29,4 +30,5 @@ class LMQuantExpModel(LMBase):
                          target_namespace=target_namespace,
                          beam_size=beam_size,
                          scheduled_sampling_ratio=scheduled_sampling_ratio,
-                         use_bleu=use_bleu)
+                         use_bleu=use_bleu,
+                         dropout=dropout)

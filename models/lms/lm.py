@@ -18,6 +18,7 @@ from allennlp.modules.token_embedders import Embedding
 from allennlp.nn import util
 from allennlp.nn.beam_search import BeamSearch
 from allennlp.training.metrics import BLEU
+from allennlp.training.metrics import Perplexity
 
 
 class LMBase(Model):
@@ -80,7 +81,9 @@ class LMBase(Model):
                  beam_size: int = None,
                  scheduled_sampling_ratio: float = 0.,
                  use_bleu: bool = True,
-                
+                 dropout: float = None,
+
+
                  # This fields will only come into play in Seq2Seq mode.
                  source_embedder: TextFieldEmbedder = None,
                  encoder: Seq2SeqEncoder = None,
@@ -126,6 +129,13 @@ class LMBase(Model):
             self._encoder = encoder
 
             self._encoder_output_dim = self._encoder.get_output_dim()
+
+        self._perplexity = Perplexity()
+
+        if dropout:
+            self._dropout = torch.nn.Dropout(dropout)
+        else:
+            self._dropout = lambda x: x
 
 
         if self._seq2seq_mode:
@@ -355,7 +365,9 @@ class LMBase(Model):
 
         # Initialize target predictions with the start index.
         # shape: (batch_size,)
-        last_predictions = torch.zeros((batch_size,), dtype=torch.long).fill_(self._start_index)
+        last_predictions = torch.zeros((batch_size,), 
+                                       dtype=torch.long, 
+                                       device=torch.cuda.current_device()).fill_(self._start_index)
 
         step_logits: List[torch.Tensor] = []
         step_predictions: List[torch.Tensor] = []
@@ -402,7 +414,7 @@ class LMBase(Model):
             target_mask = util.get_text_field_mask(target_tokens)
             loss = self._get_loss(logits, targets, target_mask)
             output_dict["loss"] = loss
-
+            self._perplexity(loss)
         return output_dict
 
 
@@ -418,7 +430,12 @@ class LMBase(Model):
         else:
             batch_size = self._generation_batch_size
 
-        return torch.zeros((batch_size,), dtype=torch.long).fill_(self._start_index)
+        # Initialize target predictions with the start index.
+        # shape: (batch_size,)
+        return torch.zeros((batch_size,), 
+                                       dtype=torch.long, 
+                                       device=torch.cuda.current_device()).fill_(self._start_index)
+
 
     def _forward_beam_search(self,
                              state: Dict[str, torch.Tensor],
@@ -489,8 +506,11 @@ class LMBase(Model):
         state["decoder_hidden"] = decoder_hidden
         state["decoder_context"] = decoder_context
 
+        # add dropout
+        decoder_hidden_with_dropout = self._dropout(decoder_hidden)
+        
         # shape: (group_size, num_classes)
-        output_projections = self._output_projection_layer(decoder_hidden)
+        output_projections = self._output_projection_layer(decoder_hidden_with_dropout)
 
         return output_projections, state
 
@@ -553,6 +573,8 @@ class LMBase(Model):
     @overrides
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
         all_metrics: Dict[str, float] = {}
+        if self.training or not self._seq2seq_mode:
+            all_metrics.update({'perplexity': self._perplexity.get_metric(reset=reset)})
         if self._bleu and not self.training:
             all_metrics.update(self._bleu.get_metric(reset=reset))
         return all_metrics
