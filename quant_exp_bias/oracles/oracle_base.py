@@ -1,5 +1,8 @@
-class OracleBase(object):
-    def __init__(self):
+from allennlp.common.registrable import Registrable
+
+class Oracle(Registrable):
+    def __init__(self, 
+                 num_samples : int):
         pass
 
     def sample_training_set(self):

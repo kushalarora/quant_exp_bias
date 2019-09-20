@@ -1,4 +1,4 @@
-from .oracle_base import OracleBase
+from quant_exp_bias.oracles.oracle_base import Oracle
 from nltk import PCFG
 from nltk.grammar import Nonterminal
 from nltk.parse.pchart import InsideChartParser
@@ -7,29 +7,35 @@ import itertools
 import random
 
 
-class ArtificialLanguageOracle(OracleBase):
+@Oracle.register('artificial_lang_oracle')
+class ArtificialLanguageOracle(Oracle):
     """
+    TODO (Kushal): Expand class doc.
     SO: https://stackoverflow.com/questions/15009656/how-to-use-nltk-to-generate-sentences-from-an-induced-grammar
     """
     FSA_GRAMMAR_STRING = """
                             q0 -> '<s>' q1 [1]
-                            q1 -> 'a' q1 [0.3]
-                            q1 -> 'b' q1 [0.3]
-                            q1 -> 'c' q1 [0.3]
-                            q1 -> '</s>' [0.1]
+                            q1 -> 'a' q1 [0.32]
+                            q1 -> 'b' q1 [0.32]
+                            q1 -> 'c' q1 [0.32]
+                            q1 -> '</s>' [0.04]
                          """
 
     def __init__(self,
-                 grammar_string: str=FSA_GRAMMAR_STRING):
-        """ TODO: Add function doc.
+                 num_samples : int,
+                 grammar_string: str=FSA_GRAMMAR_STRING,
+                 use_weighted_choice: bool = True):
+        """ TODO (Kushal): Add function doc.
         """
-        OracleBase.__init__(self)
-        self.grammar = PCFG.fromstring(grammar_string)
-        self.parser = InsideChartParser(self.grammar)
+        super(Oracle, self).__init__()
+        self._grammar = PCFG.fromstring(grammar_string)
+        self._parser = InsideChartParser(self._grammar)
+        self._use_weighted_choice = use_weighted_choice
+        self._num_samples = num_samples
 
     @classmethod
     def _weighted_choice(cls, productions):
-        """ TODO: Add function doc.
+        """ TODO (Kushal): Add function doc.
         """
         prods_with_probs = [(prod, prod.prob()) for prod in productions]
         total = sum(prob for prod, prob in prods_with_probs)
@@ -43,42 +49,39 @@ class ArtificialLanguageOracle(OracleBase):
 
     @classmethod
     def _rewrite_at(cls, index, replacements, the_list):
-        """ TODO: Add function doc.
+        """ TODO (Kushal): Add function doc.
         """
         del the_list[index]
         the_list[index:index] = replacements
 
-    @classmethod
-    def _generate_sequence(cls, grammar, use_weighted_choice=True):
-        """ TODO: Add function doc.
+    def _generate_sequence(self):
+        """ TODO (Kushal): Add function doc.
         """
-        sentence_list = [grammar.start()]
+        sentence_list = [self._grammar.start()]
         all_terminals = False
-        choice = cls._weighted_choice if use_weighted_choice else random.choice
+        choice = self._weighted_choice if self._use_weighted_choice else random.choice
         while not all_terminals:
             all_terminals = True
             for position, symbol in enumerate(sentence_list):
-                if symbol in grammar._lhs_index:
+                if symbol in self._grammar._lhs_index:
                     all_terminals = False
-                    derivations = grammar._lhs_index[symbol]
+                    derivations = self._grammar._lhs_index[symbol]
                     derivation = choice(derivations)
-                    cls._rewrite_at(position, derivation.rhs(), sentence_list)
-        return sentence_list
+                    self._rewrite_at(position, derivation.rhs(), sentence_list)
+        return ''.join(sentence_list)
 
-    def sample_training_set(self, num_samples, use_weighted_choice=True):
-        """ TODO: Add function doc.
+    def sample_training_set(self):
+        """ TODO (Kushal): Add function doc.
         """
-        # TODO: Reformat the code to move generator to the base class and derived class only overloads generate_sequence method.
-
-        return [self._generate_sequence(self.grammar, use_weighted_choice)
-                for _ in range(num_samples)]
+        # TODO (Kushal): Reformat the code to move generator to the base class and derived class only overloads generate_sequence method.
+        return [self._generate_sequence() for _ in range(self._num_samples)]
 
     def compute_sent_probs(self, sequences):
-        """ TODO: Add function doc.
+        """ TODO (Kushal): Add function doc.
         """
-        # TODO: Reformat the code to move the for loop in the base class.
+        # TODO (Kushal): Reformat the code to move the for loop in the base class.
         sent_probs = []
         for sequence in sequences:
-            parses = list(self.parser.parse(sequence.split()))
+            parses = list(self._parser.parse(sequence.split()))
             sent_probs.append(reduce(lambda a, b: a + b.prob(), parses, 0) / len(parses) \
                 if parses else 0)
