@@ -7,16 +7,16 @@
         "namespace": "target_tokens"
       },
     },
-    "start_tokens": ["<S>"],
-    "end_tokens": ["</S>"]
+//    "start_tokens": ["<S>"],
+//    "end_tokens": ["</S>"]
   },
   "train_data_path": std.extVar("ARTIFICIAL_GRAMMAR_TRAIN"),
   "validation_data_path": std.extVar("ARTIFICIAL_GRAMMAR_DEV"), 
   "model": {
     "type": "quant_exp_lm",
     "target_namespace": "target_tokens",
-    "target_output_dim": 30, 
-    "target_embedding_dim": 30,
+    "target_output_dim": 300, 
+    "target_embedding_dim": 300,
     "generation_batch_size": 32, 
     "max_decoding_steps": 400,
     "beam_size": 1,
@@ -36,9 +36,10 @@
     "cuda_device" : 0,
     "optimizer": {
       "type": "adam",
-      "lr": 0.001
+      "lr": 0.01
     },
-    "patience": 5,
+    //"patience": 5,
+    "should_log_learning_rate": true,
     "log_batch_size_period": 50
   },
 }

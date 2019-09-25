@@ -4,6 +4,8 @@ from allennlp.models.model import Model
 from allennlp.modules import Attention, TextFieldEmbedder, Seq2SeqEncoder
 from allennlp.modules.similarity_functions import SimilarityFunction
 
+from quant_exp_bias.oracles.oracle_base import Oracle
+
 @Model.register('quant_exp_lm')
 class LMQuantExpModel(LMBase):
     """
@@ -11,6 +13,7 @@ class LMQuantExpModel(LMBase):
     """
     def __init__(self,
                  vocab: Vocabulary,
+                 oracle: Oracle,
                  max_decoding_steps: int,
                  target_embedding_dim: int,
                  target_output_dim: int,
@@ -22,6 +25,7 @@ class LMQuantExpModel(LMBase):
                  dropout: float = None) -> None:
         
         super().__init__(vocab=vocab,
+                         oracle=oracle,
                          use_in_seq2seq_mode=False,
                          max_decoding_steps=max_decoding_steps,
                          target_embedding_dim=target_embedding_dim,

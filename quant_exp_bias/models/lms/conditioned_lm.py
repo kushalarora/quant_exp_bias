@@ -6,6 +6,8 @@ from allennlp.models.model import Model
 from allennlp.modules import Attention, TextFieldEmbedder, Seq2SeqEncoder
 from allennlp.modules.similarity_functions import SimilarityFunction
 
+from quant_exp_bias.oracles.oracle_base import Oracle
+
 @Model.register('quant_exp_seq2seq')
 class Seq2SeqQuantExpModel(LMBase):
     """
@@ -13,6 +15,7 @@ class Seq2SeqQuantExpModel(LMBase):
     """
     def __init__(self,
                  vocab: Vocabulary,
+                 oracle: Oracle,
                  max_decoding_steps: int,
                  target_embedding_dim: int,
                  target_namespace: str = "tokens",
@@ -27,6 +30,7 @@ class Seq2SeqQuantExpModel(LMBase):
                  attention_function: SimilarityFunction = None) -> None:
         
         super().__init__(vocab=vocab,
+                         oracle=oracle,
                          use_in_seq2seq_mode=True,
                          max_decoding_steps=max_decoding_steps,
                          generation_batch_size=10,

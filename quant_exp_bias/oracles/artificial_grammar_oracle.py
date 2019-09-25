@@ -14,11 +14,11 @@ class ArtificialLanguageOracle(Oracle):
     SO: https://stackoverflow.com/questions/15009656/how-to-use-nltk-to-generate-sentences-from-an-induced-grammar
     """
     FSA_GRAMMAR_STRING = """
-                            q0 -> '<s>' q1 [1]
-                            q1 -> 'a' q1 [0.32]
-                            q1 -> 'b' q1 [0.32]
-                            q1 -> 'c' q1 [0.32]
-                            q1 -> '</s>' [0.04]
+                            q0 -> 'S' q1 [0.9900] | 'a' q1 [0.0025] | 'b' q1 [0.0025] | 'c' q1 [0.0025] | 'E' q1 [0.0025]
+                            q1 -> 'S' q1 [0.0025] | 'a' q1 [0.3000] | 'b' q1 [0.3000] | 'c' q1 [0.3000] | 'E' q1 [0.0025]
+                            q1 -> 'S' q2 [0.0025] | 'a' q2 [0.0300] | 'b' q2 [0.0300] | 'c' q2 [0.0300] | 'E' q2 [0.0025]
+                            q2 -> 'S' [0.0025] | 'a' [0.0025] | 'b' [0.0025] | 'c' [0.0025] | 'E' [0.9900]
+
                          """
 
     def __init__(self,
@@ -68,7 +68,7 @@ class ArtificialLanguageOracle(Oracle):
                     derivations = self._grammar._lhs_index[symbol]
                     derivation = choice(derivations)
                     self._rewrite_at(position, derivation.rhs(), sentence_list)
-        return ''.join(sentence_list)
+        return ' '.join(sentence_list)
 
     def sample_training_set(self):
         """ TODO (Kushal): Add function doc.
@@ -82,6 +82,14 @@ class ArtificialLanguageOracle(Oracle):
         # TODO (Kushal): Reformat the code to move the for loop in the base class.
         sent_probs = []
         for sequence in sequences:
-            parses = list(self._parser.parse(sequence.split()))
-            sent_probs.append(reduce(lambda a, b: a + b.prob(), parses, 0) / len(parses) \
-                if parses else 0)
+            sequence = ['S'] + sequence + ['E']
+            probs = 1e-10
+            try:
+                parses = list(self._parser.parse(sequence))
+                if parses and len(parses) > 0:
+                    probs += reduce(lambda a, b: a + b.prob(), parses, 0) / len(parses)/ len(sequence)
+            except Exception as e:
+                pass
+            
+            sent_probs.append(probs)
+        return sent_probs

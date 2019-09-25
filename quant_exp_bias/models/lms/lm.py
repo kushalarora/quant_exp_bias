@@ -1,11 +1,15 @@
 from typing import Dict, List, Tuple
 
+import logging
+
 import numpy
 from overrides import overrides
 import torch
 import torch.nn.functional as F
 from torch.nn.modules.linear import Linear
 from torch.nn.modules.rnn import LSTMCell
+from torch.distributions import Categorical
+
 
 from allennlp.common.checks import ConfigurationError
 from allennlp.common.util import START_SYMBOL, END_SYMBOL
@@ -20,6 +24,11 @@ from allennlp.nn.beam_search import BeamSearch
 from allennlp.training.metrics import BLEU
 from allennlp.training.metrics import Perplexity
 
+from quant_exp_bias.metrics.exposure_bias import ExposureBias
+
+from quant_exp_bias.oracles.oracle_base import Oracle
+
+logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 class LMBase(Model):
     """
@@ -72,6 +81,7 @@ class LMBase(Model):
 
     def __init__(self,
                  vocab: Vocabulary,
+                 oracle: Oracle,
                  use_in_seq2seq_mode: bool,
                  max_decoding_steps: int,
                  generation_batch_size: int,
@@ -82,8 +92,11 @@ class LMBase(Model):
                  scheduled_sampling_ratio: float = 0.,
                  use_bleu: bool = True,
                  dropout: float = None,
-
-
+                 sample_from_categorical: bool = True, 
+#                 start_index: str = '<S>',
+#                 end_index: str = '</S>',
+                 start_index: str = 'S',
+                 end_index: str = 'E',
                  # This fields will only come into play in Seq2Seq mode.
                  source_embedder: TextFieldEmbedder = None,
                  encoder: Seq2SeqEncoder = None,
@@ -98,8 +111,11 @@ class LMBase(Model):
 
         # We need the start symbol to provide as the input at the first timestep of decoding, and
         # end symbol as a way to indicate the end of the decoded sequence.
-        self._start_index = self.vocab.get_token_index(START_SYMBOL, self._target_namespace)
-        self._end_index = self.vocab.get_token_index(END_SYMBOL, self._target_namespace)
+        self._start_index = self.vocab.get_token_index(start_index, self._target_namespace)
+        self._end_index = self.vocab.get_token_index(end_index, self._target_namespace)
+        
+        # self._start_index = self.vocab.get_token_index(START_SYMBOL, self._target_namespace)
+        # self._end_index = self.vocab.get_token_index(END_SYMBOL, self._target_namespace)
 
         if use_bleu:
             pad_index = self.vocab.get_token_index(self.vocab._padding_token, self._target_namespace)  # pylint: disable=protected-access
@@ -118,6 +134,8 @@ class LMBase(Model):
         # Dense embedding of vocab words in the target space.
         self._target_embedder = Embedding(num_classes, target_embedding_dim)
 
+        self._sample_from_categorical = sample_from_categorical
+
         if self._seq2seq_mode:
 
             self._seq2seq_mode = use_in_seq2seq_mode
@@ -131,6 +149,8 @@ class LMBase(Model):
             self._encoder_output_dim = self._encoder.get_output_dim()
 
         self._perplexity = Perplexity()
+
+        self._exposure_bias = ExposureBias(oracle)
 
         if dropout:
             self._dropout = torch.nn.Dropout(dropout)
@@ -273,6 +293,30 @@ class LMBase(Model):
 
         return output_dict
 
+
+    def _decode_tokens(self, predicted_indices: torch.Tensor, truncate=False) -> List[str]:
+        if not isinstance(predicted_indices, numpy.ndarray):
+            predicted_indices = predicted_indices.detach().cpu().numpy()
+        all_predicted_tokens = []
+        for indices in predicted_indices:
+            # Beam search gives us the top k results for each source sentence in the batch
+            # but we just want the single best.
+            if len(indices.shape) > 1:
+                indices = indices[0]
+            indices = list(indices)
+            # Collect indices till the first end_symbol
+
+            if truncate and self._end_index in indices:
+                indices = indices[:indices.index(self._end_index)]
+            predicted_tokens = [self.vocab.get_token_from_index(x, namespace=self._target_namespace)
+                                for x in indices]
+            # if not self.training:
+            #     print(' '.join(predicted_tokens))
+
+            all_predicted_tokens.append(predicted_tokens)
+        return all_predicted_tokens
+
+
     @overrides
     def decode(self, output_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
@@ -286,21 +330,7 @@ class LMBase(Model):
         corresponding tokens, and adds a field called ``predicted_tokens`` to the ``output_dict``.
         """
         predicted_indices = output_dict["predictions"]
-        if not isinstance(predicted_indices, numpy.ndarray):
-            predicted_indices = predicted_indices.detach().cpu().numpy()
-        all_predicted_tokens = []
-        for indices in predicted_indices:
-            # Beam search gives us the top k results for each source sentence in the batch
-            # but we just want the single best.
-            if len(indices.shape) > 1:
-                indices = indices[0]
-            indices = list(indices)
-            # Collect indices till the first end_symbol
-            if self._end_index in indices:
-                indices = indices[:indices.index(self._end_index)]
-            predicted_tokens = [self.vocab.get_token_from_index(x, namespace=self._target_namespace)
-                                for x in indices]
-            all_predicted_tokens.append(predicted_tokens)
+        all_predicted_tokens = self._decode_tokens(predicted_indices, True)
         output_dict["predicted_tokens"] = all_predicted_tokens
         return output_dict
 
@@ -371,6 +401,7 @@ class LMBase(Model):
 
         step_logits: List[torch.Tensor] = []
         step_predictions: List[torch.Tensor] = []
+        step_prediction_loss: List[torch.Tensor] = []
         for timestep in range(num_decoding_steps):
             if self.training and torch.rand(1).item() < self._scheduled_sampling_ratio:
                 # Use gold tokens at test time and at a rate of 1 - _scheduled_sampling_ratio
@@ -394,22 +425,38 @@ class LMBase(Model):
             class_probabilities = F.softmax(output_projections, dim=-1)
 
             # shape (predicted_classes): (batch_size,)
-            _, predicted_classes = torch.max(class_probabilities, 1)
 
+            if self._sample_from_categorical:
+                predicted_classes = torch.multinomial(class_probabilities, 1)
+                prediction_loss = torch.gather(class_probabilities, 1, predicted_classes)
+                predicted_classes, prediction_loss = predicted_classes.squeeze(1), prediction_loss.squeeze(1)
+            else:
+                prediction_loss, predicted_classes = torch.max(class_probabilities, 1)
             # shape (predicted_classes): (batch_size,)
             last_predictions = predicted_classes
 
             step_predictions.append(last_predictions.unsqueeze(1))
+            step_prediction_loss.append(prediction_loss.unsqueeze(1))
 
         # shape: (batch_size, num_decoding_steps)
         predictions = torch.cat(step_predictions, 1)
+        prediction_mask = util.get_text_field_mask({"tokens": predictions})
 
-        output_dict = {"predictions": predictions}
+        prediction_loss = torch.cat(step_prediction_loss, 1)
+        prediction_loss *= prediction_mask.float()
+
+        output_dict = {"predictions": predictions,
+                       "prediction_loss": prediction_loss}
+ 
+        predicted_tokens = self._decode_tokens(predictions, truncate=True)
+    
+        if not self.training:
+            self._exposure_bias(prediction_loss.data, predicted_tokens)
 
         if target_tokens:
             # shape: (batch_size, num_decoding_steps, num_classes)
             logits = torch.cat(step_logits, 1)
-
+        
             # Compute loss.
             target_mask = util.get_text_field_mask(target_tokens)
             loss = self._get_loss(logits, targets, target_mask)
@@ -577,4 +624,6 @@ class LMBase(Model):
             all_metrics.update({'perplexity': self._perplexity.get_metric(reset=reset)})
         if self._bleu and not self.training:
             all_metrics.update(self._bleu.get_metric(reset=reset))
+        if not self.training:
+            all_metrics.update({'exposure_bias': self._exposure_bias.get_metric(reset=reset)})
         return all_metrics
