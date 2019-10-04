@@ -1,4 +1,5 @@
 from quant_exp_bias.oracles.oracle_base import Oracle
+from multiprocessing.dummy import Pool as ThreadPool
 from nltk import PCFG
 from nltk.grammar import Nonterminal
 from nltk.parse.pchart import InsideChartParser
@@ -24,7 +25,9 @@ class ArtificialLanguageOracle(Oracle):
     def __init__(self,
                  num_samples : int,
                  grammar_string: str=FSA_GRAMMAR_STRING,
-                 use_weighted_choice: bool = True):
+                 use_weighted_choice: bool = True,
+                 parallelize=True, 
+                 num_threads=32):
         """ TODO (Kushal): Add function doc.
         """
         super(Oracle, self).__init__()
@@ -32,6 +35,9 @@ class ArtificialLanguageOracle(Oracle):
         self._parser = InsideChartParser(self._grammar)
         self._use_weighted_choice = use_weighted_choice
         self._num_samples = num_samples
+        self._parallelize = parallelize
+        if parallelize:
+            self._thread_pool = ThreadPool(num_threads)
 
     @classmethod
     def _weighted_choice(cls, productions):
@@ -74,6 +80,9 @@ class ArtificialLanguageOracle(Oracle):
         """ TODO (Kushal): Add function doc.
         """
         # TODO (Kushal): Reformat the code to move generator to the base class and derived class only overloads generate_sequence method.
+        if self._parallelize:
+            results = [self._thread_pool.apply_async(self._generate_sequence, ()) for _ in range(self._num_samples)]
+            return [res.get() for res in results]
         return [self._generate_sequence() for _ in range(self._num_samples)]
 
     def compute_sent_probs(self, sequences):
@@ -81,15 +90,20 @@ class ArtificialLanguageOracle(Oracle):
         """
         # TODO (Kushal): Reformat the code to move the for loop in the base class.
         sent_probs = []
-        for sequence in sequences:
+        if self._parallelize:
+            sent_probs = self._thread_pool.map(self._compute_one_sent_prob, sequences)
+        else:
+            for sequence in sequences:
+                sent_probs.append(self._compute_one_sent_prob(sequence))
+        return sent_probs
+
+    def _compute_one_sent_prob(self, sequence):
             sequence = ['S'] + sequence + ['E']
-            probs = 1e-10
+            probs = 1e-30
             try:
                 parses = list(self._parser.parse(sequence))
                 if parses and len(parses) > 0:
-                    probs += reduce(lambda a, b: a + b.prob(), parses, 0) / len(parses)/ len(sequence)
+                    probs += reduce(lambda a, b: a + b.prob(), parses, 0) / len(parses)
             except Exception as e:
                 pass
-            
-            sent_probs.append(probs)
-        return sent_probs
+            return probs

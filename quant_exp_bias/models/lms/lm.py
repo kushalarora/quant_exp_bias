@@ -20,12 +20,11 @@ from allennlp.modules.similarity_functions import SimilarityFunction
 from allennlp.models.model import Model
 from allennlp.modules.token_embedders import Embedding
 from allennlp.nn import util
-from allennlp.nn.beam_search import BeamSearch
 from allennlp.training.metrics import BLEU
 from allennlp.training.metrics import Perplexity
 
 from quant_exp_bias.metrics.exposure_bias import ExposureBias
-
+from quant_exp_bias.models.sampled_beam_search import SampledBeamSearch
 from quant_exp_bias.oracles.oracle_base import Oracle
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -127,7 +126,7 @@ class LMBase(Model):
         beam_size = beam_size or 1
         self._max_decoding_steps = max_decoding_steps
         self._generation_batch_size = generation_batch_size
-        self._beam_search = BeamSearch(self._end_index, max_steps=max_decoding_steps, beam_size=beam_size)
+        self._beam_search = SampledBeamSearch(self._end_index, max_steps=max_decoding_steps, beam_size=beam_size, sampled=True)
 
         num_classes = self.vocab.get_vocab_size(self._target_namespace)
 
@@ -263,36 +262,44 @@ class LMBase(Model):
         -------
         Dict[str, torch.Tensor]
         """
-
+        
+        output_dict:  Dict[str, torch.Tensor] = {}
+        state:  Dict[str, torch.Tensor] = {}
+        
         if self._seq2seq_mode:
-            state = self._encode(source_tokens)
+            state.update(self._encode(source_tokens))
+            state = self._init_decoder_state_from_encoder(state)
 
         if target_tokens:
-            state = self._init_decoder_state_from_encoder(state) if self._seq2seq_mode else {}
-
             # The `_forward_loop` decodes the input sequence and computes the loss during training
             # and validation.
-            output_dict = self._forward_loop(state, target_tokens)
-        else:
-            output_dict = {}
+            output_dict.update(self._forward_loop(state, target_tokens))
+
 
         if not self.training:
-            state = self._init_decoder_state_from_encoder(state) if self._seq2seq_mode else {}
-
-            start_predictions = self._get_start_predictions(state, target_tokens)
-
-            predictions = self._forward_beam_search(state, start_predictions)
-            output_dict.update(predictions)
+            output_dict.update(self._forward_beam_search(state, target_tokens))
+ 
             if target_tokens and self._bleu:
                 # shape: (batch_size, beam_size, max_sequence_length)
                 top_k_predictions = output_dict["predictions"]
+                
                 # shape: (batch_size, max_predicted_sequence_length)
                 best_predictions = top_k_predictions[:, 0, :]
                 
                 self._bleu(best_predictions, target_tokens["tokens"])
 
-        return output_dict
+            if self._exposure_bias:
+                # shape: (batch_size, beam_size, max_sequence_length)
+                top_k_predictions = output_dict["predictions"]
+                top_k_log_probabilities = output_dict["class_log_probabilities"]
+                # shape: (batch_size, max_predicted_sequence_length)
+                best_predictions = top_k_predictions[:, 0, :]
 
+                prediction_loss = top_k_log_probabilities[:,0]
+                predicted_tokens = self._decode_tokens(best_predictions, truncate=True)
+                
+                self._exposure_bias(prediction_loss.data, predicted_tokens)
+        return output_dict
 
     def _decode_tokens(self, predicted_indices: torch.Tensor, truncate=False) -> List[str]:
         if not isinstance(predicted_indices, numpy.ndarray):
@@ -310,8 +317,8 @@ class LMBase(Model):
                 indices = indices[:indices.index(self._end_index)]
             predicted_tokens = [self.vocab.get_token_from_index(x, namespace=self._target_namespace)
                                 for x in indices]
-            # if not self.training:
-            #     print(' '.join(predicted_tokens))
+            if torch.rand(1).item() < 0.1 and not self.training:
+                print(' '.join(predicted_tokens))
 
             all_predicted_tokens.append(predicted_tokens)
         return all_predicted_tokens
@@ -447,12 +454,7 @@ class LMBase(Model):
 
         output_dict = {"predictions": predictions,
                        "prediction_loss": prediction_loss}
- 
-        predicted_tokens = self._decode_tokens(predictions, truncate=True)
-    
-        if not self.training:
-            self._exposure_bias(prediction_loss.data, predicted_tokens)
-
+     
         if target_tokens:
             # shape: (batch_size, num_decoding_steps, num_classes)
             logits = torch.cat(step_logits, 1)
@@ -486,8 +488,12 @@ class LMBase(Model):
 
     def _forward_beam_search(self,
                              state: Dict[str, torch.Tensor],
-                             start_predictions: torch.LongTensor, ) -> Dict[str, torch.Tensor]:
+                             target_tokens: torch.LongTensor = None) -> Dict[str, torch.Tensor]:
         """Make forward pass during prediction using a beam search."""
+
+        # Initialize target predictions with the start index.
+        # shape: (batch_size,)
+        start_predictions = self._get_start_predictions(state, target_tokens)
 
         # shape (all_top_k_predictions): (batch_size, beam_size, num_decoding_steps)
         # shape (log_probabilities): (batch_size, beam_size)

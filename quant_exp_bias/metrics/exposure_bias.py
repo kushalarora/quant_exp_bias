@@ -7,7 +7,6 @@ from quant_exp_bias.oracles.oracle_base import Oracle
 
 import torch
 import numpy 
-import itertools
 from functools import reduce
 
 
@@ -38,9 +37,9 @@ class ExposureBias(Metric):
         batch_size = len(predictions)
         oracle_probs = self._oracle.compute_sent_probs(predictions)
         model_probs = []
+
         for i  in range(len(predictions)):
-            model_log_prob_i = reduce(lambda a, b: a + torch.log(b + 1e-20), 
-                                    predictions_losses[i][: len(predictions[i])], predictions_losses.new_tensor([1e-10]))/max(1, len(predictions[i]))
+            model_log_prob_i = predictions_losses[i]
             model_prob_i = torch.exp(model_log_prob_i)
             model_probs.append(model_prob_i)
 
@@ -49,6 +48,8 @@ class ExposureBias(Metric):
             total_value += torch.log(model_probs[i]/oracle_probs[i]).item()
 
             if  numpy.isneginf(total_value) or numpy.isposinf(total_value):
+                # TODO (Kushal): Remove this import pdb and replace
+                # with a warning. 
                 import pdb;pdb.set_trace()
                 pass
 

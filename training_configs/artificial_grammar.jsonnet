@@ -18,7 +18,7 @@
     "target_output_dim": 300, 
     "target_embedding_dim": 300,
     "generation_batch_size": 32, 
-    "max_decoding_steps": 400,
+    "max_decoding_steps": 50,
     "beam_size": 1,
     "use_bleu" : false,
     "dropout": 0.5,
