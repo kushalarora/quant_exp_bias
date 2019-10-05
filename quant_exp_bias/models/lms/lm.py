@@ -126,6 +126,7 @@ class LMBase(Model):
         beam_size = beam_size or 1
         self._max_decoding_steps = max_decoding_steps
         self._generation_batch_size = generation_batch_size
+        # TODO(Kushal): Pass in the arguments for sampled. Also, make sure you do not sample in case of Seq2Seq models.
         self._beam_search = SampledBeamSearch(self._end_index, max_steps=max_decoding_steps, beam_size=beam_size, sampled=True)
 
         num_classes = self.vocab.get_vocab_size(self._target_namespace)
@@ -243,7 +244,10 @@ class LMBase(Model):
     @overrides
     def forward(self,  # type: ignore
                 target_tokens: Dict[str, torch.LongTensor] = None,
-                source_tokens: Dict[str, torch.LongTensor] = None) -> Dict[str, torch.Tensor]:
+                source_tokens: Dict[str, torch.LongTensor] = None,
+                compute_exposure_bias: bool = False,
+                generation_batch_size:int = 1024,
+                max_decoding_step: int = None) -> Dict[str, torch.Tensor]:
         # pylint: disable=arguments-differ
         """
         Make foward pass with decoder logic for producing the entire target sequence.
@@ -277,18 +281,22 @@ class LMBase(Model):
 
 
         if not self.training:
-            output_dict.update(self._forward_beam_search(state, target_tokens))
- 
             if target_tokens and self._bleu:
+                output_dict.update(self._forward_beam_search(state, 
+                                            target_tokens=target_tokens))
+
                 # shape: (batch_size, beam_size, max_sequence_length)
                 top_k_predictions = output_dict["predictions"]
-                
                 # shape: (batch_size, max_predicted_sequence_length)
                 best_predictions = top_k_predictions[:, 0, :]
                 
                 self._bleu(best_predictions, target_tokens["tokens"])
 
-            if self._exposure_bias:
+            
+            if compute_exposure_bias and self._exposure_bias:
+                output_dict.update(self._forward_beam_search(state, 
+                                            generation_batch_size=generation_batch_size))
+ 
                 # shape: (batch_size, beam_size, max_sequence_length)
                 top_k_predictions = output_dict["predictions"]
                 top_k_log_probabilities = output_dict["class_log_probabilities"]
@@ -299,6 +307,9 @@ class LMBase(Model):
                 predicted_tokens = self._decode_tokens(best_predictions, truncate=True)
                 
                 self._exposure_bias(prediction_loss.data, predicted_tokens)
+
+                output_dict['predictions'] = predicted_tokens
+                output_dict['prediction_loss'] = prediction_loss
         return output_dict
 
     def _decode_tokens(self, predicted_indices: torch.Tensor, truncate=False) -> List[str]:
@@ -317,9 +328,7 @@ class LMBase(Model):
                 indices = indices[:indices.index(self._end_index)]
             predicted_tokens = [self.vocab.get_token_from_index(x, namespace=self._target_namespace)
                                 for x in indices]
-            if torch.rand(1).item() < 0.1 and not self.training:
-                print(' '.join(predicted_tokens))
-
+            
             all_predicted_tokens.append(predicted_tokens)
         return all_predicted_tokens
 
@@ -469,7 +478,8 @@ class LMBase(Model):
 
     def _get_start_predictions(self, 
               state: Dict[str, torch.Tensor], 
-              target_tokens: torch.LongTensor = None) ->  torch.LongTensor:
+              target_tokens: torch.LongTensor = None,
+              generation_batch_size:int = None) ->  torch.LongTensor:
 
         if self._seq2seq_mode:
            source_mask = state["source_mask"]
@@ -477,7 +487,7 @@ class LMBase(Model):
         elif target_tokens:
             batch_size = target_tokens["tokens"].size(0)
         else:
-            batch_size = self._generation_batch_size
+            batch_size = generation_batch_size
 
         # Initialize target predictions with the start index.
         # shape: (batch_size,)
@@ -488,12 +498,15 @@ class LMBase(Model):
 
     def _forward_beam_search(self,
                              state: Dict[str, torch.Tensor],
-                             target_tokens: torch.LongTensor = None) -> Dict[str, torch.Tensor]:
+                             target_tokens: torch.LongTensor = None,
+                             generation_batch_size:int = None) -> Dict[str, torch.Tensor]:
         """Make forward pass during prediction using a beam search."""
 
         # Initialize target predictions with the start index.
         # shape: (batch_size,)
-        start_predictions = self._get_start_predictions(state, target_tokens)
+        start_predictions = self._get_start_predictions(state, 
+                                                        target_tokens, 
+                                                        generation_batch_size)
 
         # shape (all_top_k_predictions): (batch_size, beam_size, num_decoding_steps)
         # shape (log_probabilities): (batch_size, beam_size)
@@ -624,12 +637,15 @@ class LMBase(Model):
         return util.sequence_cross_entropy_with_logits(logits, relevant_targets, relevant_mask)
 
     @overrides
-    def get_metrics(self, reset: bool = False) -> Dict[str, float]:
+    def get_metrics(self, reset: bool = False, get_exposure_bias: bool = False) -> Dict[str, float]:
         all_metrics: Dict[str, float] = {}
+        if get_exposure_bias and self._exposure_bias and not self.training:
+            all_metrics.update({'exposure_bias': self._exposure_bias.get_metric(reset=reset)})
+            return all_metrics
+
         if self.training or not self._seq2seq_mode:
             all_metrics.update({'perplexity': self._perplexity.get_metric(reset=reset)})
         if self._bleu and not self.training:
             all_metrics.update(self._bleu.get_metric(reset=reset))
-        if not self.training:
-            all_metrics.update({'exposure_bias': self._exposure_bias.get_metric(reset=reset)})
+
         return all_metrics

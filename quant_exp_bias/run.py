@@ -14,9 +14,13 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s
 
 from allennlp.commands import main  # pylint: disable=wrong-import-position
 from quant_exp_bias.commands.sample_oracle import SampleOracle
+from quant_exp_bias.commands.quantify_exposure_bias import QuantifyExposureBias
 
 def run():
-    main(prog="allennlp", subcommand_overrides={'sample-oracle': SampleOracle()})
+    main(prog="allennlp", subcommand_overrides={
+                                'sample-oracle': SampleOracle(),
+                                'quantify-exposure-bias': QuantifyExposureBias()
+                            })
 
 if __name__ == "__main__":
     run()

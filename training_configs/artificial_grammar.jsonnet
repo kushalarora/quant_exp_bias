@@ -38,7 +38,7 @@
       "type": "adam",
       "lr": 0.01
     },
-    //"patience": 5,
+    "patience": 5,
     "should_log_learning_rate": true,
     "log_batch_size_period": 50
   },

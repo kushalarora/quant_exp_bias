@@ -40,7 +40,7 @@ class SampledBeamSearch:
                  per_node_beam_size: int = None, 
                  sampled: int = False) -> None:
         self._end_index = end_index
-        self.max_steps = max_steps
+        self.global_max_steps = max_steps
         self.beam_size = beam_size
         self.per_node_beam_size = per_node_beam_size or beam_size
         self._sampled = sampled
@@ -48,7 +48,8 @@ class SampledBeamSearch:
     def search(self,
                start_predictions: torch.Tensor,
                start_state: StateType,
-               step: StepFunctionType) -> Tuple[torch.Tensor, torch.Tensor]:
+               step: StepFunctionType,
+               max_steps=None) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Given a starting state and a step function, apply beam search to find the
         most likely target sequences.
@@ -160,7 +161,8 @@ class SampledBeamSearch:
                     expand(batch_size, self.beam_size, *last_dims).\
                     reshape(batch_size * self.beam_size, *last_dims)
 
-        for timestep in range(self.max_steps - 1):
+        max_steps = max_steps or self.global_max_steps
+        for timestep in range(max_steps - 1):
             # shape: (batch_size * beam_size,)
             last_predictions = predictions[-1].reshape(batch_size * self.beam_size)
 
