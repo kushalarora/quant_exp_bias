@@ -22,7 +22,9 @@ class LMQuantExpModel(LMBase):
                  beam_size: int = None,
                  scheduled_sampling_ratio: float = 0.,
                  use_bleu: bool = True,
-                 dropout: float = None) -> None:
+                 dropout: float = None,
+                 start_token: str = '<S>',
+                 end_token: str = '</S>') -> None:
         
         super().__init__(vocab=vocab,
                          oracle=oracle,
@@ -35,4 +37,6 @@ class LMQuantExpModel(LMBase):
                          beam_size=beam_size,
                          scheduled_sampling_ratio=scheduled_sampling_ratio,
                          use_bleu=use_bleu,
-                         dropout=dropout)
+                         dropout=dropout,
+                         start_token=start_token,
+                         end_token=end_token)

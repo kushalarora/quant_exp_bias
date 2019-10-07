@@ -94,8 +94,9 @@ class LMBase(Model):
                  sample_from_categorical: bool = True, 
 #                 start_index: str = '<S>',
 #                 end_index: str = '</S>',
-                 start_index: str = 'S',
-                 end_index: str = 'E',
+                 start_token: str = 'S',
+                 end_token: str = 'E',
+                 
                  # This fields will only come into play in Seq2Seq mode.
                  source_embedder: TextFieldEmbedder = None,
                  encoder: Seq2SeqEncoder = None,
@@ -110,8 +111,8 @@ class LMBase(Model):
 
         # We need the start symbol to provide as the input at the first timestep of decoding, and
         # end symbol as a way to indicate the end of the decoded sequence.
-        self._start_index = self.vocab.get_token_index(start_index, self._target_namespace)
-        self._end_index = self.vocab.get_token_index(end_index, self._target_namespace)
+        self._start_index = self.vocab.get_token_index(start_token, self._target_namespace)
+        self._end_index = self.vocab.get_token_index(end_token, self._target_namespace)
         
         # self._start_index = self.vocab.get_token_index(START_SYMBOL, self._target_namespace)
         # self._end_index = self.vocab.get_token_index(END_SYMBOL, self._target_namespace)

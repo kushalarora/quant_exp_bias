@@ -98,7 +98,6 @@ class ArtificialLanguageOracle(Oracle):
         return sent_probs
 
     def _compute_one_sent_prob(self, sequence: List[str]):
-            sequence = ['S'] + sequence + ['E']
             probs = 1e-30
             try:
                 parses = list(self._parser.parse(sequence))

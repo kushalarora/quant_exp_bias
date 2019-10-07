@@ -7,8 +7,8 @@
         "namespace": "target_tokens"
       },
     },
-//    "start_tokens": ["<S>"],
-//    "end_tokens": ["</S>"]
+    "start_tokens": ["<S>"],
+    "end_tokens": ["</S>"]
   },
   "train_data_path": std.extVar("ARTIFICIAL_GRAMMAR_TRAIN"),
   "validation_data_path": std.extVar("ARTIFICIAL_GRAMMAR_DEV"), 
@@ -25,7 +25,9 @@
     "oracle": {
       "type": "artificial_lang_oracle",
       "grammar_string": std.extVar("FSA_GRAMMAR_STRING"),
-    }
+    },
+    "start_token": "<S>",
+    "end_token": "</S>"
   },
   "iterator": {
     "type": "basic",

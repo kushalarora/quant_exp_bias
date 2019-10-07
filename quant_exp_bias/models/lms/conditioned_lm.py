@@ -22,6 +22,8 @@ class Seq2SeqQuantExpModel(LMBase):
                  beam_size: int = None,
                  scheduled_sampling_ratio: float = 0.,
                  use_bleu: bool = True,
+                 start_token: str = '<S>',
+                 end_token: str = '</S>',
                 
                  # This fields will only come into play in Seq2Seq mode.
                  source_embedder: TextFieldEmbedder = None,
@@ -42,4 +44,6 @@ class Seq2SeqQuantExpModel(LMBase):
                          source_embedder=source_embedder,
                          encoder=encoder,
                          attention=attention,
-                         attention_function=attention_function)
+                         attention_function=attention_function,
+                         start_token=start_token,
+                         end_token=end_token)
