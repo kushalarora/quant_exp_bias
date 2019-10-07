@@ -1,3 +1,5 @@
+from typing import List
+
 from quant_exp_bias.oracles.oracle_base import Oracle
 from multiprocessing.dummy import Pool as ThreadPool
 from nltk import PCFG
@@ -23,10 +25,9 @@ class ArtificialLanguageOracle(Oracle):
                          """
 
     def __init__(self,
-                 num_samples : int,
-                 grammar_string: str=FSA_GRAMMAR_STRING,
+                 grammar_string: str,
                  use_weighted_choice: bool = True,
-                 parallelize=True, 
+                 parallelize=False, 
                  num_threads=32):
         """ TODO (Kushal): Add function doc.
         """
@@ -34,7 +35,6 @@ class ArtificialLanguageOracle(Oracle):
         self._grammar = PCFG.fromstring(grammar_string)
         self._parser = InsideChartParser(self._grammar)
         self._use_weighted_choice = use_weighted_choice
-        self._num_samples = num_samples
         self._parallelize = parallelize
         if parallelize:
             self._thread_pool = ThreadPool(num_threads)
@@ -76,16 +76,16 @@ class ArtificialLanguageOracle(Oracle):
                     self._rewrite_at(position, derivation.rhs(), sentence_list)
         return ' '.join(sentence_list)
 
-    def sample_training_set(self):
+    def sample_training_set(self, num_samples: int):
         """ TODO (Kushal): Add function doc.
         """
         # TODO (Kushal): Reformat the code to move generator to the base class and derived class only overloads generate_sequence method.
         if self._parallelize:
-            results = [self._thread_pool.apply_async(self._generate_sequence, ()) for _ in range(self._num_samples)]
+            results = [self._thread_pool.apply_async(self._generate_sequence, ()) for _ in range(num_samples)]
             return [res.get() for res in results]
-        return [self._generate_sequence() for _ in range(self._num_samples)]
+        return [self._generate_sequence() for _ in range(num_samples)]
 
-    def compute_sent_probs(self, sequences):
+    def compute_sent_probs(self, sequences: List[List[str]]):
         """ TODO (Kushal): Add function doc.
         """
         # TODO (Kushal): Reformat the code to move the for loop in the base class.
@@ -97,7 +97,7 @@ class ArtificialLanguageOracle(Oracle):
                 sent_probs.append(self._compute_one_sent_prob(sequence))
         return sent_probs
 
-    def _compute_one_sent_prob(self, sequence):
+    def _compute_one_sent_prob(self, sequence: List[str]):
             sequence = ['S'] + sequence + ['E']
             probs = 1e-30
             try:

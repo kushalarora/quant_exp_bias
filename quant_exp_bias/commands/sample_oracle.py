@@ -60,6 +60,11 @@ class SampleOracle(Subcommand):
                                default="",
                                help='a JSON structure used to override the experiment configuration')
 
+        subparser.add_argument('-n', '--num-samples',
+                               type=int,
+                               default=100000,
+                               help='Number of samples to draw from oracle for training.')
+
         subparser.set_defaults(func=sample_oracle_from_args)
 
         return subparser
@@ -72,13 +77,16 @@ def sample_oracle_from_args(args: argparse.Namespace):
     parameter_path = args.param_path
     overrides = args.overrides
     serialization_dir = args.serialization_dir
+    num_samples = args.num_samples
 
     params = Params.from_file(parameter_path, overrides)
 
-    sample_oracle_from_params(params, serialization_dir)
+    sample_oracle_from_params(params, serialization_dir, num_samples)
 
 
-def sample_oracle_from_params(params: Params, serialization_dir: str):
+def sample_oracle_from_params(params: Params, 
+                              serialization_dir: str, 
+                              num_samples: int):
     prepare_environment(params)
 
     oracle_params = params.pop("oracle", {})
@@ -96,6 +104,6 @@ def sample_oracle_from_params(params: Params, serialization_dir: str):
 
     logger.info(f"writing the oracle samples to {oracle_file}.")
     with open(oracle_file, 'w') as oracle_output_file:
-        for sample in oracle.sample_training_set():
+        for sample in oracle.sample_training_set(num_samples):
             print(sample, file=oracle_output_file)
     logger.info("done creating oracle samples")

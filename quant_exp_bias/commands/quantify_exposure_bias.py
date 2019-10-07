@@ -115,11 +115,11 @@ class QuantifyExposureBias(Subcommand):
                                default="",
                                help='a JSON structure used to override the experiment configuration')
 
-        subparser.set_defaults(func=evaluate_from_args)
+        subparser.set_defaults(func=quantify_exposure_bias_from_args)
 
         return subparser
 
-def evaluate_from_args(args: argparse.Namespace) -> Dict[str, Any]:
+def quantify_exposure_bias_from_args(args: argparse.Namespace) -> Dict[str, Any]:
     # Disable some of the more verbose logging statements
     logging.getLogger('allennlp.common.params').disabled = True
     logging.getLogger('allennlp.nn.initializers').disabled = True

@@ -24,7 +24,7 @@
     "dropout": 0.5,
     "oracle": {
       "type": "artificial_lang_oracle",
-      "num_samples": std.extVar("NUM_SAMPLES")
+      "grammar_string": std.extVar("FSA_GRAMMAR_STRING"),
     }
   },
   "iterator": {
