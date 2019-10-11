@@ -25,6 +25,7 @@
     "oracle": {
       "type": "artificial_lang_oracle",
       "grammar_string": std.extVar("FSA_GRAMMAR_STRING"),
+      "parallelize": true
     },
     "start_token": "<S>",
     "end_token": "</S>"
@@ -34,14 +35,21 @@
     "batch_size": 256
   },
   "trainer": {
-    "num_epochs": 100,
+    "num_epochs": 50,
     "cuda_device" : 0,
     "optimizer": {
       "type": "adam",
       "lr": 0.01
     },
-    "patience": 5,
+    "learning_rate_scheduler": {
+        "type": "reduce_on_plateau",
+        "factor": 0.5,
+        "mode": "max",
+        "patience": 0
+    },
+    "patience": 5, 
     "should_log_learning_rate": true,
-    "log_batch_size_period": 50
+    "log_batch_size_period": 50,
+    "num_serialized_models_to_keep": -1
   },
 }

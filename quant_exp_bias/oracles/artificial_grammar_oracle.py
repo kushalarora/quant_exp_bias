@@ -1,13 +1,13 @@
 from typing import List
 
 from quant_exp_bias.oracles.oracle_base import Oracle
-from multiprocessing.dummy import Pool as ThreadPool
 from nltk import PCFG
 from nltk.grammar import Nonterminal
 from nltk.parse.pchart import InsideChartParser
 from functools import reduce
 import itertools
 import random
+import ray
 
 
 @Oracle.register('artificial_lang_oracle')
@@ -27,20 +27,19 @@ class ArtificialLanguageOracle(Oracle):
     def __init__(self,
                  grammar_string: str,
                  use_weighted_choice: bool = True,
-                 parallelize=False, 
+                 parallelize=True, 
                  num_threads=32):
         """ TODO (Kushal): Add function doc.
         """
         super(Oracle, self).__init__()
-        self._grammar = PCFG.fromstring(grammar_string)
-        self._parser = InsideChartParser(self._grammar)
         self._use_weighted_choice = use_weighted_choice
+        self._grammar_string = grammar_string
         self._parallelize = parallelize
-        if parallelize:
-            self._thread_pool = ThreadPool(num_threads)
+        if not ray.is_initialized():
+            ray.init(num_cpus=num_threads)
 
-    @classmethod
-    def _weighted_choice(cls, productions):
+    @staticmethod
+    def _weighted_choice(productions):
         """ TODO (Kushal): Add function doc.
         """
         prods_with_probs = [(prod, prod.prob()) for prod in productions]
@@ -53,56 +52,54 @@ class ArtificialLanguageOracle(Oracle):
             upto += prob
         assert False, "Shouldn't get here"
 
-    @classmethod
-    def _rewrite_at(cls, index, replacements, the_list):
+    @staticmethod
+    def _rewrite_at(index, replacements, the_list):
         """ TODO (Kushal): Add function doc.
         """
         del the_list[index]
         the_list[index:index] = replacements
 
-    def _generate_sequence(self):
+    @staticmethod
+    @ray.remote
+    def generate_sequence(grammar_string, use_weighted_choice):
         """ TODO (Kushal): Add function doc.
         """
-        sentence_list = [self._grammar.start()]
+        grammar = PCFG.fromstring(grammar_string)
+        sentence_list = [grammar.start()]
         all_terminals = False
-        choice = self._weighted_choice if self._use_weighted_choice else random.choice
+        choice = ArtificialLanguageOracle._weighted_choice if use_weighted_choice else random.choice
         while not all_terminals:
             all_terminals = True
             for position, symbol in enumerate(sentence_list):
-                if symbol in self._grammar._lhs_index:
+                if symbol in grammar._lhs_index:
                     all_terminals = False
-                    derivations = self._grammar._lhs_index[symbol]
+                    derivations = grammar._lhs_index[symbol]
                     derivation = choice(derivations)
-                    self._rewrite_at(position, derivation.rhs(), sentence_list)
+                    ArtificialLanguageOracle._rewrite_at(position, derivation.rhs(), sentence_list)
         return ' '.join(sentence_list)
 
     def sample_training_set(self, num_samples: int):
         """ TODO (Kushal): Add function doc.
         """
         # TODO (Kushal): Reformat the code to move generator to the base class and derived class only overloads generate_sequence method.
-        if self._parallelize:
-            results = [self._thread_pool.apply_async(self._generate_sequence, ()) for _ in range(num_samples)]
-            return [res.get() for res in results]
-        return [self._generate_sequence() for _ in range(num_samples)]
+        return ray.get([ArtificialLanguageOracle.generate_sequence.remote(self._grammar_string, self._use_weighted_choice)  for _ in range(num_samples)])
 
     def compute_sent_probs(self, sequences: List[List[str]]):
         """ TODO (Kushal): Add function doc.
         """
         # TODO (Kushal): Reformat the code to move the for loop in the base class.
-        sent_probs = []
-        if self._parallelize:
-            sent_probs = self._thread_pool.map(self._compute_one_sent_prob, sequences)
-        else:
-            for sequence in sequences:
-                sent_probs.append(self._compute_one_sent_prob(sequence))
-        return sent_probs
+        return ray.get([ArtificialLanguageOracle._compute_one_sent_prob.remote(self._grammar_string, sequence) for sequence in sequences])
 
-    def _compute_one_sent_prob(self, sequence: List[str]):
+    @staticmethod
+    @ray.remote
+    def _compute_one_sent_prob(grammar_string, sequence: List[str]):
+            parser = InsideChartParser(PCFG.fromstring(grammar_string))
             probs = 1e-30
             try:
-                parses = list(self._parser.parse(sequence))
+                parses = list(parser.parse(sequence))
                 if parses and len(parses) > 0:
                     probs += reduce(lambda a, b: a + b.prob(), parses, 0) / len(parses)
             except Exception as e:
                 pass
+
             return probs

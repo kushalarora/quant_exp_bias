@@ -62,7 +62,7 @@ class SampleOracle(Subcommand):
 
         subparser.add_argument('-n', '--num-samples',
                                type=int,
-                               default=100000,
+                               default=10000,
                                help='Number of samples to draw from oracle for training.')
 
         subparser.set_defaults(func=sample_oracle_from_args)
@@ -81,29 +81,40 @@ def sample_oracle_from_args(args: argparse.Namespace):
 
     params = Params.from_file(parameter_path, overrides)
 
-    sample_oracle_from_params(params, serialization_dir, num_samples)
+    sample_oracle(params, serialization_dir, num_samples)
 
 
-def sample_oracle_from_params(params: Params, 
-                              serialization_dir: str, 
-                              num_samples: int):
+def sample_oracle(params: Params, 
+                  serialization_dir: str, 
+                  num_samples: int) -> str:
+                  
     prepare_environment(params)
 
-    oracle_params = params.pop("oracle", {})
-    os.makedirs(serialization_dir, exist_ok=True)
-    oracle_file = os.path.join(serialization_dir, "oracle_samples.txt")
+    model_oracle_params = params.get('model', {})
+    assert model_oracle_params is not None, \
+         "We should have specified model in configuration."
+    
+    oracle_params = model_oracle_params.get('oracle', {})
+    assert oracle_params is not None, \
+        "Oracle should be specified in configuration."
 
-    if os.path.isfile(oracle_file):
+    logger.info(f"Num Samples: {num_samples}")
+    os.makedirs(serialization_dir, exist_ok=True)
+    oracle_filename = os.path.join(serialization_dir, "oracle_samples.txt")
+  
+    if os.path.isfile(oracle_filename):
        import time
        epoch_time = int(time.time())
-       move_path = '.'.join([oracle_file, f'{epoch_time}'])
-       logger.warn(f"Oracle Sample file already exists at {oracle_file}. Moving it to {move_path}")
-       os.rename(oracle_file, move_path)
+       move_path = '.'.join([oracle_filename, f'{epoch_time}'])
+       logger.warn(f"Oracle Sample file already exists at {oracle_filename}. Moving it to {move_path}")
+       os.rename(oracle_filename, move_path)
 
     oracle = Oracle.from_params(oracle_params)
 
-    logger.info(f"writing the oracle samples to {oracle_file}.")
-    with open(oracle_file, 'w') as oracle_output_file:
+    logger.info(f"writing the oracle samples to {oracle_filename}.")
+    with open(oracle_filename, 'w') as oracle_file:
         for sample in oracle.sample_training_set(num_samples):
-            print(sample, file=oracle_output_file)
+            print(sample, file=oracle_file)
+
     logger.info("done creating oracle samples")
+    return oracle_filename

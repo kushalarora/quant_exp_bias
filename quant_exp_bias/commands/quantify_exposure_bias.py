@@ -77,9 +77,14 @@ class QuantifyExposureBias(Subcommand):
         subparser = parser.add_parser(
                 name, description=description, help='Evaluate the specified model + dataset.')
 
-        subparser.add_argument('archive_file', type=str, help='path to an archived trained model')
+        subparser.add_argument('archive_file', 
+                               type=str, 
+                               help='path to an archived trained model')
 
-        subparser.add_argument('--output-dir', type=str, help='path to output directory')
+        subparser.add_argument('--output-dir', 
+                               required=True,
+                               type=str, 
+                               help='path to output directory')
 
         subparser.add_argument('--weights-file',
                                type=str,
@@ -93,7 +98,7 @@ class QuantifyExposureBias(Subcommand):
 
         subparser.add_argument('--num-samples-per-length',
                                  type=int,
-                                 default=1024,
+                                 default=10000,
                                  help='Number of samples to draw from $w_{1}^{n}~p$ for approximating expectation.')
 
         subparser.add_argument('--num-length-samples',
@@ -104,7 +109,7 @@ class QuantifyExposureBias(Subcommand):
         
         subparser.add_argument('--num-trials',
                                  type=int,
-                                 default=10,
+                                 default=1,
                                  help='Number of samples to draw from $n~\mathcal{N}$" + \
                                         "for approximating expectation over sequence lengths.')
         
@@ -120,36 +125,50 @@ class QuantifyExposureBias(Subcommand):
         return subparser
 
 def quantify_exposure_bias_from_args(args: argparse.Namespace) -> Dict[str, Any]:
+    return quantify_exposure_bias(archive_file=args.archive_file,
+                                 output_dir=args.output_dir,
+                                 num_trials=args.num_trials,
+                                 num_length_samples=args.num_length_samples,
+                                 num_samples_per_length=args.num_samples_per_length,
+                                 cuda_device=args.cuda_device,
+                                 overrides=args.overrides,
+                                 weights_file=args.weights_file)
+
+def quantify_exposure_bias(archive_file: str,
+                           output_dir: str,
+                           num_trials: int = 1,
+                           num_length_samples: int = 50,
+                           num_samples_per_length: int = 1024,
+                           cuda_device: int = -1,
+                           overrides: str = "",
+                           weights_file: str = None):
     # Disable some of the more verbose logging statements
     logging.getLogger('allennlp.common.params').disabled = True
     logging.getLogger('allennlp.nn.initializers').disabled = True
 
     # Load from archive
-    archive = load_archive(args.archive_file, args.cuda_device, args.overrides, args.weights_file)
+    archive = load_archive(archive_file, cuda_device, overrides, weights_file)
     config = archive.config
     prepare_environment(config)
     model = archive.model
     model.eval()
 
     output_dir_trail = None
-    output_dir = None
-
     exp_biases = []
     input_dict = { "compute_exposure_bias": True }
-    if args.output_dir:
-        output_dir = args.output_dir
+    if output_dir:
         os.makedirs(output_dir, exist_ok=True)
 
 
     logger.info("Metrics:")
-    for trail_num in range(1, args.num_trials + 1):
-        if args.output_dir:
+    for trail_num in range(1, num_trials + 1):
+        if output_dir:
             output_dir_trail = os.path.join(output_dir, str(trail_num))
             os.makedirs(output_dir_trail, exist_ok=True)
 
-        for _ in range(args.num_length_samples):
+        for _ in range(num_length_samples):
             # sample sentence length
-            input_dict['generation_batch_size'] = 1024
+            input_dict['generation_batch_size'] = num_samples_per_length
             output_dict = model(**input_dict)
             
             metric_trial = model.get_metrics(reset=True, get_exposure_bias=True)
@@ -159,19 +178,15 @@ def quantify_exposure_bias_from_args(args: argparse.Namespace) -> Dict[str, Any]
 
             exp_biases.append(metric_trial['exposure_bias'])
 
-            if output_dir_trail:
-                with open(os.path.join(output_dir_trail, 'metrics.json'), "w") as file:
-                    json.dump(metric_trial, file, indent=4)
-                
-                with open(os.path.join(output_dir_trail, 'generated.txt'), "w") as file:
-                    for seq in output_dict['predictions']:
-                        print(' '.join(seq), file=file)
+        if output_dir_trail:                
+            with open(os.path.join(output_dir_trail, 'generated.txt'), "w") as file:
+                for seq in output_dict['predictions']:
+                    print(' '.join(seq), file=file)
 
     metrics = {
         'exposure_bias_mean': np.mean(exp_biases),
         'exposure_bias_std': np.std(exp_biases)
     }
-
 
     with open(os.path.join(output_dir, 'metrics.json'), "w") as file:
         json.dump(metrics, file, indent=4)
@@ -180,5 +195,4 @@ def quantify_exposure_bias_from_args(args: argparse.Namespace) -> Dict[str, Any]
     logger.info("\t mean: %4.2f", metrics['exposure_bias_mean'])
     logger.info("\t std:  %4.2f", metrics['exposure_bias_std'])
     logger.info("Done!!")
-
-    return metrics
+    return exp_biases, metrics['exposure_bias_mean'], metrics['exposure_bias_std']
