@@ -109,4 +109,6 @@ venv.bak/
 
 data/
 results/
-result
+result/
+logs/
+worker-*
