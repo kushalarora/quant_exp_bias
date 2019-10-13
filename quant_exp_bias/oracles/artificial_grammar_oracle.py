@@ -8,7 +8,8 @@ from functools import reduce
 import itertools
 import random
 import ray
-
+import subprocess
+import time
 
 @Oracle.register('artificial_lang_oracle')
 class ArtificialLanguageOracle(Oracle):
@@ -35,8 +36,27 @@ class ArtificialLanguageOracle(Oracle):
         self._use_weighted_choice = use_weighted_choice
         self._grammar_string = grammar_string
         self._parallelize = parallelize
-        if not ray.is_initialized():
-            ray.init(num_cpus=num_threads)
+
+        if ray.is_initialized():
+            # Just to avoid weird ray behaviors
+            # we will shut down the server and will
+            # restart it.
+            ray.shutdown()
+            print("$$$$ Shutting Down Ray $$$$$")
+
+            # Sleep for 5 secs to make sure server
+            # is properly shutdown.
+            time.sleep(5)
+
+        ray.init(num_cpus=num_threads)
+
+        # Sleep for 5 secs to make sure server
+        # is properly up.
+        time.sleep(5)
+        print("$$$$ Ray Initialized $$$$$")
+
+
+
 
     @staticmethod
     def _weighted_choice(productions):
@@ -82,13 +102,15 @@ class ArtificialLanguageOracle(Oracle):
         """ TODO (Kushal): Add function doc.
         """
         # TODO (Kushal): Reformat the code to move generator to the base class and derived class only overloads generate_sequence method.
-        return ray.get([ArtificialLanguageOracle.generate_sequence.remote(self._grammar_string, self._use_weighted_choice)  for _ in range(num_samples)])
+        samples = ray.get([ArtificialLanguageOracle.generate_sequence.remote(self._grammar_string, self._use_weighted_choice)  for _ in range(num_samples)])
+        return samples
 
     def compute_sent_probs(self, sequences: List[List[str]]):
         """ TODO (Kushal): Add function doc.
         """
         # TODO (Kushal): Reformat the code to move the for loop in the base class.
-        return ray.get([ArtificialLanguageOracle._compute_one_sent_prob.remote(self._grammar_string, sequence) for sequence in sequences])
+        probs = ray.get([ArtificialLanguageOracle._compute_one_sent_prob.remote(self._grammar_string, sequence) for sequence in sequences])
+        return probs 
 
     @staticmethod
     @ray.remote

@@ -2,7 +2,7 @@
 
 set -eux
 
-export NUM_SAMPLES=300
+export NUM_SAMPLES=10000
 export indir="$(date '+%Y_%m_%d_%H_%M')/"
 export FSA_GRAMMAR_STRING="q0 -> 'S' q1 [0.9900] | 'a' q1 [0.0025] | 'b' q1 [0.0025] | 'c' q1 [0.0025] | 'E' q1 [0.0025]
 				           q1 -> 'S' q1 [0.0025] | 'a' q1 [0.3000] | 'b' q1 [0.3000] | 'c' q1 [0.3000] | 'E' q1 [0.0025]

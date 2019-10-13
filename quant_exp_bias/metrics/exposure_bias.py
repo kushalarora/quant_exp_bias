@@ -45,7 +45,12 @@ class ExposureBias(Metric):
 
         total_value = 0
         for i in range(batch_size):
-            total_value += torch.log(model_probs[i]/oracle_probs[i]).item()
+            try:
+                total_value += torch.log(model_probs[i]/oracle_probs[i]).item()
+            except Exception as e:
+                print(e)
+                print(oracle_probs[i])
+                print(model_probs[i])
 
             if  numpy.isneginf(total_value) or numpy.isposinf(total_value):
                 # TODO (Kushal): Remove this import pdb and replace
