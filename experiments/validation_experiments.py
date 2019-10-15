@@ -41,7 +41,8 @@ def validation_experiments(num_sample_oracles, num_trials, num_samples_per_lengt
         os.environ['ARTIFICIAL_GRAMMAR_TRAIN'] = oracle_train_filename
         os.environ['ARTIFICIAL_GRAMMAR_DEV'] = oracle_dev_filename
 
-        train_args = get_args(args=['train' , param_path, '-s', num_run_serialization_dir])
+        overrides = json.dumps({'trainer': {'num_epochs': 20, 'patience': None}})
+        train_args = get_args(args=['train' , param_path, '-s', num_run_serialization_dir, '-o', overrides])
         trainer_params = Params.from_file(train_args.param_path, train_args.overrides)
         cuda_device = trainer_params['trainer']['cuda_device']
         train_model_serialization_dir = train_runner(train_args, 
