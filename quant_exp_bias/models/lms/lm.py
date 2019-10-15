@@ -3,11 +3,12 @@ from typing import Dict, List, Tuple
 import logging
 
 import numpy
+import math
 from overrides import overrides
 import torch
 import torch.nn.functional as F
 from torch.nn.modules.linear import Linear
-from torch.nn.modules.rnn import LSTMCell
+from torch.nn.modules.rnn import LSTMCell, LSTM
 from torch.distributions import Categorical
 
 
@@ -96,7 +97,8 @@ class LMBase(Model):
 #                 end_index: str = '</S>',
                  start_token: str = 'S',
                  end_token: str = 'E',
-                 
+                 num_decoder_layers:int = 1,
+
                  # This fields will only come into play in Seq2Seq mode.
                  source_embedder: TextFieldEmbedder = None,
                  encoder: Seq2SeqEncoder = None,
@@ -190,11 +192,17 @@ class LMBase(Model):
             # Otherwise, the input to the decoder is just the previous target embedding.
             self._decoder_input_dim = target_embedding_dim
 
-        # We'll use an LSTM cell as the recurrent cell that produces a hidden state
-        # for the decoder at each time step.
-        # TODO (pradeep): Do not hardcode decoder cell type.
-        self._decoder_cell = LSTMCell(self._decoder_input_dim, self._decoder_output_dim)
+        self._num_decoder_layers = num_decoder_layers
 
+        if self._num_decoder_layers > 1:
+            self._decoder_cell = LSTM(self._decoder_input_dim, self._decoder_output_dim, self._num_decoder_layers)
+        else:
+            # We'll use an LSTM cell as the recurrent cell that produces a hidden state
+            # for the decoder at each time step.
+            # TODO (pradeep): Do not hardcode decoder cell type.
+            self._decoder_cell = LSTMCell(self._decoder_input_dim, self._decoder_output_dim)
+
+        self.training_iteration = 0
         # We project the hidden state from the decoder into the output vocabulary space
         # in order to get log probabilities of each target token, at each time step.
         self._output_projection_layer = Linear(self._decoder_output_dim, num_classes)
@@ -267,7 +275,6 @@ class LMBase(Model):
         -------
         Dict[str, torch.Tensor]
         """
-        
         output_dict:  Dict[str, torch.Tensor] = {}
         state:  Dict[str, torch.Tensor] = {}
         
@@ -389,7 +396,6 @@ class LMBase(Model):
         We really only use the predictions from the method to test that beam search
         with a beam size of 1 gives the same results.
         """
-
         if self._seq2seq_mode:
            source_mask = state["source_mask"]
            batch_size = source_mask.size()[0]
@@ -419,8 +425,14 @@ class LMBase(Model):
         step_logits: List[torch.Tensor] = []
         step_predictions: List[torch.Tensor] = []
         step_prediction_loss: List[torch.Tensor] = []
+
+        scheduled_sampling_ratio = max(1 - self._scheduled_sampling_ratio,
+                                       100/(100 + math.exp(self.training_iteration/100)))
+        if self.training:
+            self.training_iteration += 1
+
         for timestep in range(num_decoding_steps):
-            if self.training and torch.rand(1).item() < self._scheduled_sampling_ratio:
+            if self.training and torch.rand(1).item() > scheduled_sampling_ratio:
                 # Use gold tokens at test time and at a rate of 1 - _scheduled_sampling_ratio
                 # during training.
                 # shape: (batch_size,)
@@ -463,7 +475,8 @@ class LMBase(Model):
         prediction_loss *= prediction_mask.float()
 
         output_dict = {"predictions": predictions,
-                       "prediction_loss": prediction_loss}
+                       "prediction_loss": prediction_loss, 
+                       "scheduled_sampleing_ratio": scheduled_sampling_ratio}
      
         if target_tokens:
             # shape: (batch_size, num_decoding_steps, num_classes)
@@ -509,6 +522,7 @@ class LMBase(Model):
                                                         target_tokens, 
                                                         generation_batch_size)
 
+
         # shape (all_top_k_predictions): (batch_size, beam_size, num_decoding_steps)
         # shape (log_probabilities): (batch_size, beam_size)
         all_top_k_predictions, log_probabilities = self._beam_search.search(
@@ -540,10 +554,13 @@ class LMBase(Model):
                 decoder_hidden is not None and decoder_context is not None, \
             "Either decoder_hidden and context should be None or both should exist."
 
-        decoder_hidden_and_context = (decoder_hidden, decoder_context) \
-                                        if decoder_hidden is not None or \
-                                           decoder_context is not None else \
-                                     None
+        decoder_hidden_and_context = None \
+                                        if decoder_hidden is None or \
+                                           decoder_context is None else \
+                                     (decoder_hidden.transpose(0,1).contiguous(),
+                                      decoder_context.transpose(0,1).contiguous()) \
+                                         if self._num_decoder_layers > 1 else \
+                                     (decoder_hidden, decoder_context)
 
         # shape: (group_size, target_embedding_dim)
         embedded_input = self._target_embedder(last_predictions)
@@ -567,18 +584,23 @@ class LMBase(Model):
         
         # shape (decoder_hidden): (batch_size, decoder_output_dim)
         # shape (decoder_context): (batch_size, decoder_output_dim)
-        decoder_hidden, decoder_context = self._decoder_cell(decoder_input, 
-                                                             decoder_hidden_and_context)
+        if self._num_decoder_layers > 1:
+            _, (decoder_hidden, decoder_context) = self._decoder_cell(decoder_input.unsqueeze(0),
+                                                                      decoder_hidden_and_context)
+        else:
+            decoder_hidden, decoder_context = self._decoder_cell(decoder_input, 
+                                                                 decoder_hidden_and_context)
 
-        state["decoder_hidden"] = decoder_hidden
-        state["decoder_context"] = decoder_context
+        state["decoder_hidden"] = decoder_hidden.transpose(0,1).contiguous()
+        state["decoder_context"] = decoder_context.transpose(0,1).contiguous()
 
         # add dropout
         decoder_hidden_with_dropout = self._dropout(decoder_hidden)
         
         # shape: (group_size, num_classes)
-        output_projections = self._output_projection_layer(decoder_hidden_with_dropout)
-
+        output_projections = self._output_projection_layer(decoder_hidden_with_dropout[-1]
+                                                            if self._num_decoder_layers > 1 else
+                                                                decoder_hidden_with_dropout)
         return output_projections, state
 
     def _prepare_attended_input(self,

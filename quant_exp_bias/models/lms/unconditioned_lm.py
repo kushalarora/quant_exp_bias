@@ -24,7 +24,8 @@ class LMQuantExpModel(LMBase):
                  use_bleu: bool = True,
                  dropout: float = None,
                  start_token: str = '<S>',
-                 end_token: str = '</S>') -> None:
+                 end_token: str = '</S>',
+                 num_decoder_layers:int = 1) -> None:
         
         super().__init__(vocab=vocab,
                          oracle=oracle,
@@ -39,4 +40,5 @@ class LMQuantExpModel(LMBase):
                          use_bleu=use_bleu,
                          dropout=dropout,
                          start_token=start_token,
-                         end_token=end_token)
+                         end_token=end_token,
+                         num_decoder_layers=num_decoder_layers)
