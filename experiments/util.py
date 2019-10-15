@@ -6,7 +6,7 @@ from datetime import datetime
 import_submodules("quant_exp_bias")
 from quant_exp_bias.utils import get_args
 
-def run_on_cluster(job_name, account=None):
+def run_on_cluster(job_name, account=None, local=False):
     def func_wrapper_outer(func):
         def func_wrapper(*args, **kwargs):
             import dask
@@ -14,6 +14,8 @@ def run_on_cluster(job_name, account=None):
             from dask_jobqueue import SLURMCluster
             from dask.distributed import Client
             from dask.distributed import progress
+            if local:
+                return func(*args, **kwargs)
 
             cluster = SLURMCluster(
                             job_name=job_name,
@@ -28,6 +30,7 @@ def run_on_cluster(job_name, account=None):
             client = Client(cluster)
             try:
                 future = client.submit(func, *args, **kwargs)
+                progress(future)
                 results =  client.gather(future)
                 return results
             except Exception as e:
