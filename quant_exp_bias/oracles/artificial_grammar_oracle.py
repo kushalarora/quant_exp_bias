@@ -46,13 +46,13 @@ class ArtificialLanguageOracle(Oracle):
 
             # Sleep for 5 secs to make sure server
             # is properly shutdown.
-            time.sleep(5)
+            time.sleep(2)
 
         ray.init(num_cpus=num_threads)
 
         # Sleep for 5 secs to make sure server
         # is properly up.
-        time.sleep(5)
+        time.sleep(2)
         print("$$$$ Ray Initialized $$$$$")
 
 
