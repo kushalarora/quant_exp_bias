@@ -426,8 +426,9 @@ class LMBase(Model):
         step_predictions: List[torch.Tensor] = []
         step_prediction_loss: List[torch.Tensor] = []
 
-        scheduled_sampling_ratio = max(1 - self._scheduled_sampling_ratio,
-                                       100/(100 + math.exp(self.training_iteration/100)))
+        scheduled_sampling_ratio = min(1 - self._scheduled_sampling_ratio,
+                                        self._scheduled_sampling_ratio * \
+                                            100/(100 + math.exp(self.training_iteration/100)))
         if self.training:
             self.training_iteration += 1
 
@@ -522,7 +523,6 @@ class LMBase(Model):
                                                         target_tokens, 
                                                         generation_batch_size)
 
-
         # shape (all_top_k_predictions): (batch_size, beam_size, num_decoding_steps)
         # shape (log_probabilities): (batch_size, beam_size)
         all_top_k_predictions, log_probabilities = self._beam_search.search(
@@ -587,12 +587,14 @@ class LMBase(Model):
         if self._num_decoder_layers > 1:
             _, (decoder_hidden, decoder_context) = self._decoder_cell(decoder_input.unsqueeze(0),
                                                                       decoder_hidden_and_context)
+            decoder_hidden = decoder_hidden.transpose(0,1).contiguous()
+            decoder_context = decoder_context.transpose(0,1).contiguous()
         else:
             decoder_hidden, decoder_context = self._decoder_cell(decoder_input, 
                                                                  decoder_hidden_and_context)
 
-        state["decoder_hidden"] = decoder_hidden.transpose(0,1).contiguous()
-        state["decoder_context"] = decoder_context.transpose(0,1).contiguous()
+        state["decoder_hidden"] = decoder_hidden
+        state["decoder_context"] = decoder_context
 
         # add dropout
         decoder_hidden_with_dropout = self._dropout(decoder_hidden)
