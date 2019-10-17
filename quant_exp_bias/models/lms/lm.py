@@ -1,6 +1,7 @@
 from typing import Dict, List, Tuple
 
 import logging
+import sys
 
 import numpy
 import math
@@ -21,8 +22,7 @@ from allennlp.modules.similarity_functions import SimilarityFunction
 from allennlp.models.model import Model
 from allennlp.modules.token_embedders import Embedding
 from allennlp.nn import util
-from allennlp.training.metrics import BLEU
-from allennlp.training.metrics import Perplexity
+from allennlp.training.metrics import BLEU, Perplexity, Average
 
 from quant_exp_bias.metrics.exposure_bias import ExposureBias
 from quant_exp_bias.models.sampled_beam_search import SampledBeamSearch
@@ -90,6 +90,7 @@ class LMBase(Model):
                  target_namespace: str = "tokens",
                  beam_size: int = None,
                  scheduled_sampling_ratio: float = 0.,
+                 scheduled_sampling_k: int = 100,
                  use_bleu: bool = True,
                  dropout: float = None,
                  sample_from_categorical: bool = True, 
@@ -110,6 +111,7 @@ class LMBase(Model):
 
         self._target_namespace = target_namespace
         self._scheduled_sampling_ratio = scheduled_sampling_ratio
+        self._scheduled_sampling_k = scheduled_sampling_k
 
         # We need the start symbol to provide as the input at the first timestep of decoding, and
         # end symbol as a way to indicate the end of the decoded sequence.
@@ -155,6 +157,7 @@ class LMBase(Model):
 
         self._exposure_bias = ExposureBias(oracle)
 
+        self._ss_ratio = Average()
         if dropout:
             self._dropout = torch.nn.Dropout(dropout)
         else:
@@ -426,14 +429,18 @@ class LMBase(Model):
         step_predictions: List[torch.Tensor] = []
         step_prediction_loss: List[torch.Tensor] = []
 
-        scheduled_sampling_ratio = min(1 - self._scheduled_sampling_ratio,
-                                        self._scheduled_sampling_ratio * \
-                                            100/(100 + math.exp(self.training_iteration/100)))
+        k = self._scheduled_sampling_k
+        scheduled_sampling_ratio = min(self._scheduled_sampling_ratio,
+                                       #1 -  2/(1 + math.exp(0.1*(self.training_iteration//300)))
+                                       1 -  k/(k + math.exp(self.training_iteration/k))
+                                       ) if self._scheduled_sampling_k > 0 else self._scheduled_sampling_ratio
+        self._ss_ratio(scheduled_sampling_ratio)
+
         if self.training:
             self.training_iteration += 1
 
         for timestep in range(num_decoding_steps):
-            if self.training and torch.rand(1).item() > scheduled_sampling_ratio:
+            if self.training and torch.rand(1).item() < scheduled_sampling_ratio:
                 # Use gold tokens at test time and at a rate of 1 - _scheduled_sampling_ratio
                 # during training.
                 # shape: (batch_size,)
@@ -581,21 +588,15 @@ class LMBase(Model):
         else:
             # shape: (group_size, target_embedding_dim)
             decoder_input = embedded_input
-        
+
         # shape (decoder_hidden): (batch_size, decoder_output_dim)
         # shape (decoder_context): (batch_size, decoder_output_dim)
         if self._num_decoder_layers > 1:
             _, (decoder_hidden, decoder_context) = self._decoder_cell(decoder_input.unsqueeze(0),
                                                                       decoder_hidden_and_context)
-            decoder_hidden = decoder_hidden.transpose(0,1).contiguous()
-            decoder_context = decoder_context.transpose(0,1).contiguous()
         else:
             decoder_hidden, decoder_context = self._decoder_cell(decoder_input, 
                                                                  decoder_hidden_and_context)
-
-        state["decoder_hidden"] = decoder_hidden
-        state["decoder_context"] = decoder_context
-
         # add dropout
         decoder_hidden_with_dropout = self._dropout(decoder_hidden)
         
@@ -603,6 +604,12 @@ class LMBase(Model):
         output_projections = self._output_projection_layer(decoder_hidden_with_dropout[-1]
                                                             if self._num_decoder_layers > 1 else
                                                                 decoder_hidden_with_dropout)
+        if self._num_decoder_layers > 1:
+            decoder_hidden = decoder_hidden.transpose(0,1).contiguous()
+            decoder_context = decoder_context.transpose(0,1).contiguous()
+
+        state["decoder_hidden"] = decoder_hidden
+        state["decoder_context"] = decoder_context
         return output_projections, state
 
     def _prepare_attended_input(self,
@@ -669,7 +676,9 @@ class LMBase(Model):
             return all_metrics
 
         if self.training or not self._seq2seq_mode:
-            all_metrics.update({'perplexity': self._perplexity.get_metric(reset=reset)})
+            all_metrics.update({'perplexity': self._perplexity.get_metric(reset=reset),
+                                'ss_ratio': self._ss_ratio.get_metric(reset=reset),
+                                'training_iter': self.training_iteration})
         if self._bleu and not self.training:
             all_metrics.update(self._bleu.get_metric(reset=reset))
 

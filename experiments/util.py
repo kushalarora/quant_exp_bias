@@ -24,7 +24,7 @@ def run_on_cluster(job_name, account=None, local=False):
                             env_extra=['source activate quant_exp', 'pkill -f ray'],
                             job_extra=['--gres=gpu:1'],
                             cores=16,
-                            walltime="4:00:00",
+                            walltime="10:00:00",
                             log_directory='logs/')
             cluster.scale(1)
             client = Client(cluster)
