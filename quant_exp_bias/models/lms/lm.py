@@ -1,7 +1,6 @@
 from typing import Dict, List, Tuple
 
 import logging
-import sys
 
 import numpy
 import math
