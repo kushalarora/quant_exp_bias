@@ -37,8 +37,8 @@ num_samples_per_length=2000
 def scheduled_sampling_experiments(main_args, serialization_dir, param_path):
     # Setup variables needed later.
     model_size_exp_results = {}
-    for ss_ratio in scheduled_sampling_ratios:
-        model_size_exp_results[ss_ratio] = []
+    for ss_ratio, ss_k in scheduled_sampling_ratios:
+        model_size_exp_results[f'{ss_ratio}_{ss_k}'] = []
         
     orig_serialization_dir = serialization_dir
     for ss_ratio, ss_k in scheduled_sampling_ratios:
@@ -71,7 +71,7 @@ def scheduled_sampling_experiments(main_args, serialization_dir, param_path):
                                                                                     cuda_device=cuda_device, 
                                                                                     num_trials=num_trials,
                                                                                     num_samples_per_length=num_samples_per_length)
-            model_size_exp_results[(ss_ratio, ss_k)].extend(exp_biases)
+            model_size_exp_results[f'{ss_ratio}_{ss_k}'].extend(exp_biases)
     return model_size_exp_results
 
 dataset_exp_results = scheduled_sampling_experiments(main_args, serialization_dir, param_path)
