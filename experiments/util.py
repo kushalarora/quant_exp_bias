@@ -6,7 +6,11 @@ from datetime import datetime
 import_submodules("quant_exp_bias")
 from quant_exp_bias.utils import get_args
 
-def run_on_cluster(job_name, account=None, local=False):
+def run_on_cluster(job_name, conda_env, 
+                   nodes=1, gpu=0, account=None, 
+                   local=False, memory="40 GB", 
+                   cores=16, log_dir='logs/',
+                   walltime="10:00:00"):
     def func_wrapper_outer(func):
         def func_wrapper(*args, **kwargs):
             import dask
@@ -16,17 +20,19 @@ def run_on_cluster(job_name, account=None, local=False):
             from dask.distributed import progress
             if local:
                 return func(*args, **kwargs)
+            env_extra =  [f'source activate {conda_env}'] if conda_env else []
+            job_extra = [f"--gres=gpu:{gpu}"] if gpu > 0 else []
 
             cluster = SLURMCluster(
                             job_name=job_name,
                             project=account,    
-                            memory="60 GB",
-                            env_extra=['source activate quant_exp', 'pkill -f ray'],
-                            job_extra=['--gres=gpu:1'],
-                            cores=16,
-                            walltime="10:00:00",
-                            log_directory='logs/')
-            cluster.scale(1)
+                            memory=memory,
+                            env_extra=env_extra,
+                            job_extra=job_extra,
+                            cores=cores,
+                            walltime=walltime,
+                            log_directory=log_dir)
+            cluster.scale(nodes)
             client = Client(cluster)
             try:
                 future = client.submit(func, *args, **kwargs)

@@ -31,7 +31,9 @@ num_samples_per_length=2000
 
 # # Validation Experiments
 
-@run_on_cluster('scheduled_sampling_experiments')
+@run_on_cluster(job_name='scheduled_sampling_experiments', 
+                conda_env='quant_exp', gpu=1,
+                walltime="14:00:00")
 def scheduled_sampling_experiments(main_args, serialization_dir, param_path):
     # Setup variables needed later.
     model_size_exp_results = {}

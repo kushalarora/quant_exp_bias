@@ -30,7 +30,9 @@ num_samples_per_length=2000
 # # Dataset Experiments
 ss_ratio = 0.125
 ss_k = 300
-@run_on_cluster('scheduled_sampling_validation_experiments')
+
+@run_on_cluster(job_name='scheduled_sampling_validation_experiments', 
+                conda_env='quant_exp', gpu=1)
 def validation_experiments(num_sample_oracles, num_trials, num_samples_per_length, serialization_dir, param_path):
     validation_exp_results = {}
     for num_run in range(num_sample_oracles):

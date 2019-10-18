@@ -21,7 +21,7 @@
     "max_decoding_steps": 50,
     "beam_size": 1,
     "use_bleu" : false,
-    "dropout": 0.5,
+    "dropout": 0.1,
     "oracle": {
       "type": "artificial_lang_oracle",
       "grammar_string": std.extVar("FSA_GRAMMAR_STRING"),

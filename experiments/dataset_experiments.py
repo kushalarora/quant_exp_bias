@@ -31,7 +31,8 @@ num_samples_per_length=2000
 
 # # Validation Experiments
 
-@run_on_cluster('dataset_experiments')
+@run_on_cluster(job_name='dataset_experiments', 
+                conda_env='quant_exp', gpu=1)
 def dataset_experiments(main_args, serialization_dir, param_path):
     # Setup variables needed later.
     dataset_exp_results = {}
