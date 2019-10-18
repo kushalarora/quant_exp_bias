@@ -39,24 +39,24 @@ class ExposureBias(Metric):
         model_probs = []
 
         for i  in range(len(predictions)):
-            model_log_prob_i = predictions_losses[i]
+            model_log_prob_i = predictions_losses[i]/len(predictions[i])
             model_prob_i = torch.exp(model_log_prob_i)
             model_probs.append(model_prob_i)
 
         total_value = 0
         for i in range(batch_size):
             try:
-                total_value += torch.log(model_probs[i]/oracle_probs[i]).item()
+                value = torch.log(model_probs[i]/oracle_probs[i]).item()
             except Exception as e:
                 print(e)
                 print(oracle_probs[i])
                 print(model_probs[i])
-
-            if  numpy.isneginf(total_value) or numpy.isposinf(total_value):
-                # TODO (Kushal): Remove this import pdb and replace
+            if  numpy.isneginf(value) or numpy.isposinf(value):
                 # with a warning. 
-                import pdb;pdb.set_trace()
-                pass
+                print(f'{value}=log({model_probs[i]}/{oracle_probs[i]}) for {predictions[i]}.')
+                continue
+    
+            total_value += value
 
 
         self._total_value += total_value

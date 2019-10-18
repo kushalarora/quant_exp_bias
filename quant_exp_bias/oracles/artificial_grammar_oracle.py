@@ -4,12 +4,18 @@ from quant_exp_bias.oracles.oracle_base import Oracle
 from nltk import PCFG
 from nltk.grammar import Nonterminal
 from nltk.parse.pchart import InsideChartParser
+
+from scipy.stats import zipf
+
 from functools import reduce
 import itertools
 import random
 import ray
+import re
 import subprocess
 import time
+import string
+import numpy as np
 
 @Oracle.register('artificial_lang_oracle')
 class ArtificialLanguageOracle(Oracle):
@@ -17,24 +23,19 @@ class ArtificialLanguageOracle(Oracle):
     TODO (Kushal): Expand class doc.
     SO: https://stackoverflow.com/questions/15009656/how-to-use-nltk-to-generate-sentences-from-an-induced-grammar
     """
-    FSA_GRAMMAR_STRING = """
-                            q0 -> 'S' q1 [0.9900] | 'a' q1 [0.0025] | 'b' q1 [0.0025] | 'c' q1 [0.0025] | 'E' q1 [0.0025]
-                            q1 -> 'S' q1 [0.0025] | 'a' q1 [0.3000] | 'b' q1 [0.3000] | 'c' q1 [0.3000] | 'E' q1 [0.0025]
-                            q1 -> 'S' q2 [0.0025] | 'a' q2 [0.0300] | 'b' q2 [0.0300] | 'c' q2 [0.0300] | 'E' q2 [0.0025]
-                            q2 -> 'S' [0.0025] | 'a' [0.0025] | 'b' [0.0025] | 'c' [0.0025] | 'E' [0.9900]
-
-                         """
 
     def __init__(self,
-                 grammar_string: str,
+                 grammar_file:str,
                  use_weighted_choice: bool = True,
                  parallelize=True, 
                  num_threads=32):
         """ TODO (Kushal): Add function doc.
         """
         super(Oracle, self).__init__()
+
+        self._grammar_string = open(grammar_file).read()
         self._use_weighted_choice = use_weighted_choice
-        self._grammar_string = grammar_string
+
         self._parallelize = parallelize
 
         if ray.is_initialized():
@@ -56,8 +57,104 @@ class ArtificialLanguageOracle(Oracle):
         print("$$$$ Ray Initialized $$$$$")
 
 
+    @staticmethod
+    def generate_grammar_string(grammar_template_file: str, 
+                                 vocabulary_size: int,
+                                 vocabulary_distribution: str,):
+        epsilon = 10**-10
 
+        def _get_vocab_prob(vsize, offset=0):
+            if vocabulary_distribution == 'zipf':
+                dist = zipf(1.2)
+                p_vocabs = [dist.pmf(x + 1) - offset/vsize for x in range(vsize)]
+                p_vocabs /= sum(p_vocabs)
+            elif vocabulary_distribution == 'uniform':
+                p_vocab = [1.0/vsize - offset/vsize] * vsize
+            return p_vocab
 
+        printables = [f"'{x}'" for x in string.printable[:-7] if x not in set(["'", '"'])]
+        assert vocabulary_size <= len(printables)
+        vocab = [printables[i] for i in range(vocabulary_size)]
+        extended_vocab = ["'SOS'", "'EOS'"] + vocab
+        
+        grammar_template = open(grammar_template_file)
+        grammar_rules = []
+        
+        group_set = set([])
+        for template in grammar_template:
+            states_and_inputs = template.strip().split()
+            current_state, arrow, next_states = states_and_inputs[0], states_and_inputs[1], states_and_inputs[2:]
+            if len(next_states) == 2:
+                inp, next_state = next_states
+            elif len(next_states) == 3:
+                inp, next_state, prob = next_states
+
+            if re.match("'<G[0-9]+>'", inp):
+                group_set.add(inp)
+
+        group2idx = {}
+        for i, g in enumerate(group_set):
+            group2idx[g] = i
+        
+        num_groups = len(group_set)  
+        group_vocab_size = vocabulary_size//num_groups
+
+        current_state_offset = {}
+        grammar_template.seek(0)
+        for template in grammar_template:   
+            token2p = {} 
+            states_and_inputs = template.strip().split()
+            current_state, arrow, next_states = states_and_inputs[0], states_and_inputs[1], states_and_inputs[2:]
+            
+            if current_state not in current_state_offset:
+                current_state_offset[current_state] = 0
+            
+            offset = current_state_offset[current_state]
+            prob = None
+            if len(next_states) == 2:
+                inp, next_state = next_states
+            elif len(next_states) == 3:
+                inp, next_state, prob = next_states
+                prob = float(prob)
+
+            if inp == "'EOS'":
+                token2p[inp] = (prob or 1.0 - offset)  - epsilon * (vocabulary_size + 2) 
+
+                for token in extended_vocab:
+                    if token in token2p:
+                        p = token2p[token]
+                    else:
+                        p = epsilon
+
+                    current_state_offset[current_state] += p
+                    grammar_rules.append(f"{current_state} {arrow} {token} [{p:.10f}]")
+            else:
+                if re.match("'<G[0-9]+>'", inp):
+                    group_num = group2idx[inp]
+                    group_vocab = vocab[group_num * group_vocab_size : (group_num + 1) * group_vocab_size]
+                    group_p_vocab = _get_vocab_prob(len(group_vocab), offset)
+                    if prob: 
+                        group_p_vocab =  [prob * x for x in group_p_vocab]
+
+                    for token, p in zip(group_vocab, group_p_vocab):
+                        token2p[token] = p - epsilon * (vocabulary_size + 2)/len(group_p_vocab)
+                else: 
+                   token2p[inp] = (prob or 1.0  - offset) - epsilon * (vocabulary_size + 2)
+
+                for token in extended_vocab:
+                    if token in token2p:
+                        p = token2p[token]
+                    else:
+                        p = epsilon
+
+                    current_state_offset[current_state] += p
+                    grammar_rules.append(f"{current_state} {arrow} {token} {next_state} [{p:.10f}]")
+
+        grammar_string = ""
+        for rule in grammar_rules:
+            grammar_string += f"{rule}\n"
+        return grammar_string
+        
     @staticmethod
     def _weighted_choice(productions):
         """ TODO (Kushal): Add function doc.
@@ -116,11 +213,11 @@ class ArtificialLanguageOracle(Oracle):
     @ray.remote
     def _compute_one_sent_prob(grammar_string, sequence: List[str]):
             parser = InsideChartParser(PCFG.fromstring(grammar_string))
-            probs = 1e-30
+            probs = 1e-10
             try:
                 parses = list(parser.parse(sequence))
                 if parses and len(parses) > 0:
-                    probs += reduce(lambda a, b: a + b.prob(), parses, 0) / len(parses)
+                    probs += np.exp(np.log(reduce(lambda a, b: a + b.prob(), parses, 0)/len(parses))/len(sequence))
             except Exception as e:
                 pass
 

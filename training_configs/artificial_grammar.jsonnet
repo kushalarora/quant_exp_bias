@@ -21,10 +21,10 @@
     "max_decoding_steps": 50,
     "beam_size": 1,
     "use_bleu" : false,
-    "dropout": 0.1,
+    "dropout": 0.5,
     "oracle": {
       "type": "artificial_lang_oracle",
-      "grammar_string": std.extVar("FSA_GRAMMAR_STRING"),
+      "grammar_file": "grammar_templates/default_grammar.txt",
       "parallelize": true
     },
     "start_token": "<S>",

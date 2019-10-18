@@ -24,7 +24,7 @@
     "dropout": 0.1,
     "oracle": {
       "type": "artificial_lang_oracle",
-      "grammar_string": std.extVar("FSA_GRAMMAR_STRING"),
+      "grammar_file": "grammar_templates/default_grammar.txt"
       "parallelize": true
     },
     "start_token": "<S>",
