@@ -14,7 +14,7 @@ from torch.distributions import Categorical
 
 from allennlp.common.checks import ConfigurationError
 from allennlp.common.util import START_SYMBOL, END_SYMBOL
-from allennlp.data.vocabulary import Vocabulary
+from allennlp.data.vocabulary import Vocabulary, DEFAULT_OOV_TOKEN, DEFAULT_PADDING_TOKEN
 from allennlp.modules.attention import LegacyAttention
 from allennlp.modules import Attention, TextFieldEmbedder, Seq2SeqEncoder
 from allennlp.modules.similarity_functions import SimilarityFunction
@@ -117,6 +117,16 @@ class LMBase(Model):
         self._start_index = self.vocab.get_token_index(start_token, self._target_namespace)
         self._end_index = self.vocab.get_token_index(end_token, self._target_namespace)
         
+        padding_index = self.vocab.get_token_index(DEFAULT_PADDING_TOKEN, self._target_namespace)
+        oov_index = self.vocab.get_token_index(DEFAULT_OOV_TOKEN, self._target_namespace)
+        self._vocab_mask = torch.ones(self.vocab.get_vocab_size( self._target_namespace),
+                                      device=torch.cuda.current_device()) \
+                                .scatter(0, torch.tensor([self._start_index,
+                                                          self._end_index,
+                                                          padding_index,
+                                                          oov_index],
+                                                          device=torch.cuda.current_device()), 
+                                        0)
         # self._start_index = self.vocab.get_token_index(START_SYMBOL, self._target_namespace)
         # self._end_index = self.vocab.get_token_index(END_SYMBOL, self._target_namespace)
 
@@ -132,6 +142,7 @@ class LMBase(Model):
         self._generation_batch_size = generation_batch_size
         # TODO(Kushal): Pass in the arguments for sampled. Also, make sure you do not sample in case of Seq2Seq models.
         self._beam_search = SampledBeamSearch(self._end_index, max_steps=max_decoding_steps, beam_size=beam_size, sampled=True)
+
 
         num_classes = self.vocab.get_vocab_size(self._target_namespace)
 
@@ -211,6 +222,7 @@ class LMBase(Model):
 
 
 
+
     def take_step(self,
                   last_predictions: torch.Tensor,
                   state: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
@@ -244,11 +256,14 @@ class LMBase(Model):
             equal to ``batch_size``, since the group may contain multiple states
             for each source sentence in the batch.
         """
+        
         # shape: (group_size, num_classes)
         output_projections, state = self._prepare_output_projections(last_predictions, state)
 
         # shape: (group_size, num_classes)
-        class_log_probabilities = F.log_softmax(output_projections, dim=-1)
+        class_log_probabilities = util.masked_log_softmax(output_projections, 
+                                            self._vocab_mask.expand(output_projections.shape), 
+                                            dim=-1)
 
         return class_log_probabilities, state
 
@@ -326,6 +341,7 @@ class LMBase(Model):
         if not isinstance(predicted_indices, numpy.ndarray):
             predicted_indices = predicted_indices.detach().cpu().numpy()
         all_predicted_tokens = []
+        
         for indices in predicted_indices:
             # Beam search gives us the top k results for each source sentence in the batch
             # but we just want the single best.
