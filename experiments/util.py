@@ -1,5 +1,7 @@
 import os
 import sys
+import wandb
+
 from allennlp.common.util import import_submodules
 from datetime import datetime
 
@@ -49,14 +51,14 @@ def run_on_cluster(job_name, conda_env,
         return func_wrapper
     return func_wrapper_outer
 
-def initialize_experiments():
+def initialize_experiments(experiment_name: str):
     
     FSA_GRAMMAR_STRING = """
                             q0 -> 'S' q1 [0.9900] | 'a' q1 [0.0025] | 'b' q1 [0.0025] | 'c' q1 [0.0025] | 'E' q1 [0.0025]
                             q1 -> 'S' q1 [0.0025] | 'a' q1 [0.3000] | 'b' q1 [0.3000] | 'c' q1 [0.3000] | 'E' q1 [0.0025]
                             q1 -> 'S' q2 [0.0025] | 'a' q2 [0.0300] | 'b' q2 [0.0300] | 'c' q2 [0.0300] | 'E' q2 [0.0025]
                             q2 -> 'S' [0.0025] | 'a' [0.0025] | 'b' [0.0025] | 'c' [0.0025] | 'E' [0.9900]
-                        """
+                         """
         
     os.environ["FSA_GRAMMAR_STRING"] = FSA_GRAMMAR_STRING
     os.environ['ARTIFICIAL_GRAMMAR_TRAIN'] = ""
@@ -77,7 +79,15 @@ def initialize_experiments():
     # ipython notebook.
     main_args = get_args(args=[])
 
-    serialization_dir = os.path.join(main_args.output_dir, datetime.now().strftime("%m_%d_%Y_%H_%M_%S"))
+    experiment_id = datetime.now().strftime("%m_%d_%Y_%H_%M_%S")
+    serialization_dir = os.path.join(main_args.output_dir, experiment_id)
     param_path = main_args.config
+
+    wandb.init(project='quantifying_exposure_bias', 
+               name=experiment_name,
+               id=experiment_id, 
+               sync_tensorboard=False)
+
     return main_args, serialization_dir, param_path
 
+    

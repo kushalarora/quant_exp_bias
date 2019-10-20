@@ -112,3 +112,4 @@ results/
 result/
 logs/
 worker-*
+wandb/
