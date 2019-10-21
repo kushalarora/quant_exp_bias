@@ -8,6 +8,7 @@ from nltk.parse.pchart import InsideChartParser
 from scipy.stats import zipf
 
 from functools import reduce
+import logging
 import itertools
 import random
 import ray
@@ -16,6 +17,9 @@ import subprocess
 import time
 import string
 import numpy as np
+
+logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
+
 
 @Oracle.register('artificial_lang_oracle')
 class ArtificialLanguageOracle(Oracle):
@@ -43,7 +47,7 @@ class ArtificialLanguageOracle(Oracle):
             # we will shut down the server and will
             # restart it.
             ray.shutdown()
-            print("$$$$ Shutting Down Ray $$$$$")
+            logging.info("$$$$ Shutting Down Ray $$$$$")
 
             # Sleep for 5 secs to make sure server
             # is properly shutdown.
@@ -54,22 +58,25 @@ class ArtificialLanguageOracle(Oracle):
         # Sleep for 5 secs to make sure server
         # is properly up.
         time.sleep(2)
-        print("$$$$ Ray Initialized $$$$$")
+        logging.info("$$$$ Ray Initialized $$$$$")
 
 
     @staticmethod
     def generate_grammar_string(grammar_template_file: str, 
                                  vocabulary_size: int,
                                  vocabulary_distribution: str,):
-        epsilon = 10**-10
+        epsilon = 10**-4
 
         def _get_vocab_prob(vsize, offset=0):
             if vocabulary_distribution == 'zipf':
                 dist = zipf(1.2)
-                p_vocabs = [dist.pmf(x + 1) - offset/vsize for x in range(vsize)]
-                p_vocabs /= sum(p_vocabs)
+                p_vocab = [dist.pmf(x + 1) for x in range(vsize)]
+                p_vocab /= sum(p_vocab)
             elif vocabulary_distribution == 'uniform':
-                p_vocab = [1.0/vsize - offset/vsize] * vsize
+                p_vocab = [1.0/vsize] * vsize
+
+            p_vocab =  [(1.0 - offset) * x for x in p_vocab]
+
             return p_vocab
 
         printables = [f"'{x}'" for x in string.printable[:-7] if x not in set(["'", '"'])]
@@ -127,7 +134,7 @@ class ArtificialLanguageOracle(Oracle):
                         p = epsilon
 
                     current_state_offset[current_state] += p
-                    grammar_rules.append(f"{current_state} {arrow} {token} [{p:.10f}]")
+                    grammar_rules.append(f"{current_state} {arrow} {token} [{p:.5f}]")
             else:
                 if re.match("'<G[0-9]+>'", inp):
                     group_num = group2idx[inp]
@@ -148,7 +155,7 @@ class ArtificialLanguageOracle(Oracle):
                         p = epsilon
 
                     current_state_offset[current_state] += p
-                    grammar_rules.append(f"{current_state} {arrow} {token} {next_state} [{p:.10f}]")
+                    grammar_rules.append(f"{current_state} {arrow} {token} {next_state} [{p:.5f}]")
 
         grammar_string = ""
         for rule in grammar_rules:
@@ -213,12 +220,13 @@ class ArtificialLanguageOracle(Oracle):
     @ray.remote
     def _compute_one_sent_prob(grammar_string, sequence: List[str]):
             parser = InsideChartParser(PCFG.fromstring(grammar_string))
-            probs = 1e-10
+            probs = 1e-20
             try:
                 parses = list(parser.parse(sequence))
                 if parses and len(parses) > 0:
                     probs += np.exp(np.log(reduce(lambda a, b: a + b.prob(), parses, 0)/len(parses))/len(sequence))
             except Exception as e:
-                pass
+                logging.warn(e)
+                probs = -1
 
             return probs

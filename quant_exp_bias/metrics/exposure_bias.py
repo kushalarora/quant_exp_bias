@@ -5,10 +5,12 @@ from allennlp.training.metrics.metric import Metric
 
 from quant_exp_bias.oracles.oracle_base import Oracle
 
+import logging
 import torch
 import numpy 
 from functools import reduce
 
+logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 @Metric.register("exp_bias")
 class ExposureBias(Metric):
@@ -45,23 +47,19 @@ class ExposureBias(Metric):
 
         total_value = 0
         for i in range(batch_size):
-            try:
+            value = 0
+            if oracle_probs[i] > 0:
                 value = torch.log(model_probs[i]/oracle_probs[i]).item()
-            except Exception as e:
-                print(e)
-                print(oracle_probs[i])
-                print(model_probs[i])
-            if  numpy.isneginf(value) or numpy.isposinf(value):
-                # with a warning. 
-                print(f'{value}=log({model_probs[i]}/{oracle_probs[i]}) for {predictions[i]}.')
+                if  numpy.isneginf(value) or numpy.isposinf(value):
+                    # with a warning. 
+                    logging.warn(f'{value}=log({model_probs[i]}/{oracle_probs[i]}) for {predictions[i]}.')
+                    continue
+            else:
+                logging.warn(f"Failed to parse prediction: {predictions[i]}. Model Prob: {model_probs[i]}")
                 continue
-    
-            total_value += value
-
-
-        self._total_value += total_value
-        self._count += batch_size
-
+                
+            self._count += 1
+            self._total_value += value
     @overrides
     def get_metric(self, reset: bool = False):
         """
