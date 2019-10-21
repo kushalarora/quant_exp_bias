@@ -2,6 +2,7 @@
 
 import os
 import sys
+import wandb
 
 from matplotlib import pyplot as plt
 
@@ -22,7 +23,7 @@ import numpy as np
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
-main_args, serialization_dir, param_path = initialize_experiments()
+main_args, serialization_dir, param_path, experiment_id = initialize_experiments('validation_experiments')
 num_sample_oracles = 10
 num_trials = 10
 num_samples_per_length=2000
@@ -30,6 +31,7 @@ num_samples_per_length=2000
 # # Dataset Experiments
 
 @run_on_cluster(job_name='validation_experiments', 
+                job_id=experiment_id,
                 conda_env='quant_exp', gpu=1)
 def validation_experiments(num_sample_oracles, num_trials, num_samples_per_length, serialization_dir, param_path):
     validation_exp_results = {}
@@ -54,7 +56,7 @@ def validation_experiments(num_sample_oracles, num_trials, num_samples_per_lengt
             qeb_output_dir = os.path.join(num_run_serialization_dir, 'exp_bias', 'epoch_' + str(epoch))
             
             # TODO(Kushal): Clean this up.
-            validation_ppl = json.load(open(os.path.join(train_model_serialization_dir, f'metrics_epoch_{epoch}.json')))['validation_perplexity']
+            metrics = json.load(open(os.path.join(train_model_serialization_dir, f'metrics_epoch_{epoch}.json')))
 
             weights_file = os.path.join(train_model_serialization_dir, f'model_state_epoch_{epoch}.th')
             qeb_args = get_args(args=['quantify-exposure-bias', archive_file, '--output-dir', qeb_output_dir, '--weights-file', weights_file])
@@ -66,17 +68,20 @@ def validation_experiments(num_sample_oracles, num_trials, num_samples_per_lengt
                                                                                     num_trials=num_trials,
                                                                                     num_samples_per_length=num_samples_per_length);
             if epoch not in validation_exp_results:
-                validation_exp_results[epoch] = {
-                                                    'exp_biases': exp_biases,
-                                                    'val_ppl': [validation_ppl],
-                                                    'exp_mean': [exp_bias_mean],
-                                                    'exp_std': [exp_bias_std]
-                                                }
-            else:
-                validation_exp_results[epoch]['exp_biases'].extend(exp_biases)
-                validation_exp_results[epoch]['exp_mean'].append(exp_bias_mean)
-                validation_exp_results[epoch]['exp_std'].append(exp_bias_std)
-            validation_exp_results[epoch]['val_ppl'].append(validation_ppl)
+                validation_exp_results[epoch] = []
+           
+            results = {
+                        'exp_biases': exp_biases,
+                        'val_ppl': metrics['validation_perplexity'],
+                        'epoch': epoch,
+                        'exp_mean': exp_bias_mean,
+                        'exp_std': exp_bias_std,
+                        'num_run': num_run
+                      }
+
+            validation_exp_results[epoch].append(results)
+            wandb.log(results)
+
     return validation_exp_results
 
 validation_exp_results = validation_experiments(num_sample_oracles, num_trials, num_samples_per_length, serialization_dir, param_path)

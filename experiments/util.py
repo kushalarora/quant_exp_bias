@@ -1,6 +1,5 @@
 import os
 import sys
-import wandb
 
 from allennlp.common.util import import_submodules
 from datetime import datetime
@@ -8,7 +7,7 @@ from datetime import datetime
 import_submodules("quant_exp_bias")
 from quant_exp_bias.utils import get_args
 
-def run_on_cluster(job_name, conda_env, 
+def run_on_cluster(job_name, job_id, conda_env,
                    nodes=1, gpu=0, account=None, 
                    local=False, memory="40 GB", 
                    cores=16, log_dir='logs/',
@@ -16,12 +15,23 @@ def run_on_cluster(job_name, conda_env,
     def func_wrapper_outer(func):
         def func_wrapper(*args, **kwargs):
             import dask
+            import wandb
 
             from dask_jobqueue import SLURMCluster
             from dask.distributed import Client
             from dask.distributed import progress
-            if local:
+
+            def func2(*args, **kwargs):
+                wandb.init(project='quantifying_exposure_bias', 
+                            name=job_name,
+                            id=f'{job_name}-{job_id}', 
+                            dir=log_dir,
+                            sync_tensorboard=False)
                 return func(*args, **kwargs)
+
+            if local:
+                return func2(*args, **kwargs)
+
             env_extra =  [f'source activate {conda_env}'] if conda_env else []
             job_extra = [f"--gres=gpu:{gpu}"] if gpu > 0 else []
 
@@ -37,7 +47,7 @@ def run_on_cluster(job_name, conda_env,
             cluster.scale(nodes)
             client = Client(cluster)
             try:
-                future = client.submit(func, *args, **kwargs)
+                future = client.submit(func2, *args, **kwargs)
                 progress(future)
                 results =  client.gather(future)
                 return results
@@ -83,11 +93,6 @@ def initialize_experiments(experiment_name: str):
     serialization_dir = os.path.join(main_args.output_dir, experiment_id)
     param_path = main_args.config
 
-    wandb.init(project='quantifying_exposure_bias', 
-               name=experiment_name,
-               id=experiment_id, 
-               sync_tensorboard=False)
-
-    return main_args, serialization_dir, param_path
+    return main_args, serialization_dir, param_path, experiment_id
 
     

@@ -3,6 +3,7 @@
 
 import os
 import sys
+import wandb
 
 from matplotlib import pyplot as plt
 from datetime import datetime
@@ -22,7 +23,7 @@ import json
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
-main_args, serialization_dir, param_path = initialize_experiments()
+main_args, serialization_dir, param_path, experiment_id = initialize_experiments('dataset_experiments')
 dataset_experiments_params = [(1000, 16), (5000, 12), (10000,8) , (25000, 4), (50000,2), (100000,1)]
 
 num_sample_oracles = 1
@@ -32,6 +33,7 @@ num_samples_per_length=2000
 # # Validation Experiments
 
 @run_on_cluster(job_name='dataset_experiments', 
+                job_id=experiment_id,
                 conda_env='quant_exp', gpu=1)
 def dataset_experiments(main_args, serialization_dir, param_path):
     # Setup variables needed later.
@@ -60,6 +62,7 @@ def dataset_experiments(main_args, serialization_dir, param_path):
             archive_file = os.path.join(train_model_serialization_dir, 'model.tar.gz')
             qeb_output_dir = os.path.join(serialization_dir, 'exp_bias')
 
+            metrics = json.load(open(os.path.join(train_model_serialization_dir, f'metrics.json')))
             qeb_args = get_args(args=['quantify-exposure-bias', archive_file, '--output-dir', qeb_output_dir])
             exp_biases, exp_bias_mean, exp_bias_std = quantify_exposure_bias_runner(qeb_args, 
                                                                                     archive_file,
@@ -67,7 +70,19 @@ def dataset_experiments(main_args, serialization_dir, param_path):
                                                                                     cuda_device=cuda_device, 
                                                                                     num_trials=num_trials,
                                                                                     num_samples_per_length=num_samples_per_length)
-            dataset_exp_results[num_samples].extend(exp_biases)
+            result= {
+                'exp_biases': exp_biases,
+                'exp_bias_mean': exp_bias_mean,
+                'exp_bias_std': exp_bias_std,
+                'num_samples': num_samples,
+                'num_run': num_run,
+                'val_ppl': metrics['best_validation_perplexity'],
+                'best_val_epoch': metrics['best_epoch']
+            }
+            
+            dataset_exp_results[num_samples].append(result)
+            wandb.log(result)
+
     return dataset_exp_results
 
 dataset_exp_results = dataset_experiments(main_args, serialization_dir, param_path)
@@ -76,4 +91,3 @@ result_path = os.path.join(serialization_dir, 'dataset_experiments.json')
 with open(result_path, 'w') as f:
     json.dump(dataset_exp_results, f, indent=4, sort_keys=True)
 print(result_path)
-#
