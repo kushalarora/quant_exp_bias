@@ -1,8 +1,15 @@
+import json
 import os
 import sys
+import wandb
 
-from allennlp.common.util import import_submodules
 from datetime import datetime
+from typing import Dict, List
+
+from allennlp.common import Params
+from allennlp.common.util import import_submodules
+from quant_exp_bias.utils import (get_args, quantify_exposure_bias_runner, 
+                  sample_oracle_runner, train_runner)
 
 import_submodules("quant_exp_bias")
 from quant_exp_bias.utils import get_args
@@ -11,7 +18,7 @@ def run_on_cluster(job_name, job_id, conda_env,
                    nodes=1, gpu=0, account=None, 
                    local=False, memory="40 GB", 
                    cores=16, log_dir='logs/',
-                   walltime="10:00:00"):
+                   walltime="20:00:00"):
     def func_wrapper_outer(func):
         def func_wrapper(*args, **kwargs):
             import dask
@@ -94,5 +101,3 @@ def initialize_experiments(experiment_name: str):
     param_path = main_args.config
 
     return main_args, serialization_dir, param_path, experiment_id
-
-    

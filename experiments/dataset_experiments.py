@@ -24,7 +24,7 @@ import json
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
 main_args, serialization_dir, param_path, experiment_id = initialize_experiments('dataset_experiments')
-dataset_experiments_params = [(1000, 16), (5000, 12), (10000,8) , (25000, 4), (50000,2), (100000,1)]
+dataset_experiments_params = [(1000, 16), (5000, 12), (10000,8) , (25000, 6), (50000,4), (100000,2)]
 
 num_sample_oracles = 1
 num_trials = 10

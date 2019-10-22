@@ -90,6 +90,7 @@ class LMBase(Model):
                  beam_size: int = None,
                  scheduled_sampling_ratio: float = 0.,
                  scheduled_sampling_k: int = 100,
+                 scheduled_sampling_type: str = 'uniform',
                  use_bleu: bool = True,
                  dropout: float = None,
                  sample_from_categorical: bool = True, 
@@ -111,7 +112,7 @@ class LMBase(Model):
         self._target_namespace = target_namespace
         self._scheduled_sampling_ratio = scheduled_sampling_ratio
         self._scheduled_sampling_k = scheduled_sampling_k
-
+        self._scheduled_sampling_type = scheduled_sampling_type
         # We need the start symbol to provide as the input at the first timestep of decoding, and
         # end symbol as a way to indicate the end of the decoded sequence.
         self._start_index = self.vocab.get_token_index(start_token, self._target_namespace)
@@ -439,10 +440,13 @@ class LMBase(Model):
         step_prediction_loss: List[torch.Tensor] = []
 
         k = self._scheduled_sampling_k
-        scheduled_sampling_ratio = min(self._scheduled_sampling_ratio,
-                                       #1 -  2/(1 + math.exp(0.1*(self.training_iteration//300)))
-                                       1 -  k/(k + math.exp(self.training_iteration/k))
-                                       ) if self._scheduled_sampling_k > 0 else self._scheduled_sampling_ratio
+        if self._scheduled_sampling_type == 'uniform':
+            scheduled_sampling_ratio = self._scheduled_sampling_ratio
+        elif self._scheduled_sampling_type == 'quantized':
+             scheduled_sampling_ratio =  1 -  k/(k + math.exp(self.training_iteration//k))
+        elif self._scheduled_sampling_type == 'linear':
+             scheduled_sampling_ratio =  1 -  k/(k + math.exp(self.training_iteration/k))
+
         self._ss_ratio(scheduled_sampling_ratio)
 
         if self.training:
@@ -493,7 +497,7 @@ class LMBase(Model):
 
         output_dict = {"predictions": predictions,
                        "prediction_loss": prediction_loss, 
-                       "scheduled_sampleing_ratio": scheduled_sampling_ratio}
+                       "scheduled_sampling_ratio": scheduled_sampling_ratio}
      
         if target_tokens:
             # shape: (batch_size, num_decoding_steps, num_classes)
