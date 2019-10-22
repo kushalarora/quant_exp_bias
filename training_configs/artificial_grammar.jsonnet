@@ -24,7 +24,7 @@
     "dropout": 0.5,
     "oracle": {
       "type": "artificial_lang_oracle",
-      "grammar_file": "grammar_templates/default_grammar.txt",
+      "grammar_file": "grammar_templates/zipf_grammar_2_24.txt",
       "parallelize": true
     },
     "start_token": "<S>",

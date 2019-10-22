@@ -17,7 +17,7 @@ from quant_exp_bias.utils import get_args
 def run_on_cluster(job_name, job_id, conda_env,
                    nodes=1, gpu=0, account=None, 
                    local=False, memory="40 GB", 
-                   cores=16, log_dir='logs/',
+                   cores=4, log_dir='logs/',
                    walltime="20:00:00"):
     def func_wrapper_outer(func):
         def func_wrapper(*args, **kwargs):
