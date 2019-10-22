@@ -95,9 +95,12 @@ class ArtificialLanguageOracle(Oracle):
                 inp, next_state = next_states
             elif len(next_states) == 3:
                 inp, next_state, prob = next_states
-
+            
             if re.match("'<G[0-9]+>'", inp):
                 group_set.add(inp)
+            elif inp not in extended_vocab:
+                extended_vocab.append(inp)
+                
 
         group2idx = {}
         for i, g in enumerate(group_set):
