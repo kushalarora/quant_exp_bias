@@ -44,7 +44,7 @@ def model_size_experiments(main_args, serialization_dir, param_path):
     orig_serialization_dir = serialization_dir
     for model_size in reversed(model_sizes):
         param_path = f'training_configs/model_size_experiments/artificial_grammar_{model_size}.jsonnet'
-        msexp_serialization_dir = os.path.join(orig_serialization_dir, 'model_size_experiments', model_size)
+        msexp_serialization_dir = os.path.join(orig_serialization_dir, model_size)
         for num_samples, num_runs in num_samples_and_runs:
             for run in range(num_runs):
                 serialization_dir = os.path.join(msexp_serialization_dir, str(num_samples), str(run))
@@ -70,9 +70,7 @@ def model_size_experiments(main_args, serialization_dir, param_path):
                 exp_biases, exp_bias_mean, exp_bias_std = quantify_exposure_bias_runner(qeb_args, 
                                                                                         archive_file,
                                                                                         qeb_output_dir,
-                                                                                        cuda_device=cuda_device, 
-                                                                                        num_trials=num_trials,
-                                                                                        num_samples_per_length=num_samples_per_length)
+                                                                                        cuda_device=cuda_device)
 
                 result = {
                             'exp_biases': exp_biases,

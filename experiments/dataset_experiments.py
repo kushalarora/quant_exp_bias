@@ -43,7 +43,7 @@ def dataset_experiments(main_args, serialization_dir, param_path):
         
     orig_serialization_dir = serialization_dir
     for num_samples, num_runs in dataset_experiments_params:
-        dexp_serialization_dir = os.path.join(orig_serialization_dir, 'dataset_experiments', str(num_samples))
+        dexp_serialization_dir = os.path.join(orig_serialization_dir, str(num_samples))
         for num_run in range(num_runs):
             serialization_dir = os.path.join(dexp_serialization_dir, str(num_run))
             sample_oracle_args = get_args(args=['sample-oracle', param_path, '-s', serialization_dir, '-n', str(num_samples)])
@@ -67,9 +67,7 @@ def dataset_experiments(main_args, serialization_dir, param_path):
             exp_biases, exp_bias_mean, exp_bias_std = quantify_exposure_bias_runner(qeb_args, 
                                                                                     archive_file,
                                                                                     qeb_output_dir,
-                                                                                    cuda_device=cuda_device, 
-                                                                                    num_trials=num_trials,
-                                                                                    num_samples_per_length=num_samples_per_length)
+                                                                                    cuda_device=cuda_device)
             result= {
                 'exp_biases': exp_biases,
                 'exp_bias_mean': exp_bias_mean,

@@ -48,7 +48,7 @@ def scheduled_sampling_experiments(main_args, serialization_dir, param_path):
         
     orig_serialization_dir = serialization_dir
     for ss_type, ss_ratio, ss_k in scheduled_sampling_ratios:
-        msexp_serialization_dir = os.path.join(orig_serialization_dir, 'scheduled_sampling_experiments', f'{ss_type}_{ss_ratio}_{ss_k}')
+        msexp_serialization_dir = os.path.join(orig_serialization_dir, f'{ss_type}_{ss_ratio}_{ss_k}')
         for num_samples, num_runs in num_samples_and_runs:
             for run in range(num_runs):
                 serialization_dir = os.path.join(msexp_serialization_dir, str(num_samples), str(run))
@@ -77,9 +77,7 @@ def scheduled_sampling_experiments(main_args, serialization_dir, param_path):
                 exp_biases, exp_bias_mean, exp_bias_std = quantify_exposure_bias_runner(qeb_args, 
                                                                                         archive_file,
                                                                                         qeb_output_dir,
-                                                                                        cuda_device=cuda_device, 
-                                                                                        num_trials=num_trials,
-                                                                                        num_samples_per_length=num_samples_per_length)
+                                                                                        cuda_device=cuda_device)
                 result = {
                             'exp_biases': exp_biases,
                             'exp_bias_mean': exp_bias_mean,

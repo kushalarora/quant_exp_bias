@@ -12,12 +12,13 @@ from quant_exp_bias.utils import (get_args, quantify_exposure_bias_runner,
                   sample_oracle_runner, train_runner)
 
 import_submodules("quant_exp_bias")
+from quant_exp_bias.oracles.artificial_grammar_oracle import ArtificialLanguageOracle
 from quant_exp_bias.utils import get_args
 
 def run_on_cluster(job_name, job_id, conda_env,
                    nodes=1, gpu=0, account=None, 
                    local=False, memory="40 GB", 
-                   cores=4, log_dir='logs/',
+                   cores=8, log_dir='logs/',
                    walltime="20:00:00"):
     def func_wrapper_outer(func):
         def func_wrapper(*args, **kwargs):
@@ -68,24 +69,10 @@ def run_on_cluster(job_name, job_id, conda_env,
         return func_wrapper
     return func_wrapper_outer
 
-def initialize_experiments(experiment_name: str):
-    
-    FSA_GRAMMAR_STRING = """
-                            q0 -> 'S' q1 [0.9900] | 'a' q1 [0.0025] | 'b' q1 [0.0025] | 'c' q1 [0.0025] | 'E' q1 [0.0025]
-                            q1 -> 'S' q1 [0.0025] | 'a' q1 [0.3000] | 'b' q1 [0.3000] | 'c' q1 [0.3000] | 'E' q1 [0.0025]
-                            q1 -> 'S' q2 [0.0025] | 'a' q2 [0.0300] | 'b' q2 [0.0300] | 'c' q2 [0.0300] | 'E' q2 [0.0025]
-                            q2 -> 'S' [0.0025] | 'a' [0.0025] | 'b' [0.0025] | 'c' [0.0025] | 'E' [0.9900]
-                         """
-        
-    os.environ["FSA_GRAMMAR_STRING"] = FSA_GRAMMAR_STRING
-    os.environ['ARTIFICIAL_GRAMMAR_TRAIN'] = ""
-    os.environ['ARTIFICIAL_GRAMMAR_DEV'] = ""
-
-
-    num_sample_oracles = 10
-    num_trials = 10
-    num_samples_per_length=2000
-
+def initialize_experiments(experiment_name: str, 
+                           grammar_template: str='grammar_templates/grammar_1.template',
+                           vocabulary_size: int=6,
+                           vocabulary_distribution: str='uniform'):
     # Ipython by default adds some arguments to sys.argv.
     #  We don't want those arguments, hence we pass [] here.
     #
@@ -97,7 +84,18 @@ def initialize_experiments(experiment_name: str):
     main_args = get_args(args=[])
 
     experiment_id = datetime.now().strftime("%m_%d_%Y_%H_%M_%S")
-    serialization_dir = os.path.join(main_args.output_dir, experiment_id)
+    serialization_dir = os.path.join(main_args.output_dir, experiment_name, experiment_id)
     param_path = main_args.config
+
+    grammar_string = ArtificialLanguageOracle.generate_grammar_string(grammar_template_file=grammar_template,
+                                                                            vocabulary_size=vocabulary_size, 
+                                                                            vocabulary_distribution=vocabulary_distribution)
+    os.makedirs(serialization_dir, exist_ok=True)
+    grammar_filename = os.path.join(serialization_dir, 'grammar.txt')
+    with open(grammar_filename, 'w') as f:
+        f.write(grammar_string)
+    os.environ["FSA_GRAMMAR_FILENAME"]  = grammar_filename
+    os.environ['ARTIFICIAL_GRAMMAR_TRAIN'] = ""
+    os.environ['ARTIFICIAL_GRAMMAR_DEV'] = ""
 
     return main_args, serialization_dir, param_path, experiment_id

@@ -24,7 +24,7 @@
     "dropout": 0.1,
     "oracle": {
       "type": "artificial_lang_oracle",
-      "grammar_file": "grammar_templates/zipf_grammar_2_24.txt",
+      "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME"),
       "parallelize": true
     },
     "start_token": "<S>",

@@ -98,7 +98,7 @@ class QuantifyExposureBias(Subcommand):
 
         subparser.add_argument('--num-samples-per-length',
                                  type=int,
-                                 default=10000,
+                                 default=2000,
                                  help='Number of samples to draw from $w_{1}^{n}~p$ for approximating expectation.')
 
         subparser.add_argument('--num-length-samples',
@@ -109,7 +109,7 @@ class QuantifyExposureBias(Subcommand):
         
         subparser.add_argument('--num-trials',
                                  type=int,
-                                 default=1,
+                                 default=5,
                                  help='Number of samples to draw from $n~\mathcal{N}$" + \
                                         "for approximating expectation over sequence lengths.')
         
@@ -136,7 +136,7 @@ def quantify_exposure_bias_from_args(args: argparse.Namespace) -> Dict[str, Any]
 
 def quantify_exposure_bias(archive_file: str,
                            output_dir: str,
-                           num_trials: int = 1,
+                           num_trials: int = 5,
                            num_length_samples: int = 50,
                            num_samples_per_length: int = 1024,
                            cuda_device: int = -1,

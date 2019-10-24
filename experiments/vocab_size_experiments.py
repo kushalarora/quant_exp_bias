@@ -49,7 +49,7 @@ def vocabulary_size_experiments(main_args, serialization_dir, param_path):
         
     orig_serialization_dir = serialization_dir
     for grammar_template, size, dist in grammar_vocab_size_and_dist:
-        vsexp_serialization_dir = os.path.join(orig_serialization_dir, 'vocabulary_size_experiments', f'{dist}_{size}')
+        vsexp_serialization_dir = os.path.join(orig_serialization_dir, f'{grammar_template}_{dist}_{size}')
         grammar_string = ArtificialLanguageOracle.generate_grammar_string(grammar_template_file=grammar_template,
                                                                             vocabulary_size=size, 
                                                                             vocabulary_distribution=dist)
@@ -85,9 +85,7 @@ def vocabulary_size_experiments(main_args, serialization_dir, param_path):
                 exp_biases, exp_bias_mean, exp_bias_std = quantify_exposure_bias_runner(qeb_args, 
                                                                                         archive_file,
                                                                                         qeb_output_dir,
-                                                                                        cuda_device=cuda_device, 
-                                                                                        num_trials=num_trials,
-                                                                                        num_samples_per_length=num_samples_per_length)
+                                                                                        cuda_device=cuda_device)
                 result = {
                             'exp_biases': exp_biases,
                             'exp_bias_mean': exp_bias_mean,
@@ -99,7 +97,7 @@ def vocabulary_size_experiments(main_args, serialization_dir, param_path):
                             'val_ppl': metrics['best_validation_perplexity'],
                             'best_val_epoch': metrics['best_epoch']
                         }
-                vocab_size_exp_results[f'{dist}_{size}'].append(result)
+                vocab_size_exp_results[f'{grammar_template}_{dist}_{size}'].append(result)
                 wandb.log(result)
     return vocab_size_exp_results
 

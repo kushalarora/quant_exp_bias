@@ -37,7 +37,7 @@ def validation_experiments(num_sample_oracles, num_trials, num_samples_per_lengt
     validation_exp_results = {}
     for num_samples, num_runs in num_samples_and_runs:
         for run in range(num_runs):
-            num_run_serialization_dir = os.path.join(serialization_dir, 'validation_experiments', str(num_samples), str(run))
+            num_run_serialization_dir = os.path.join(serialization_dir, str(num_samples), str(run))
             sample_oracle_args = get_args(args=['sample-oracle', param_path, '-s', num_run_serialization_dir, f'-n {num_samples}'])
             oracle_train_filename, oracle_dev_filename = sample_oracle_runner(sample_oracle_args, 
                                                                             num_run_serialization_dir);
@@ -64,9 +64,7 @@ def validation_experiments(num_sample_oracles, num_trials, num_samples_per_lengt
                                                                                         archive_file,
                                                                                         qeb_output_dir,
                                                                                         cuda_device=cuda_device,
-                                                                                        weights_file=weights_file,
-                                                                                        num_trials=num_trials,
-                                                                                        num_samples_per_length=num_samples_per_length);
+                                                                                        weights_file=weights_file);
                 if epoch not in validation_exp_results:
                     validation_exp_results[epoch] = []
             
