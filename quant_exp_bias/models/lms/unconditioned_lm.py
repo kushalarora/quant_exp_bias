@@ -1,5 +1,9 @@
 from allennlp.data.vocabulary import Vocabulary
 from quant_exp_bias.models.lms.lm import LMBase
+from allennlp.common.util import START_SYMBOL, END_SYMBOL
+from allennlp.nn import InitializerApplicator, RegularizerApplicator
+
+from typing import Optional
 from allennlp.models.model import Model
 from allennlp.modules import Attention, TextFieldEmbedder, Seq2SeqEncoder
 from allennlp.modules.similarity_functions import SimilarityFunction
@@ -13,7 +17,6 @@ class LMQuantExpModel(LMBase):
     """
     def __init__(self,
                  vocab: Vocabulary,
-                 oracle: Oracle,
                  max_decoding_steps: int,
                  target_embedding_dim: int,
                  target_output_dim: int,
@@ -25,12 +28,15 @@ class LMQuantExpModel(LMBase):
                  scheduled_sampling_type: str = 'uniform',
                  use_bleu: bool = True,
                  dropout: float = None,
-                 start_token: str = '<S>',
-                 end_token: str = '</S>',
-                 num_decoder_layers:int = 1) -> None:
+                 start_token: str = START_SYMBOL,
+                 end_token: str = END_SYMBOL,
+                 num_decoder_layers:int = 1,
+                 initializer: InitializerApplicator = InitializerApplicator(),
+                 regularizer: Optional[RegularizerApplicator] = None,
+
+                 oracle: Oracle = None) -> None:
         
         super().__init__(vocab=vocab,
-                         oracle=oracle,
                          use_in_seq2seq_mode=False,
                          max_decoding_steps=max_decoding_steps,
                          target_embedding_dim=target_embedding_dim,
@@ -45,4 +51,7 @@ class LMQuantExpModel(LMBase):
                          dropout=dropout,
                          start_token=start_token,
                          end_token=end_token,
-                         num_decoder_layers=num_decoder_layers)
+                         num_decoder_layers=num_decoder_layers,
+                         initializer=initializer,
+                         regularizer=regularizer,
+                         oracle=oracle)

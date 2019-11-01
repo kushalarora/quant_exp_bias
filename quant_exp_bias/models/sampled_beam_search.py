@@ -168,7 +168,7 @@ class SampledBeamSearch:
 
             # If every predicted token from the last step is `self._end_index`,
             # then we can stop early.
-            if (last_predictions == self._end_index).all():
+            if (last_predictions.cpu() == self._end_index).all():
                 break
 
             # Take a step. This get the predicted log probs of the next classes

@@ -8,10 +8,10 @@ from typing import Dict, List, Callable, Tuple, Union
 
 from allennlp.common import Params
 from allennlp.common.util import import_submodules
+import_submodules("quant_exp_bias")
 from quant_exp_bias.utils import (get_args, quantify_exposure_bias_runner, 
                   sample_oracle_runner, train_runner)
 
-import_submodules("quant_exp_bias")
 from quant_exp_bias.oracles.artificial_grammar_oracle import ArtificialLanguageOracle
 from quant_exp_bias.utils import get_args
 

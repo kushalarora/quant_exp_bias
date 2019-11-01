@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 import logging
 
@@ -11,6 +11,7 @@ from torch.nn.modules.linear import Linear
 from torch.nn.modules.rnn import LSTMCell, LSTM
 from torch.distributions import Categorical
 
+from allennlp.nn import InitializerApplicator, RegularizerApplicator
 
 from allennlp.common.checks import ConfigurationError
 from allennlp.common.util import START_SYMBOL, END_SYMBOL
@@ -76,11 +77,14 @@ class LMBase(Model):
         2015 <https://arxiv.org/abs/1506.03099>`_.
     use_bleu : ``bool``, optional (default = True)
         If True, the BLEU metric will be calculated during validation.
+    initializer : ``InitializerApplicator``, optional (default=``InitializerApplicator()``)
+        Used to initialize the model parameters.
+    regularizer : ``RegularizerApplicator``, optional (default=``None``)
+        If provided, will be used to calculate the regularization penalty during training.
     """
 
     def __init__(self,
                  vocab: Vocabulary,
-                 oracle: Oracle,
                  use_in_seq2seq_mode: bool,
                  max_decoding_steps: int,
                  generation_batch_size: int,
@@ -93,12 +97,16 @@ class LMBase(Model):
                  scheduled_sampling_type: str = 'uniform',
                  use_bleu: bool = True,
                  dropout: float = None,
-                 sample_from_categorical: bool = True, 
+                 sample_from_categorical: bool = False, 
 #                 start_index: str = '<S>',
 #                 end_index: str = '</S>',
-                 start_token: str = 'S',
-                 end_token: str = 'E',
+                 start_token: str =START_SYMBOL,
+                 end_token: str = END_SYMBOL,
                  num_decoder_layers:int = 1,
+                 initializer: InitializerApplicator = InitializerApplicator(),
+                 regularizer: Optional[RegularizerApplicator] = None,
+
+                 oracle: Oracle = None,
 
                  # This fields will only come into play in Seq2Seq mode.
                  source_embedder: TextFieldEmbedder = None,
@@ -106,13 +114,16 @@ class LMBase(Model):
                  attention: Attention = None,
                  attention_function: SimilarityFunction = None) -> None:
         super(LMBase, self).__init__(vocab)
-                
+        
         self._seq2seq_mode = use_in_seq2seq_mode
 
         self._target_namespace = target_namespace
         self._scheduled_sampling_ratio = scheduled_sampling_ratio
         self._scheduled_sampling_k = scheduled_sampling_k
         self._scheduled_sampling_type = scheduled_sampling_type
+        self._generation_batch_size = generation_batch_size
+        self._sample_from_categorical = sample_from_categorical
+
         # We need the start symbol to provide as the input at the first timestep of decoding, and
         # end symbol as a way to indicate the end of the decoded sequence.
         self._start_index = self.vocab.get_token_index(start_token, self._target_namespace)
@@ -126,8 +137,6 @@ class LMBase(Model):
                                                           oov_index],
                                                           device=torch.cuda.current_device()), 
                                         0)
-        # self._start_index = self.vocab.get_token_index(START_SYMBOL, self._target_namespace)
-        # self._end_index = self.vocab.get_token_index(END_SYMBOL, self._target_namespace)
 
         if use_bleu:
             pad_index = self.vocab.get_token_index(self.vocab._padding_token, self._target_namespace)  # pylint: disable=protected-access
@@ -138,21 +147,17 @@ class LMBase(Model):
         # At prediction time, we use a beam search to find the most likely sequence of target tokens.
         beam_size = beam_size or 1
         self._max_decoding_steps = max_decoding_steps
-        self._generation_batch_size = generation_batch_size
+
         # TODO(Kushal): Pass in the arguments for sampled. Also, make sure you do not sample in case of Seq2Seq models.
-        self._beam_search = SampledBeamSearch(self._end_index, max_steps=max_decoding_steps, beam_size=beam_size, sampled=True)
+        self._beam_search = SampledBeamSearch(self._end_index, max_steps=max_decoding_steps, beam_size=beam_size, sampled=self._sample_from_categorical)
 
         num_classes = self.vocab.get_vocab_size(self._target_namespace)
 
         # Dense embedding of vocab words in the target space.
         self._target_embedder = Embedding(num_classes, target_embedding_dim)
 
-        self._sample_from_categorical = sample_from_categorical
-
+        self._seq2seq_mode = use_in_seq2seq_mode
         if self._seq2seq_mode:
-
-            self._seq2seq_mode = use_in_seq2seq_mode
-
             # Dense embedding of source vocab tokens.
             self._source_embedder = source_embedder
 
@@ -163,7 +168,8 @@ class LMBase(Model):
 
         self._perplexity = Perplexity()
 
-        self._exposure_bias = ExposureBias(oracle)
+        if oracle is not None:
+            self._exposure_bias = ExposureBias(oracle)
 
         self._ss_ratio = Average()
         if dropout:
@@ -218,6 +224,7 @@ class LMBase(Model):
         # in order to get log probabilities of each target token, at each time step.
         self._output_projection_layer = Linear(self._decoder_output_dim, num_classes)
 
+        initializer(self)
 
 
     def take_step(self,
@@ -300,8 +307,10 @@ class LMBase(Model):
             # and validation.
             output_dict.update(self._forward_loop(state, target_tokens))
 
-
         if not self.training:
+            if self._seq2seq_mode:
+                state = self._init_decoder_state_from_encoder(state)
+
             if target_tokens and self._bleu:
                 output_dict.update(self._forward_beam_search(state, 
                                             target_tokens=target_tokens))
@@ -310,7 +319,7 @@ class LMBase(Model):
                 top_k_predictions = output_dict["predictions"]
                 # shape: (batch_size, max_predicted_sequence_length)
                 best_predictions = top_k_predictions[:, 0, :]
-                
+
                 self._bleu(best_predictions, target_tokens["tokens"])
 
             
@@ -325,7 +334,9 @@ class LMBase(Model):
                 best_predictions = top_k_predictions[:, 0, :]
 
                 prediction_loss = top_k_log_probabilities[:,0]
-                predicted_tokens = self._decode_tokens(best_predictions, truncate=True)
+                predicted_tokens = self._decode_tokens(best_predictions, 
+                                                        vocab_namespace=self._target_namespace,
+                                                        truncate=True)
                 
                 self._exposure_bias(prediction_loss.data, predicted_tokens)
 
@@ -333,7 +344,10 @@ class LMBase(Model):
                 output_dict['prediction_loss'] = prediction_loss
         return output_dict
 
-    def _decode_tokens(self, predicted_indices: torch.Tensor, truncate=False) -> List[str]:
+    def _decode_tokens(self, 
+                       predicted_indices: torch.Tensor, 
+                       vocab_namespace:str ='tokens',
+                       truncate=False) -> List[str]:
         if not isinstance(predicted_indices, numpy.ndarray):
             predicted_indices = predicted_indices.detach().cpu().numpy()
         all_predicted_tokens = []    
@@ -347,7 +361,7 @@ class LMBase(Model):
 
             if truncate and self._end_index in indices:
                 indices = indices[:indices.index(self._end_index)]
-            predicted_tokens = [self.vocab.get_token_from_index(x, namespace=self._target_namespace)
+            predicted_tokens = [self.vocab.get_token_from_index(x, namespace=vocab_namespace)
                                 for x in indices]
             
             all_predicted_tokens.append(predicted_tokens)
@@ -367,17 +381,24 @@ class LMBase(Model):
         corresponding tokens, and adds a field called ``predicted_tokens`` to the ``output_dict``.
         """
         predicted_indices = output_dict["predictions"]
-        all_predicted_tokens = self._decode_tokens(predicted_indices, True)
+        all_predicted_tokens = self._decode_tokens(predicted_indices, 
+                                                    vocab_namespace=self._target_namespace,
+                                                    truncate=True)
         output_dict["predicted_tokens"] = all_predicted_tokens
         return output_dict
 
     def _encode(self, source_tokens: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         # shape: (batch_size, max_input_sequence_length, encoder_input_dim)
         embedded_input = self._source_embedder(source_tokens)
+
+        # shape: (batch_size, max_input_sequence_length, encoder_input_dim)
+        embedded_input_w_dropout = self._dropout(embedded_input)
         # shape: (batch_size, max_input_sequence_length)
         source_mask = util.get_text_field_mask(source_tokens)
+
         # shape: (batch_size, max_input_sequence_length, encoder_output_dim)
-        encoder_outputs = self._encoder(embedded_input, source_mask)
+        encoder_outputs = self._encoder(embedded_input_w_dropout, source_mask)
+        
         return {
                 "source_mask": source_mask,
                 "encoder_outputs": encoder_outputs,
@@ -394,6 +415,7 @@ class LMBase(Model):
         # Initialize the decoder hidden state with the final output of the encoder.
         # shape: ((batch_size, decoder_output_dim), (batch_size, decoder_output_dim))
         state["decoder_hidden"] = final_encoder_output
+        # shape: (batch_size, decoder_output_dim)
         state["decoder_context"] = state["encoder_outputs"]\
                                         .new_zeros(batch_size, self._decoder_output_dim)
         return state
@@ -475,13 +497,8 @@ class LMBase(Model):
             class_probabilities = F.softmax(output_projections, dim=-1)
 
             # shape (predicted_classes): (batch_size,)
+            prediction_loss, predicted_classes = torch.max(class_probabilities, 1)
 
-            if self._sample_from_categorical:
-                predicted_classes = torch.multinomial(class_probabilities, 1)
-                prediction_loss = torch.gather(class_probabilities, 1, predicted_classes)
-                predicted_classes, prediction_loss = predicted_classes.squeeze(1), prediction_loss.squeeze(1)
-            else:
-                prediction_loss, predicted_classes = torch.max(class_probabilities, 1)
             # shape (predicted_classes): (batch_size,)
             last_predictions = predicted_classes
 
@@ -556,7 +573,7 @@ class LMBase(Model):
 
     def _prepare_output_projections(self,
                                     last_predictions: torch.Tensor,
-                                    state: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:  # pylint: disable=line-too-long
+                                    state: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         """
         Decode current state and last prediction to produce produce projections
         into the target space, which can then be used to get probabilities of
@@ -585,6 +602,8 @@ class LMBase(Model):
         # shape: (group_size, target_embedding_dim)
         embedded_input = self._target_embedder(last_predictions)
 
+        embedded_input_w_dropout = self._dropout(embedded_input)
+
         if self._attention:
 
             # shape: (group_size, max_input_sequence_length, encoder_output_dim)
@@ -597,10 +616,10 @@ class LMBase(Model):
             attended_input = self._prepare_attended_input(decoder_hidden, encoder_outputs, source_mask)
 
             # shape: (group_size, decoder_output_dim + target_embedding_dim)
-            decoder_input = torch.cat((attended_input, embedded_input), -1)
+            decoder_input = torch.cat((attended_input, embedded_input_w_dropout), -1)
         else:
             # shape: (group_size, target_embedding_dim)
-            decoder_input = embedded_input
+            decoder_input = embedded_input_w_dropout
 
         # shape (decoder_hidden): (batch_size, decoder_output_dim)
         # shape (decoder_context): (batch_size, decoder_output_dim)
@@ -636,8 +655,9 @@ class LMBase(Model):
         encoder_outputs_mask = encoder_outputs_mask.float()
 
         # shape: (batch_size, max_input_sequence_length)
-        input_weights = self._attention(
-                decoder_hidden_state, encoder_outputs, encoder_outputs_mask)
+        input_weights = self._attention(decoder_hidden_state, 
+                                        encoder_outputs, 
+                                        encoder_outputs_mask)
 
         # shape: (batch_size, encoder_output_dim)
         attended_input = util.weighted_sum(encoder_outputs, input_weights)

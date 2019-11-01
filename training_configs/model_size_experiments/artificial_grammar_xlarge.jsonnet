@@ -20,6 +20,7 @@
     "num_decoder_layers": 2,
     "generation_batch_size": 32, 
     "max_decoding_steps": 50,
+    "sample_output": true,
     "beam_size": 1,
     "use_bleu" : false,
     "dropout": 0.1,
