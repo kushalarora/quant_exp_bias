@@ -45,10 +45,6 @@ def vocabulary_size_experiments(grammar_vocab_size_and_dist,
                                 serialization_dir, 
                                 param_path):
     # Setup variables needed later.
-    vocab_size_exp_results = {}
-    for grammar_template, size, dist in grammar_vocab_size_and_dist:
-        vocab_size_exp_results[f'{grammar_template}_{dist}_{size}'] = []
-        
     orig_serialization_dir = serialization_dir
     for grammar_template, size, dist in grammar_vocab_size_and_dist:
         vsexp_serialization_dir = os.path.join(orig_serialization_dir, f'{grammar_template}_{dist}_{size}')
@@ -74,10 +70,10 @@ def vocabulary_size_experiments(grammar_vocab_size_and_dist,
                 assert len(run_metrics) == 1, \
                     'For this experiment, there should only be one final metric object for a run.'
                 run_metrics = run_metrics[0]
-                result = {
-                            'exp_biases': run_metrics['exp_biases'],
-                            'exp_bias_mean': run_metrics['exp_bias_mean'],
-                            'exp_bias_std': run_metrics['exp_bias_std'],
+                for exp_bias_idx, exp_bias in enumerate(run_metrics['exp_biases']):
+                    result= {
+                            'exp_bias': exp_bias, 
+                            'exp_bias_idx': exp_bias_idx,
                             'num_run': num_run,
                             'num_samples': num_samples,
                             'distribution': dist,
@@ -86,17 +82,10 @@ def vocabulary_size_experiments(grammar_vocab_size_and_dist,
                             'best_val_epoch': run_metrics['best_epoch'],
                             'grammar': grammar_template
                         }
-                vocab_size_exp_results[f'{grammar_template}_{dist}_{size}'].append(result)
                 wandb.log(result)
-    return vocab_size_exp_results
 
-dataset_exp_results = vocabulary_size_experiments(grammar_vocab_size_and_dist, 
-                                                    num_samples_and_runs, 
-                                                    main_args, 
-                                                    serialization_dir, 
-                                                    param_path)
-
-result_path = os.path.join(serialization_dir, 'vocabulary_size_experiments.json')
-with open(result_path, 'w') as f:
-    json.dump(dataset_exp_results, f, indent=4, sort_keys=True)
-print(result_path)
+vocabulary_size_experiments(grammar_vocab_size_and_dist, 
+                            num_samples_and_runs, 
+                            main_args, 
+                            serialization_dir, 
+                            param_path)

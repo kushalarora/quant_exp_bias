@@ -17,7 +17,7 @@ from allennlp.common.util import import_submodules
 import_submodules("quant_exp_bias")
 from quant_exp_bias.utils import (get_args, quantify_exposure_bias_runner, 
                   sample_oracle_runner, train_runner)
-from util import run_on_cluster, initialize_experiments, one_exp_run
+from experiments.util import run_on_cluster, initialize_experiments, one_exp_run
 
 import json
 
@@ -45,10 +45,6 @@ def scheduled_sampling_experiments(scheduled_sampling_ratios,
                                     serialization_dir, 
                                     param_path):
 
-    model_size_exp_results = {}
-    for  ss_type, ss_ratio, ss_k in scheduled_sampling_ratios:
-        model_size_exp_results[f'{ss_type}_{ss_ratio}_{ss_k}'] = []
-        
     orig_serialization_dir = serialization_dir
     for ss_type, ss_ratio, ss_k in scheduled_sampling_ratios:
         serialization_dir = os.path.join(orig_serialization_dir, f'{ss_type}_{ss_ratio}_{ss_k}')
@@ -67,10 +63,10 @@ def scheduled_sampling_experiments(scheduled_sampling_ratios,
                 assert len(run_metrics) == 1, \
                     'For this experiment, there should only be one final metric object for a run.'
                 run_metrics = run_metrics[0]
-                result = {
-                            'exp_biases': run_metrics['exp_biases'],
-                            'exp_bias_mean': run_metrics['exp_bias_mean'],
-                            'exp_bias_std': run_metrics['exp_bias_std'],
+                for exp_bias_idx, exp_bias in enumerate(run_metrics['exp_biases']):
+                    result= {
+                            'exp_bias': exp_bias, 
+                            'exp_bias_idx': exp_bias_idx,
                             'scheduled_sampling_ratio': ss_ratio,
                             'scheduled_sampling_k': ss_k,
                             'scheduled_sampling_type': ss_type,
@@ -81,17 +77,10 @@ def scheduled_sampling_experiments(scheduled_sampling_ratios,
                             'final_ss_ratio': run_metrics['validation_ss_ratio'],
                             'best_val_ss_ratio': run_metrics['best_validation_ss_ratio']
                         }
-                model_size_exp_results[f'{ss_type}_{ss_ratio}_{ss_k}'].append(result)
                 wandb.log(result)
-    return model_size_exp_results
 
-dataset_exp_results = scheduled_sampling_experiments(scheduled_sampling_ratios, 
-                                                        num_samples_and_runs,
-                                                        main_args, 
-                                                        serialization_dir, 
-                                                        param_path)
-
-result_path = os.path.join(serialization_dir, 'scheduled_sampling_experiments.json')
-with open(result_path, 'w') as f:
-    json.dump(dataset_exp_results, f, indent=4, sort_keys=True)
-print(result_path)
+scheduled_sampling_experiments(scheduled_sampling_ratios, 
+                                num_samples_and_runs,
+                                main_args, 
+                                serialization_dir, 
+                                param_path)

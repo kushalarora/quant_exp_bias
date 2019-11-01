@@ -97,7 +97,7 @@ class LMBase(Model):
                  scheduled_sampling_type: str = 'uniform',
                  use_bleu: bool = True,
                  dropout: float = None,
-                 sample_from_categorical: bool = False, 
+                 sample_output: bool = False, 
 #                 start_index: str = '<S>',
 #                 end_index: str = '</S>',
                  start_token: str =START_SYMBOL,
@@ -122,7 +122,7 @@ class LMBase(Model):
         self._scheduled_sampling_k = scheduled_sampling_k
         self._scheduled_sampling_type = scheduled_sampling_type
         self._generation_batch_size = generation_batch_size
-        self._sample_from_categorical = sample_from_categorical
+        self._sample_output = sample_output
 
         # We need the start symbol to provide as the input at the first timestep of decoding, and
         # end symbol as a way to indicate the end of the decoded sequence.
@@ -149,7 +149,7 @@ class LMBase(Model):
         self._max_decoding_steps = max_decoding_steps
 
         # TODO(Kushal): Pass in the arguments for sampled. Also, make sure you do not sample in case of Seq2Seq models.
-        self._beam_search = SampledBeamSearch(self._end_index, max_steps=max_decoding_steps, beam_size=beam_size, sampled=self._sample_from_categorical)
+        self._beam_search = SampledBeamSearch(self._end_index, max_steps=max_decoding_steps, beam_size=beam_size, sampled=self._sample_output)
 
         num_classes = self.vocab.get_vocab_size(self._target_namespace)
 

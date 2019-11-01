@@ -15,7 +15,7 @@ from allennlp.common.util import import_submodules
 import_submodules("quant_exp_bias")
 from quant_exp_bias.utils import (get_args, quantify_exposure_bias_runner, 
                   sample_oracle_runner, train_runner)
-from util import run_on_cluster, initialize_experiments, one_exp_run
+from experiments.util import run_on_cluster, initialize_experiments, one_exp_run
 
 import glob
 import json
@@ -31,14 +31,12 @@ num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
 
 @run_on_cluster(job_name='validation_experiments', 
                 job_id=experiment_id,
-                conda_env='quant_exp', gpu=1, 
-                local=True)
+                conda_env='quant_exp', gpu=1)
 def validation_experiments(num_samples_and_runs, 
                             main_args, 
                             serialization_dir, 
                             param_path):
 
-    validation_exp_results = {}
     overrides = json.dumps({'trainer': {'num_epochs': 50, 'patience': None}})
 
     def validation_exp_bias_epochs_func(train_model_serialization_dir):
@@ -57,30 +55,17 @@ def validation_experiments(num_samples_and_runs,
                                             exp_bias_epochs_func=validation_exp_bias_epochs_func)
             for run_metrics in run_metrics_list:
                 epoch = run_metrics['epoch']
-                if epoch not in validation_exp_results:
-                    validation_exp_results[epoch] = []
             
-                results = {
-                            'exp_biases': run_metrics['exp_biases'],
-                            'exp_bias_mean': run_metrics['exp_bias_mean'],
-                            'exp_bias_std': run_metrics['exp_bias_std'],
-                            'val_ppl': run_metrics['validation_perplexity'],
-                            'epoch': epoch,
-                            'num_run': run,
-                            'num_samples': num_samples
-                        }
+                for exp_bias_idx, exp_bias in enumerate(run_metrics['exp_biases']):
+                    results = {
+                                'exp_bias': exp_bias, 
+                                'exp_bias_idx': exp_bias_idx,
+                                'val_ppl': run_metrics['validation_perplexity'],
+                                'epoch': epoch,
+                                'num_run': run,
+                                'num_samples': num_samples
+                            }
 
-                validation_exp_results[epoch].append(results)
-                wandb.log(results)
-    return validation_exp_results
+                    wandb.log(results)
 
-validation_exp_results = validation_experiments(num_samples_and_runs, 
-                                                main_args,
-                                                serialization_dir, 
-                                                param_path)
-                                                
-result_path = os.path.join(serialization_dir, 'validation_experiments.json')
-
-with open(result_path, 'w') as f:
-    json.dump(validation_exp_results, f, indent=4, sort_keys=True)
-print(result_path)
+validation_experiments(num_samples_and_runs, main_args, serialization_dir, param_path)

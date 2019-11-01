@@ -17,7 +17,7 @@ from allennlp.common.util import import_submodules
 import_submodules("quant_exp_bias")
 from quant_exp_bias.utils import (get_args, quantify_exposure_bias_runner, 
                   sample_oracle_runner, train_runner)
-from util import run_on_cluster, initialize_experiments, one_exp_run
+from experiments.util import run_on_cluster, initialize_experiments, one_exp_run
 
 import json
 
@@ -39,10 +39,6 @@ def model_size_experiments(model_sizes,
                             param_path):
     
     # Setup variables needed later.
-    model_size_exp_results = {}
-    for size in model_sizes:
-        model_size_exp_results[size] = []
-        
     orig_serialization_dir = serialization_dir
     for model_size in reversed(model_sizes):
         param_path = f'training_configs/model_size_experiments/artificial_grammar_{model_size}.jsonnet'
@@ -57,28 +53,16 @@ def model_size_experiments(model_sizes,
                 assert len(run_metrics) == 1, \
                     'For this experiment, there should only be one final metric object for a run.'
                 run_metrics = run_metrics[0]
-                result = {
-                            'exp_biases': run_metrics['exp_biases'],
-                            'exp_bias_mean': run_metrics['exp_bias_mean'],
-                            'exp_bias_std': run_metrics['exp_bias_std'],
-                            'num_run': num_run,
-                            'num_samples': num_samples,
-                            'model_size': model_size,
-                            'val_ppl': run_metrics['best_validation_perplexity'],
-                            'best_val_epoch': run_metrics['best_epoch']
-                        }
-                model_size_exp_results[model_size].append(result)
+                for exp_bias_idx, exp_bias in enumerate(run_metrics['exp_biases']):
+                    result = {
+                                'exp_bias': exp_bias, 
+                                'exp_bias_idx': exp_bias_idx,
+                                'num_run': num_run,
+                                'num_samples': num_samples,
+                                'model_size': model_size,
+                                'val_ppl': run_metrics['best_validation_perplexity'],
+                                'best_val_epoch': run_metrics['best_epoch']
+                            }
                 wandb.log(result)
-    return model_size_exp_results
 
-dataset_exp_results = model_size_experiments(model_sizes,
-                                             num_samples_and_runs, 
-                                             main_args, 
-                                             serialization_dir, 
-                                             param_path)
-
-result_path = os.path.join(serialization_dir, 'model_size_experiments.json')
-with open(result_path, 'w') as f:
-    json.dump(dataset_exp_results, f, indent=4, sort_keys=True)
-print(result_path)
-#
+model_size_experiments(model_sizes, num_samples_and_runs, main_args, serialization_dir, param_path)

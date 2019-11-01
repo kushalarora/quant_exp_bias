@@ -33,7 +33,7 @@ class LMQuantExpModel(LMBase):
                  num_decoder_layers:int = 1,
                  initializer: InitializerApplicator = InitializerApplicator(),
                  regularizer: Optional[RegularizerApplicator] = None,
-
+                 sample_output: bool = True, 
                  oracle: Oracle = None) -> None:
         
         super().__init__(vocab=vocab,
@@ -54,4 +54,5 @@ class LMQuantExpModel(LMBase):
                          num_decoder_layers=num_decoder_layers,
                          initializer=initializer,
                          regularizer=regularizer,
-                         oracle=oracle)
+                         oracle=oracle, 
+                         sample_output=sample_output)
