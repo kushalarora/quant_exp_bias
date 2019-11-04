@@ -17,7 +17,7 @@ from allennlp.common.util import import_submodules
 import_submodules("quant_exp_bias")
 from quant_exp_bias.utils import (get_args, quantify_exposure_bias_runner, 
                   sample_oracle_runner, train_runner)
-from experiments.util import run_on_cluster, initialize_experiments, one_exp_run
+from experiments.util import initialize_experiments, one_exp_run
 
 import json
 
@@ -35,10 +35,6 @@ num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
 
 # # Validation Experiments
 
-@run_on_cluster(job_name='scheduled_sampling_experiments', 
-                job_id=experiment_id,
-                conda_env='quant_exp', gpu=1,
-                walltime="18:00:00")
 def scheduled_sampling_experiments(scheduled_sampling_ratios, 
                                     num_samples_and_runs, 
                                     main_args, 

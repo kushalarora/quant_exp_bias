@@ -18,7 +18,7 @@ import_submodules("quant_exp_bias")
 from quant_exp_bias.utils import (get_args, quantify_exposure_bias_runner, 
                   sample_oracle_runner, train_runner)
 from quant_exp_bias.oracles.artificial_grammar_oracle import ArtificialLanguageOracle
-from experiments.util import run_on_cluster, initialize_experiments, one_exp_run
+from experiments.util import initialize_experiments, one_exp_run
 
 import itertools
 import json
@@ -35,10 +35,6 @@ num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
 # # Validation Experiments
 grammar_vocab_size_and_dist = [x for x in itertools.product(grammar_templates, vocabulary_sizes, vocab_distributions)]
 
-@run_on_cluster(job_name='vocabulary_size_experiments', 
-                job_id=experiment_id,
-                conda_env='quant_exp', gpu=1,
-                walltime="48:00:00")
 def vocabulary_size_experiments(grammar_vocab_size_and_dist, 
                                 num_samples_and_runs, 
                                 main_args, 
