@@ -204,8 +204,6 @@ class ArtificialLanguageOracle(Oracle):
         # TODO (Kushal): Reformat the code to move the for loop in the base class.
         return self._pool.starmap(ArtificialLanguageOracle._compute_one_sent_prob, [(self._grammar_string, sequence) for sequence in sequences])
 
-        # return probs 
-
     @staticmethod
     def _compute_one_sent_prob(grammar_string, sequence: List[str]):
             parser = InsideChartParser(PCFG.fromstring(grammar_string))
