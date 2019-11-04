@@ -18,6 +18,7 @@ import time
 import string
 import numpy as np
 
+from multiprocessing import Pool
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
@@ -42,23 +43,10 @@ class ArtificialLanguageOracle(Oracle):
 
         self._parallelize = parallelize
 
-        if ray.is_initialized():
-            # Just to avoid weird ray behaviors
-            # we will shut down the server and will
-            # restart it.
-            ray.shutdown()
-            logging.info("$$$$ Shutting Down Ray $$$$$")
+        self._num_threads = num_threads
 
-            # Sleep for 5 secs to make sure server
-            # is properly shutdown.
-            time.sleep(2)
 
-        ray.init(num_cpus=num_threads)
-
-        # Sleep for 5 secs to make sure server
-        # is properly up.
-        time.sleep(2)
-        logging.info("$$$$ Ray Initialized $$$$$")
+        self._pool = Pool(self._num_threads)
 
 
     @staticmethod
@@ -187,7 +175,6 @@ class ArtificialLanguageOracle(Oracle):
         the_list[index:index] = replacements
 
     @staticmethod
-    @ray.remote
     def generate_sequence(grammar_string, use_weighted_choice):
         """ TODO (Kushal): Add function doc.
         """
@@ -209,18 +196,17 @@ class ArtificialLanguageOracle(Oracle):
         """ TODO (Kushal): Add function doc.
         """
         # TODO (Kushal): Reformat the code to move generator to the base class and derived class only overloads generate_sequence method.
-        samples = ray.get([ArtificialLanguageOracle.generate_sequence.remote(self._grammar_string, self._use_weighted_choice)  for _ in range(num_samples)])
-        return samples
+        return self._pool.starmap(ArtificialLanguageOracle.generate_sequence, [(self._grammar_string, self._use_weighted_choice)]* num_samples)
 
     def compute_sent_probs(self, sequences: List[List[str]]):
         """ TODO (Kushal): Add function doc.
         """
         # TODO (Kushal): Reformat the code to move the for loop in the base class.
-        probs = ray.get([ArtificialLanguageOracle._compute_one_sent_prob.remote(self._grammar_string, sequence) for sequence in sequences])
-        return probs 
+        return self._pool.starmap(ArtificialLanguageOracle._compute_one_sent_prob, [(self._grammar_string, sequence) for sequence in sequences])
+
+        # return probs 
 
     @staticmethod
-    @ray.remote
     def _compute_one_sent_prob(grammar_string, sequence: List[str]):
             parser = InsideChartParser(PCFG.fromstring(grammar_string))
             probs = 1e-20
