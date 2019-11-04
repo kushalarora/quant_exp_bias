@@ -12,26 +12,23 @@
   },
   "train_data_path": "data/ptb/ptb.train.txt",
   "validation_data_path": "data/ptb/ptb.valid.txt",
-  //"train_data_path": "test/data/lm/sentences.txt",
-  //"validation_data_path": "test/data/lm/sentences.txt",
   "model": {
     "type": "quant_exp_lm",
     "target_namespace": "target_tokens",
-    "target_output_dim": 300, 
-    "target_embedding_dim": 300,
+    "target_output_dim": 1200, 
+    "target_embedding_dim": 400,
+    "num_decoder_layers": 4,
     "generation_batch_size": 32, 
     "max_decoding_steps": 400,
     "beam_size": 1,
     "use_bleu" : false,
     "dropout": 0.5,
-    "oracle": {
-      "type": "artificial_lang_oracle",
-      "num_samples": 100 
-    }
+    "start_token": "<S>",
+    "end_token": "</S>"
   },
   "iterator": {
     "type": "basic",
-    "batch_size": 256
+    "batch_size": 128
   },
   "trainer": {
     "num_epochs": 100,
@@ -40,7 +37,14 @@
       "type": "adam",
       "lr": 0.001
     },
+    "learning_rate_scheduler": {
+        "type": "reduce_on_plateau",
+        "factor": 0.5,
+        "mode": "max",
+        "patience": 0
+    },
     "patience": 5,
-    "log_batch_size_period": 50
+    "should_log_learning_rate": true,
+    "log_batch_size_period": 500,
   }
 }
