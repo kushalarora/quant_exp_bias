@@ -19,60 +19,6 @@ from quant_exp_bias.utils import get_args
 OverrideFuncType = Callable[[], Dict[str, Union[float, str, int]]]
 ExpBiasEpochsFuncType = Callable[[str], List[Tuple[int, str, str]]]
 
-def run_on_cluster(job_name, job_id, conda_env,
-                   nodes=1, gpu=0, account=None, 
-                   local=False, memory="40 GB", 
-                   cores=8, log_dir='logs/',
-                   walltime="20:00:00"):
-    def func_wrapper_outer(func):
-        def func_wrapper(*args, **kwargs):
-            import dask
-            import wandb
-
-            from dask_jobqueue import SLURMCluster
-            from dask.distributed import Client
-            from dask.distributed import progress
-
-            def func2(*args, **kwargs):
-                wandb.init(project='quantifying_exposure_bias', 
-                            name=job_name,
-                            id=f'{job_name}-{job_id}', 
-                            dir=log_dir,
-                            sync_tensorboard=False)
-                return func(*args, **kwargs)
-
-            if local:
-                return func2(*args, **kwargs)
-
-            env_extra =  [f'source activate {conda_env}'] if conda_env else []
-            job_extra = [f"--gres=gpu:{gpu}"] if gpu > 0 else []
-
-            cluster = SLURMCluster(
-                            job_name=job_name,
-                            project=account,    
-                            memory=memory,
-                            env_extra=env_extra,
-                            job_extra=job_extra,
-                            cores=cores,
-                            walltime=walltime,
-                            log_directory=log_dir)
-            cluster.scale(nodes)
-            client = Client(cluster)
-            try:
-                future = client.submit(func2, *args, **kwargs)
-                progress(future)
-                results =  client.gather(future)
-                return results
-            except Exception as e:
-                print(e)
-                os.system('pkill -f ray')
-                os.system('ps -ef | grep ray')
-                raise e
-            client.close()
-            cluster.close()
-        return func_wrapper
-    return func_wrapper_outer
-
 def initialize_experiments(experiment_name: str, 
                            grammar_template: str='grammar_templates/grammar_1.template',
                            vocabulary_size: int=6,
@@ -101,6 +47,12 @@ def initialize_experiments(experiment_name: str,
     os.environ["FSA_GRAMMAR_FILENAME"]  = grammar_filename
     os.environ['ARTIFICIAL_GRAMMAR_TRAIN'] = ""
     os.environ['ARTIFICIAL_GRAMMAR_DEV'] = ""
+
+    wandb.init(project='quantifying_exposure_bias', 
+                name=experiment_name,
+                id=f'{experiment_name}-{experiment_id}', 
+                dir=serialization_dir,
+                sync_tensorboard=False)
 
     return main_args, serialization_dir, param_path, experiment_id
 
