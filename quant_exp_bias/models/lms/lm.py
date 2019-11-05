@@ -149,12 +149,12 @@ class LMBase(Model):
         self._max_decoding_steps = max_decoding_steps
 
         # TODO(Kushal): Pass in the arguments for sampled. Also, make sure you do not sample in case of Seq2Seq models.
-        self._beam_search = SampledBeamSearch(self._end_index, max_steps=max_decoding_steps, beam_size=beam_size, sampled=self._sample_output)
+        self._beam_search = SampledBeamSearch(self._end_index, max_steps=max_decoding_steps, beam_size=beam_size)
 
-        num_classes = self.vocab.get_vocab_size(self._target_namespace)
+        self._num_classes = self.vocab.get_vocab_size(self._target_namespace)
 
         # Dense embedding of vocab words in the target space.
-        self._target_embedder = Embedding(num_classes, target_embedding_dim)
+        self._target_embedder = Embedding(self._num_classes, target_embedding_dim)
 
         self._seq2seq_mode = use_in_seq2seq_mode
         if self._seq2seq_mode:
@@ -222,14 +222,16 @@ class LMBase(Model):
         self.training_iteration = 0
         # We project the hidden state from the decoder into the output vocabulary space
         # in order to get log probabilities of each target token, at each time step.
-        self._output_projection_layer = Linear(self._decoder_output_dim, num_classes)
+        self._output_projection_layer = Linear(self._decoder_output_dim, self._num_classes)
 
         initializer(self)
 
 
     def take_step(self,
+                  timestep,
                   last_predictions: torch.Tensor,
-                  state: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+                  state: Dict[str, torch.Tensor],
+                  targets: torch.LongTensor = None) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         """
         Take a decoding step. This is called by the beam search class.
 
@@ -260,8 +262,21 @@ class LMBase(Model):
             equal to ``batch_size``, since the group may contain multiple states
             for each source sentence in the batch.
         """
+        
+        if self.training and torch.rand(1).item() < self._scheduled_sampling_ratio:
+            # Use gold tokens at test time and at a rate of 1 - _scheduled_sampling_ratio
+            # during training.
+            # shape: (batch_size,)
+            input_choices = last_predictions
+        elif targets is None:
+            # shape: (batch_size,)
+            input_choices = last_predictions
+        else:
+            # shape: (batch_size,)
+            input_choices = targets[:, timestep]
+        
         # shape: (group_size, num_classes)
-        output_projections, state = self._prepare_output_projections(last_predictions, state)
+        output_projections, state = self._prepare_output_projections(input_choices, state)
 
         # shape: (group_size, num_classes)
         class_log_probabilities = util.masked_log_softmax(output_projections, 
@@ -447,13 +462,13 @@ class LMBase(Model):
 
             # The last input from the target is either padding or the end symbol.
             # Either way, we don't have to process it.
-            num_decoding_steps = target_sequence_length - 1
+            num_decoding_steps = target_sequence_length
         else:
             num_decoding_steps = self._max_decoding_steps
 
         # Initialize target predictions with the start index.
         # shape: (batch_size,)
-        last_predictions = torch.zeros((batch_size,), 
+        start_predictions = torch.zeros((batch_size,), 
                                        dtype=torch.long, 
                                        device=torch.cuda.current_device()).fill_(self._start_index)
 
@@ -463,63 +478,37 @@ class LMBase(Model):
 
         k = self._scheduled_sampling_k
         if self._scheduled_sampling_type == 'uniform':
-            scheduled_sampling_ratio = self._scheduled_sampling_ratio
+            # This is same scheduled sampling ratio set by config.
+            pass
         elif self._scheduled_sampling_type == 'quantized':
-             scheduled_sampling_ratio =  1 -  k/(k + math.exp(self.training_iteration//k))
+             self._scheduled_sampling_ratio =  1 -  k/(k + math.exp(self.training_iteration//k))
         elif self._scheduled_sampling_type == 'linear':
-             scheduled_sampling_ratio =  1 -  k/(k + math.exp(self.training_iteration/k))
+             self.scheduled_sampling_ratio =  1 -  k/(k + math.exp(self.training_iteration/k))
 
-        self._ss_ratio(scheduled_sampling_ratio)
+        self._ss_ratio(self._scheduled_sampling_ratio)
 
         if self.training:
             self.training_iteration += 1
 
-        for timestep in range(num_decoding_steps):
-            if self.training and torch.rand(1).item() < scheduled_sampling_ratio:
-                # Use gold tokens at test time and at a rate of 1 - _scheduled_sampling_ratio
-                # during training.
-                # shape: (batch_size,)
-                input_choices = last_predictions
-            elif not target_tokens:
-                # shape: (batch_size,)
-                input_choices = last_predictions
-            else:
-                # shape: (batch_size,)
-                input_choices = targets[:, timestep]
-
-            # shape: (batch_size, num_classes)
-            output_projections, state = self._prepare_output_projections(input_choices, state)
-
-            # list of tensors, shape: (batch_size, 1, num_classes)
-            step_logits.append(output_projections.unsqueeze(1))
-
-            # shape: (batch_size, num_classes)
-            class_probabilities = F.softmax(output_projections, dim=-1)
-
-            # shape (predicted_classes): (batch_size,)
-            prediction_loss, predicted_classes = torch.max(class_probabilities, 1)
-
-            # shape (predicted_classes): (batch_size,)
-            last_predictions = predicted_classes
-
-            step_predictions.append(last_predictions.unsqueeze(1))
-            step_prediction_loss.append(prediction_loss.unsqueeze(1))
+        step_predictions, prediction_loss, logits = self._beam_search \
+                                                            .search(start_predictions, 
+                                                                    state,
+                                                                    self.take_step,
+                                                                    target_tokens=targets,
+                                                                    max_steps=num_decoding_steps,
+                                                                    beam_size=1,
+                                                                    per_node_beam_size=self._num_classes,
+                                                                    truncate_at_end_all=False)
 
         # shape: (batch_size, num_decoding_steps)
-        predictions = torch.cat(step_predictions, 1)
-        prediction_mask = util.get_text_field_mask({"tokens": predictions})
-
-        prediction_loss = torch.cat(step_prediction_loss, 1)
-        prediction_loss *= prediction_mask.float()
+        predictions = step_predictions.squeeze(1)
+        logits = logits.squeeze(1)
 
         output_dict = {"predictions": predictions,
-                       "prediction_loss": prediction_loss, 
-                       "scheduled_sampling_ratio": scheduled_sampling_ratio}
+                       "scheduled_sampling_ratio": self._scheduled_sampling_ratio}
      
         if target_tokens:
-            # shape: (batch_size, num_decoding_steps, num_classes)
-            logits = torch.cat(step_logits, 1)
-        
+            import pdb;pdb.set_trace()
             # Compute loss.
             target_mask = util.get_text_field_mask(target_tokens)
             loss = self._get_loss(logits, targets, target_mask)
@@ -562,8 +551,10 @@ class LMBase(Model):
 
         # shape (all_top_k_predictions): (batch_size, beam_size, num_decoding_steps)
         # shape (log_probabilities): (batch_size, beam_size)
-        all_top_k_predictions, log_probabilities = self._beam_search.search(
-                start_predictions, state, self.take_step)
+        all_top_k_predictions, log_probabilities, _ = self._beam_search.search(start_predictions, 
+                                                                                state, 
+                                                                                self.take_step,
+                                                                                sampled=True)
 
         output_dict = {
                 "class_log_probabilities": log_probabilities,

@@ -9,7 +9,7 @@ from allennlp.common.checks import ConfigurationError
 
 
 StateType = Dict[str, torch.Tensor]  # pylint: disable=invalid-name
-StepFunctionType = Callable[[torch.Tensor, StateType], Tuple[torch.Tensor, StateType]]  # pylint: disable=invalid-name
+StepFunctionType = Callable[[int, torch.Tensor, StateType, torch.LongTensor], Tuple[torch.Tensor, StateType]]  # pylint: disable=invalid-name
 
 
 class SampledBeamSearch:
@@ -37,19 +37,22 @@ class SampledBeamSearch:
                  end_index: int,
                  max_steps: int = 50,
                  beam_size: int = 10,
-                 per_node_beam_size: int = None, 
-                 sampled: int = False) -> None:
+                 per_node_beam_size: int = None) -> None:
         self._end_index = end_index
         self.global_max_steps = max_steps
         self.beam_size = beam_size
         self.per_node_beam_size = per_node_beam_size or beam_size
-        self._sampled = sampled
 
     def search(self,
                start_predictions: torch.Tensor,
                start_state: StateType,
                step: StepFunctionType,
-               max_steps=None) -> Tuple[torch.Tensor, torch.Tensor]:
+               target_tokens: torch.Tensor = None,
+               max_steps:int = None, 
+               beam_size: int = None, 
+               per_node_beam_size: int = None, 
+               sampled: bool = False,
+               truncate_at_end_all: bool = True) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Given a starting state and a step function, apply beam search to find the
         most likely target sequences.
@@ -95,6 +98,10 @@ class SampledBeamSearch:
             has shape ``(batch_size, beam_size, max_steps)`` and ``log_probabilities``
             has shape ``(batch_size, beam_size)``.
         """
+        step_logits: List[torch.Tensor] = []
+
+        beam_size = beam_size or self.beam_size
+        per_node_beam_size = per_node_beam_size or self.per_node_beam_size
         batch_size = start_predictions.size()[0]
 
         # List of (batch_size, beam_size) tensors. One for each time step. Does not
@@ -113,18 +120,18 @@ class SampledBeamSearch:
         # beam to `beam_size`^2 candidates from which we will select the top
         # `beam_size` elements for the next iteration.
         # shape: (batch_size, num_classes)
-        start_class_log_probabilities, state = step(start_predictions, start_state)
+        start_class_log_probabilities, state = step(0, start_predictions, start_state, target_tokens)
 
         num_classes = start_class_log_probabilities.size()[1]
-
+        
         # Make sure `per_node_beam_size` is not larger than `num_classes`.
-        if self.per_node_beam_size > num_classes:
+        if per_node_beam_size > num_classes:
             raise ConfigurationError(f"Target vocab size ({num_classes:d}) too small "
-                                     f"relative to per_node_beam_size ({self.per_node_beam_size:d}).\n"
+                                     f"relative to per_node_beam_size ({per_node_beam_size:d}).\n"
                                      f"Please decrease beam_size or per_node_beam_size.")
 
         # shape: (batch_size, beam_size), (batch_size, beam_size)
-        if self._sampled:
+        if sampled:
                 start_predicted_classes = torch.multinomial(F.softmax(start_class_log_probabilities, dim=-1), self.beam_size)
                 start_top_log_probabilities = torch.gather(start_class_log_probabilities, 1, start_predicted_classes)
         else:
@@ -158,27 +165,29 @@ class SampledBeamSearch:
             # shape: (batch_size * beam_size, *)
             state[key] = state_tensor.\
                     unsqueeze(1).\
-                    expand(batch_size, self.beam_size, *last_dims).\
-                    reshape(batch_size * self.beam_size, *last_dims)
+                    expand(batch_size, beam_size, *last_dims).\
+                    reshape(batch_size * beam_size, *last_dims)
+
 
         max_steps = max_steps or self.global_max_steps
         for timestep in range(max_steps - 1):
             # shape: (batch_size * beam_size,)
-            last_predictions = predictions[-1].reshape(batch_size * self.beam_size)
+            last_predictions = predictions[-1].reshape(batch_size * beam_size)
 
             # If every predicted token from the last step is `self._end_index`,
             # then we can stop early.
-            if (last_predictions == self._end_index).all():
+            if truncate_at_end_all and (last_predictions == self._end_index).all():
                 break
 
             # Take a step. This get the predicted log probs of the next classes
             # and updates the state.
             # shape: (batch_size * beam_size, num_classes)
-            class_log_probabilities, state = step(last_predictions, state)
+            class_log_probabilities, state = step(timestep, last_predictions, state, target_tokens)
+            step_logits.append(class_log_probabilities.reshape(batch_size, beam_size, 1, num_classes))
 
             # shape: (batch_size * beam_size, num_classes)
             last_predictions_expanded = last_predictions.unsqueeze(-1).expand(
-                    batch_size * self.beam_size,
+                    batch_size * beam_size,
                     num_classes
             )
 
@@ -194,12 +203,12 @@ class SampledBeamSearch:
             )
 
             # shape (both): (batch_size * beam_size, per_node_beam_size)
-            if self._sampled:
-                predicted_classes = torch.multinomial(F.softmax(cleaned_log_probabilities, dim=-1), self.per_node_beam_size)
+            if sampled:
+                predicted_classes = torch.multinomial(F.softmax(cleaned_log_probabilities, dim=-1), per_node_beam_size)
                 top_log_probabilities = torch.gather(cleaned_log_probabilities, 1, predicted_classes)
             else:
                 top_log_probabilities, predicted_classes = \
-                    cleaned_log_probabilities.topk(self.per_node_beam_size)
+                    cleaned_log_probabilities.topk(per_node_beam_size)
 
             # Here we expand the last log probabilities to (batch_size * beam_size, per_node_beam_size)
             # so that we can add them to the current log probs for this timestep.
@@ -207,23 +216,23 @@ class SampledBeamSearch:
             # shape: (batch_size * beam_size, per_node_beam_size)
             expanded_last_log_probabilities = last_log_probabilities.\
                     unsqueeze(2).\
-                    expand(batch_size, self.beam_size, self.per_node_beam_size).\
-                    reshape(batch_size * self.beam_size, self.per_node_beam_size)
+                    expand(batch_size, beam_size, per_node_beam_size).\
+                    reshape(batch_size * beam_size, per_node_beam_size)
 
             # shape: (batch_size * beam_size, per_node_beam_size)
             summed_top_log_probabilities = top_log_probabilities + expanded_last_log_probabilities
 
             # shape: (batch_size, beam_size * per_node_beam_size)
             reshaped_summed = summed_top_log_probabilities.\
-                    reshape(batch_size, self.beam_size * self.per_node_beam_size)
+                    reshape(batch_size, beam_size * per_node_beam_size)
 
             # shape: (batch_size, beam_size * per_node_beam_size)
             reshaped_predicted_classes = predicted_classes.\
-                    reshape(batch_size, self.beam_size * self.per_node_beam_size)
+                    reshape(batch_size, beam_size * per_node_beam_size)
 
             # Keep only the top `beam_size` beam indices.
             # shape: (batch_size, beam_size), (batch_size, beam_size)
-            restricted_beam_log_probs, restricted_beam_indices = reshaped_summed.topk(self.beam_size)
+            restricted_beam_log_probs, restricted_beam_indices = reshaped_summed.topk(beam_size)
 
             # Use the beam indices to extract the corresponding classes.
             # shape: (batch_size, beam_size)
@@ -239,7 +248,7 @@ class SampledBeamSearch:
             # dividing by per_node_beam_size gives the ancestor. (Note that this is integer
             # division as the tensor is a LongTensor.)
             # shape: (batch_size, beam_size)
-            backpointer = restricted_beam_indices / self.per_node_beam_size
+            backpointer = restricted_beam_indices / per_node_beam_size
 
             backpointers.append(backpointer)
 
@@ -249,15 +258,15 @@ class SampledBeamSearch:
                 _, *last_dims = state_tensor.size()
                 # shape: (batch_size, beam_size, *)
                 expanded_backpointer = backpointer.\
-                        view(batch_size, self.beam_size, *([1] * len(last_dims))).\
-                        expand(batch_size, self.beam_size, *last_dims)
+                        view(batch_size, beam_size, *([1] * len(last_dims))).\
+                        expand(batch_size, beam_size, *last_dims)
 
                 # shape: (batch_size * beam_size, *)
                 state[key] = state_tensor.\
-                        reshape(batch_size, self.beam_size, *last_dims).\
+                        reshape(batch_size, beam_size, *last_dims).\
                         gather(1, expanded_backpointer).\
-                        reshape(batch_size * self.beam_size, *last_dims)
-
+                        reshape(batch_size * beam_size, *last_dims)
+        
         if not torch.isfinite(last_log_probabilities).all():
             warnings.warn("Infinite log probabilities encountered. Some final sequences may not make sense. "
                           "This can happen when the beam size is larger than the number of valid (non-zero "
@@ -288,4 +297,6 @@ class SampledBeamSearch:
         # shape: (batch_size, beam_size, max_steps)
         all_predictions = torch.cat(list(reversed(reconstructed_predictions)), 2)
 
-        return all_predictions, last_log_probabilities
+        # reshape step_logits list to a (batch_size, beam_size, max_steps, num_classes) tensor.
+        step_logits = torch.cat(step_logits, dim=2)
+        return all_predictions, last_log_probabilities, step_logits
