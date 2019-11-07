@@ -532,31 +532,6 @@ class LMBase(Model):
                                        device=torch.cuda.current_device()).fill_(self._start_index)
 
 
-    def _forward_beam_search(self,
-                             state: Dict[str, torch.Tensor],
-                             target_tokens: torch.LongTensor = None,
-                             generation_batch_size:int = None) -> Dict[str, torch.Tensor]:
-        """Make forward pass during prediction using a beam search."""
-
-        # Initialize target predictions with the start index.
-        # shape: (batch_size,)
-        start_predictions = self._get_start_predictions(state, 
-                                                        target_tokens, 
-                                                        generation_batch_size)
-
-        # shape (all_top_k_predictions): (batch_size, beam_size, num_decoding_steps)
-        # shape (log_probabilities): (batch_size, beam_size)
-        all_top_k_predictions, log_probabilities, _ = self._beam_search.search(start_predictions, 
-                                                                                state, 
-                                                                                self.take_step,
-                                                                                sampled=True)
-
-        output_dict = {
-                "class_log_probabilities": log_probabilities,
-                "predictions": all_top_k_predictions,
-        }
-        return output_dict
-
     def _prepare_output_projections(self,
                                     last_predictions: torch.Tensor,
                                     state: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
