@@ -105,6 +105,7 @@ class LMBase(Model):
                  num_decoder_layers:int = 1,
                  initializer: InitializerApplicator = InitializerApplicator(),
                  regularizer: Optional[RegularizerApplicator] = None,
+                 mask_pad_and_oov: bool = True,
 
                  oracle: Oracle = None,
 
@@ -123,6 +124,7 @@ class LMBase(Model):
         self._scheduled_sampling_type = scheduled_sampling_type
         self._generation_batch_size = generation_batch_size
         self._sample_output = sample_output
+        self._mask_pad_and_oov = mask_pad_and_oov
 
         # We need the start symbol to provide as the input at the first timestep of decoding, and
         # end symbol as a way to indicate the end of the decoded sequence.
@@ -131,12 +133,12 @@ class LMBase(Model):
         
         padding_index = self.vocab.get_token_index(DEFAULT_PADDING_TOKEN, self._target_namespace)
         oov_index = self.vocab.get_token_index(DEFAULT_OOV_TOKEN, self._target_namespace)
-        self._vocab_mask = torch.ones(self.vocab.get_vocab_size( self._target_namespace),
-                                      device=torch.cuda.current_device()) \
-                                .scatter(0, torch.tensor([padding_index,
-                                                          oov_index],
-                                                          device=torch.cuda.current_device()), 
-                                        0)
+
+        if self._mask_pad_and_oov:
+            self._vocab_mask = torch.ones(self.vocab.get_vocab_size(self._target_namespace),
+                                        device=torch.cuda.current_device()) \
+                                    .scatter(0, torch.tensor([padding_index,oov_index],
+                                                 device=torch.cuda.current_device()), 0)
 
         if use_bleu:
             pad_index = self.vocab.get_token_index(self.vocab._padding_token, self._target_namespace)  # pylint: disable=protected-access
@@ -262,7 +264,7 @@ class LMBase(Model):
             equal to ``batch_size``, since the group may contain multiple states
             for each source sentence in the batch.
         """
-        
+
         if self.training and torch.rand(1).item() < self._scheduled_sampling_ratio:
             # Use gold tokens at test time and at a rate of 1 - _scheduled_sampling_ratio
             # during training.
@@ -276,14 +278,15 @@ class LMBase(Model):
             input_choices = targets[:, timestep]
         
         # shape: (group_size, num_classes)
-        output_projections, state = self._prepare_output_projections(input_choices, state)
+        class_logits, state = self._prepare_output_projections(input_choices, state)
 
-        # shape: (group_size, num_classes)
-        class_log_probabilities = util.masked_log_softmax(output_projections, 
-                                            self._vocab_mask.expand(output_projections.shape), 
-                                            dim=-1)
+        if not self.training and self._mask_pad_and_oov:
+            # This implementation is copied from masked_log_softmax from allennlp.nn.util.
+            mask = (self._vocab_mask.expand(class_logits.shape) + 1e-45).log()
+            # shape: (group_size, num_classes)
+            class_logits = class_logits + mask
 
-        return class_log_probabilities, state
+        return class_logits, state
 
     @overrides
     def forward(self,  # type: ignore
@@ -317,19 +320,28 @@ class LMBase(Model):
             state.update(self._encode(source_tokens))
             state = self._init_decoder_state_from_encoder(state)
 
+        output_dict = self._forward_loop(state, 
+                                         target_tokens=target_tokens,
+                                         generation_batch_size=generation_batch_size)
+
+        self._ss_ratio(self._scheduled_sampling_ratio)
+        self.training_iteration += 1
+
         if target_tokens:
-            # The `_forward_loop` decodes the input sequence and computes the loss during training
-            # and validation.
-            output_dict.update(self._forward_loop(state, target_tokens))
+            targets = target_tokens['tokens']
+            logits = output_dict['logits']
+
+            # shape: (batch_size, num_decoding_steps)
+            best_logits = logits[:, 0, :, :].squeeze(1)
+
+            # Compute loss.
+            target_mask = util.get_text_field_mask(target_tokens)
+            loss = self._get_loss(best_logits, targets, target_mask)
+            output_dict["loss"] = loss
+            self._perplexity(loss)
 
         if not self.training:
-            if self._seq2seq_mode:
-                state = self._init_decoder_state_from_encoder(state)
-
             if target_tokens and self._bleu:
-                output_dict.update(self._forward_beam_search(state, 
-                                            target_tokens=target_tokens))
-
                 # shape: (batch_size, beam_size, max_sequence_length)
                 top_k_predictions = output_dict["predictions"]
                 # shape: (batch_size, max_predicted_sequence_length)
@@ -339,9 +351,6 @@ class LMBase(Model):
 
             
             if compute_exposure_bias and self._exposure_bias:
-                output_dict.update(self._forward_beam_search(state, 
-                                            generation_batch_size=generation_batch_size))
- 
                 # shape: (batch_size, beam_size, max_sequence_length)
                 top_k_predictions = output_dict["predictions"]
                 top_k_log_probabilities = output_dict["class_log_probabilities"]
@@ -355,7 +364,7 @@ class LMBase(Model):
                 
                 self._exposure_bias(prediction_loss.data, predicted_tokens)
 
-                output_dict['predictions'] = predicted_tokens
+                output_dict['predicted_tokens'] = predicted_tokens
                 output_dict['prediction_loss'] = prediction_loss
         return output_dict
 
@@ -437,7 +446,8 @@ class LMBase(Model):
 
     def _forward_loop(self,
                       state: Dict[str, torch.Tensor],
-                      target_tokens: Dict[str, torch.LongTensor] = None) -> Dict[str, torch.Tensor]:
+                      target_tokens: Dict[str, torch.LongTensor] = None,
+                      generation_batch_size:int = None) -> Dict[str, torch.Tensor]:
         """
         Make forward pass during training or do greedy search during prediction.
 
@@ -446,14 +456,10 @@ class LMBase(Model):
         We really only use the predictions from the method to test that beam search
         with a beam size of 1 gives the same results.
         """
-        if self._seq2seq_mode:
-           source_mask = state["source_mask"]
-           batch_size = source_mask.size()[0]
-        elif target_tokens:
-            batch_size = target_tokens["tokens"].size(0)
-        else:
-            batch_size = self._generation_batch_size
-
+        # These are default for validation and compute exposure bias run.
+        beam_size: int = None; per_node_beam_size: int = None; 
+        sampled: bool = True; truncate_at_end_all: bool = False;
+        targets: torch.LongTensor = None
         if target_tokens:
             # shape: (batch_size, max_target_sequence_length)
             targets = target_tokens["tokens"]
@@ -462,58 +468,47 @@ class LMBase(Model):
 
             # The last input from the target is either padding or the end symbol.
             # Either way, we don't have to process it.
-            num_decoding_steps = target_sequence_length
+            num_decoding_steps = target_sequence_length - 1
         else:
             num_decoding_steps = self._max_decoding_steps
 
+        if self.training:
+            beam_size: int = 1; per_node_beam_size: int = self._num_classes; 
+            sampled: bool = False; truncate_at_end_all: bool = False;            
+            
+            k = self._scheduled_sampling_k
+            if self._scheduled_sampling_type == 'uniform':
+                # This is same scheduled sampling ratio set by config.
+                pass
+            elif self._scheduled_sampling_type == 'quantized':
+                self._scheduled_sampling_ratio =  1 -  k/(k + math.exp(self.training_iteration//k))
+            elif self._scheduled_sampling_type == 'linear':
+                self.scheduled_sampling_ratio =  1 -  k/(k + math.exp(self.training_iteration/k))
+
         # Initialize target predictions with the start index.
         # shape: (batch_size,)
-        start_predictions = torch.zeros((batch_size,), 
-                                       dtype=torch.long, 
-                                       device=torch.cuda.current_device()).fill_(self._start_index)
+        start_predictions = self._get_start_predictions(state,
+                                                        target_tokens,
+                                                        generation_batch_size)
 
-        step_logits: List[torch.Tensor] = []
-        step_predictions: List[torch.Tensor] = []
-        step_prediction_loss: List[torch.Tensor] = []
+        # shape (all_top_k_predictions): (batch_size, beam_size, num_decoding_steps)
+        # shape (log_probabilities): (batch_size, beam_size)
+        # shape (logits): (batch_size, beam_size, num_decoding_steps, num_classes)
+        step_predictions, log_probabilities, logits = \
+                    self._beam_search.search(start_predictions, 
+                                                state,
+                                                self.take_step,
+                                                target_tokens=targets,
+                                                max_steps=num_decoding_steps,
+                                                beam_size=beam_size,
+                                                per_node_beam_size=per_node_beam_size,
+                                                sampled=sampled,
+                                                truncate_at_end_all=truncate_at_end_all)
 
-        k = self._scheduled_sampling_k
-        if self._scheduled_sampling_type == 'uniform':
-            # This is same scheduled sampling ratio set by config.
-            pass
-        elif self._scheduled_sampling_type == 'quantized':
-             self._scheduled_sampling_ratio =  1 -  k/(k + math.exp(self.training_iteration//k))
-        elif self._scheduled_sampling_type == 'linear':
-             self.scheduled_sampling_ratio =  1 -  k/(k + math.exp(self.training_iteration/k))
-
-        self._ss_ratio(self._scheduled_sampling_ratio)
-
-        if self.training:
-            self.training_iteration += 1
-
-        step_predictions, prediction_loss, logits = self._beam_search \
-                                                            .search(start_predictions, 
-                                                                    state,
-                                                                    self.take_step,
-                                                                    target_tokens=targets,
-                                                                    max_steps=num_decoding_steps,
-                                                                    beam_size=1,
-                                                                    per_node_beam_size=self._num_classes,
-                                                                    truncate_at_end_all=False)
-
-        # shape: (batch_size, num_decoding_steps)
-        predictions = step_predictions.squeeze(1)
-        logits = logits.squeeze(1)
-
-        output_dict = {"predictions": predictions,
+        output_dict = {"predictions": step_predictions,
+                       "logits": logits,
+                       "class_log_probabilities": log_probabilities,
                        "scheduled_sampling_ratio": self._scheduled_sampling_ratio}
-     
-        if target_tokens:
-            import pdb;pdb.set_trace()
-            # Compute loss.
-            target_mask = util.get_text_field_mask(target_tokens)
-            loss = self._get_loss(logits, targets, target_mask)
-            output_dict["loss"] = loss
-            self._perplexity(loss)
         return output_dict
 
 

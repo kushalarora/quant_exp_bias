@@ -120,10 +120,15 @@ class SampledBeamSearch:
         # beam to `beam_size`^2 candidates from which we will select the top
         # `beam_size` elements for the next iteration.
         # shape: (batch_size, num_classes)
-        start_class_log_probabilities, state = step(0, start_predictions, start_state, target_tokens)
+        start_class_logits, state = step(0, start_predictions, start_state, target_tokens)
+        start_class_log_probabilities = F.log_softmax(start_class_logits, dim=-1)
 
         num_classes = start_class_log_probabilities.size()[1]
-        
+        step_logits.append(start_class_logits
+                            .unsqueeze(1)
+                            .expand(batch_size, beam_size, num_classes)
+                            .reshape(batch_size, beam_size, 1, num_classes))
+
         # Make sure `per_node_beam_size` is not larger than `num_classes`.
         if per_node_beam_size > num_classes:
             raise ConfigurationError(f"Target vocab size ({num_classes:d}) too small "
@@ -132,11 +137,11 @@ class SampledBeamSearch:
 
         # shape: (batch_size, beam_size), (batch_size, beam_size)
         if sampled:
-                start_predicted_classes = torch.multinomial(F.softmax(start_class_log_probabilities, dim=-1), self.beam_size)
-                start_top_log_probabilities = torch.gather(start_class_log_probabilities, 1, start_predicted_classes)
+            start_predicted_classes = torch.multinomial(F.softmax(start_class_log_probabilities, dim=-1), self.beam_size)
+            start_top_log_probabilities = torch.gather(start_class_log_probabilities, 1, start_predicted_classes)
         else:
             start_top_log_probabilities, start_predicted_classes = \
-                    start_class_log_probabilities.topk(self.beam_size)
+                start_class_log_probabilities.topk(self.beam_size)
                     
         if self.beam_size == 1 and (start_predicted_classes == self._end_index).all():
             warnings.warn("Empty sequences predicted. You may want to increase the beam size or ensure "
@@ -170,7 +175,7 @@ class SampledBeamSearch:
 
 
         max_steps = max_steps or self.global_max_steps
-        for timestep in range(max_steps - 1):
+        for timestep in range(1, max_steps):
             # shape: (batch_size * beam_size,)
             last_predictions = predictions[-1].reshape(batch_size * beam_size)
 
@@ -182,8 +187,10 @@ class SampledBeamSearch:
             # Take a step. This get the predicted log probs of the next classes
             # and updates the state.
             # shape: (batch_size * beam_size, num_classes)
-            class_log_probabilities, state = step(timestep, last_predictions, state, target_tokens)
-            step_logits.append(class_log_probabilities.reshape(batch_size, beam_size, 1, num_classes))
+            class_logits, state = step(timestep, last_predictions, state, target_tokens)
+            step_logits.append(class_logits.reshape(batch_size, beam_size, 1, num_classes))
+
+            class_log_probabilities  = F.log_softmax(class_logits, dim=-1)
 
             # shape: (batch_size * beam_size, num_classes)
             last_predictions_expanded = last_predictions.unsqueeze(-1).expand(
