@@ -1,10 +1,12 @@
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Callable
 
 import logging
 
 import numpy
 import math
 from overrides import overrides
+from functools import partial
+
 import torch
 import torch.nn.functional as F
 from torch.nn.modules.linear import Linear
@@ -320,12 +322,43 @@ class LMBase(Model):
             state.update(self._encode(source_tokens))
             state = self._init_decoder_state_from_encoder(state)
 
-        output_dict = self._forward_loop(state, 
-                                         target_tokens=target_tokens,
-                                         generation_batch_size=generation_batch_size)
+        # These are default for validation and compute exposure bias run.
+        beam_size: int = None; per_node_beam_size: int = None; 
+        sampled: bool = True; truncate_at_end_all: bool = False;
+        targets: torch.LongTensor = None
+        if target_tokens:
+            # shape: (batch_size, max_target_sequence_length)
+            targets = target_tokens["tokens"]
 
-        self._ss_ratio(self._scheduled_sampling_ratio)
-        self.training_iteration += 1
+            _, target_sequence_length = targets.size()
+
+            # The last input from the target is either padding or the end symbol.
+            # Either way, we don't have to process it.
+            num_decoding_steps = target_sequence_length - 1
+        else:
+            num_decoding_steps = self._max_decoding_steps
+
+        if self.training:
+            beam_size: int = 1; per_node_beam_size: int = self._num_classes; 
+            sampled: bool = False; truncate_at_end_all: bool = False;            
+            
+            self._apply_scheduled_sampling()
+
+        # Initialize target predictions with the start index.
+        # shape: (batch_size,)
+        start_predictions = self._get_start_predictions(state,
+                                                        target_tokens,
+                                                        generation_batch_size)
+
+        rolling_policy=partial(self.take_step, targets=targets)
+        output_dict = self._forward_loop(state, 
+                                         start_predictions,
+                                         rolling_policy,
+                                         max_steps=num_decoding_steps,
+                                         beam_size=beam_size,
+                                         per_node_beam_size=per_node_beam_size,
+                                         sampled=sampled,
+                                         truncate_at_end_all=truncate_at_end_all)
 
         if target_tokens:
             targets = target_tokens['tokens']
@@ -444,10 +477,54 @@ class LMBase(Model):
                                         .new_zeros(batch_size, self._decoder_output_dim)
         return state
 
+    def _apply_scheduled_sampling(self):
+
+        if not self.training:
+            raise RuntimeError("Scheduled Sampling can only be applied during training.")
+
+        k = self._scheduled_sampling_k
+        if self._scheduled_sampling_type == 'uniform':
+            # This is same scheduled sampling ratio set by config.
+            pass
+        elif self._scheduled_sampling_type == 'quantized':
+            self._scheduled_sampling_ratio =  1 -  k/(k + math.exp(self.training_iteration//k))
+        elif self._scheduled_sampling_type == 'linear':
+            self.scheduled_sampling_ratio =  1 -  k/(k + math.exp(self.training_iteration/k))
+        else:
+            raise ConfigurationError(f"{self._scheduled_sampling_type} is not a valid scheduled sampling type.")
+    
+        self._ss_ratio(self._scheduled_sampling_ratio)
+        self.training_iteration += 1
+
+
+    def train_batch(self):
+
+        self.roll_in()
+        self.roll_out()
+        pass
+
+    def eval_batch(self):
+        pass
+
+    def rollin(self,
+               state: Dict[str, torch.Tensor],
+               target_tokens: Dict[str, torch.LongTensor] = None,):
+        pass
+
+    def rollout(self,
+               state: Dict[str, torch.Tensor],
+               generation_batch_size:int = None,):
+        pass
+
     def _forward_loop(self,
                       state: Dict[str, torch.Tensor],
-                      target_tokens: Dict[str, torch.LongTensor] = None,
-                      generation_batch_size:int = None) -> Dict[str, torch.Tensor]:
+                      start_predictions, 
+                      rolling_policy,
+                      max_steps:int = None,
+                      beam_size:int = None, 
+                      per_node_beam_size:int = None,
+                      sampled:bool = True,
+                      truncate_at_end_all: bool = True) -> Dict[str, torch.Tensor]:
         """
         Make forward pass during training or do greedy search during prediction.
 
@@ -456,50 +533,14 @@ class LMBase(Model):
         We really only use the predictions from the method to test that beam search
         with a beam size of 1 gives the same results.
         """
-        # These are default for validation and compute exposure bias run.
-        beam_size: int = None; per_node_beam_size: int = None; 
-        sampled: bool = True; truncate_at_end_all: bool = False;
-        targets: torch.LongTensor = None
-        if target_tokens:
-            # shape: (batch_size, max_target_sequence_length)
-            targets = target_tokens["tokens"]
-
-            _, target_sequence_length = targets.size()
-
-            # The last input from the target is either padding or the end symbol.
-            # Either way, we don't have to process it.
-            num_decoding_steps = target_sequence_length - 1
-        else:
-            num_decoding_steps = self._max_decoding_steps
-
-        if self.training:
-            beam_size: int = 1; per_node_beam_size: int = self._num_classes; 
-            sampled: bool = False; truncate_at_end_all: bool = False;            
-            
-            k = self._scheduled_sampling_k
-            if self._scheduled_sampling_type == 'uniform':
-                # This is same scheduled sampling ratio set by config.
-                pass
-            elif self._scheduled_sampling_type == 'quantized':
-                self._scheduled_sampling_ratio =  1 -  k/(k + math.exp(self.training_iteration//k))
-            elif self._scheduled_sampling_type == 'linear':
-                self.scheduled_sampling_ratio =  1 -  k/(k + math.exp(self.training_iteration/k))
-
-        # Initialize target predictions with the start index.
-        # shape: (batch_size,)
-        start_predictions = self._get_start_predictions(state,
-                                                        target_tokens,
-                                                        generation_batch_size)
-
         # shape (all_top_k_predictions): (batch_size, beam_size, num_decoding_steps)
         # shape (log_probabilities): (batch_size, beam_size)
         # shape (logits): (batch_size, beam_size, num_decoding_steps, num_classes)
         step_predictions, log_probabilities, logits = \
                     self._beam_search.search(start_predictions, 
                                                 state,
-                                                self.take_step,
-                                                target_tokens=targets,
-                                                max_steps=num_decoding_steps,
+                                                rolling_policy,
+                                                max_steps=max_steps,
                                                 beam_size=beam_size,
                                                 per_node_beam_size=per_node_beam_size,
                                                 sampled=sampled,

@@ -47,7 +47,6 @@ class SampledBeamSearch:
                start_predictions: torch.Tensor,
                start_state: StateType,
                step: StepFunctionType,
-               target_tokens: torch.Tensor = None,
                max_steps:int = None, 
                beam_size: int = None, 
                per_node_beam_size: int = None, 
@@ -120,7 +119,7 @@ class SampledBeamSearch:
         # beam to `beam_size`^2 candidates from which we will select the top
         # `beam_size` elements for the next iteration.
         # shape: (batch_size, num_classes)
-        start_class_logits, state = step(0, start_predictions, start_state, target_tokens)
+        start_class_logits, state = step(0, start_predictions, start_state)
         start_class_log_probabilities = F.log_softmax(start_class_logits, dim=-1)
 
         num_classes = start_class_log_probabilities.size()[1]
@@ -187,7 +186,7 @@ class SampledBeamSearch:
             # Take a step. This get the predicted log probs of the next classes
             # and updates the state.
             # shape: (batch_size * beam_size, num_classes)
-            class_logits, state = step(timestep, last_predictions, state, target_tokens)
+            class_logits, state = step(timestep, last_predictions, state)
             step_logits.append(class_logits.reshape(batch_size, beam_size, 1, num_classes))
 
             class_log_probabilities  = F.log_softmax(class_logits, dim=-1)
