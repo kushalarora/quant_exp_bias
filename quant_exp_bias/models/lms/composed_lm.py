@@ -8,11 +8,12 @@ from allennlp.data.vocabulary import Vocabulary
 from allennlp.models.model import Model
 from allennlp.modules import TextFieldEmbedder, Seq2SeqEncoder, Embedding
 from allennlp.modules.text_field_embedders import BasicTextFieldEmbedder
-from allennlp.modules.seq2seq_decoders.seq_decoder import SeqDecoder
 from allennlp.nn import util, InitializerApplicator, RegularizerApplicator
 
+from quant_exp_bias.modules.decoders.seq_decoder import SeqDecoder
 
-@Model.register("composed_seq2seq")
+
+@Model.register("quant_exp_composed_lm")
 class ComposedLMBase(Model):
     """
     This ``ComposedSeq2Seq`` class is a :class:`Model` which takes a sequence, encodes it, and then
@@ -125,6 +126,7 @@ class ComposedLMBase(Model):
         Dict[str, torch.Tensor]
             The output tensors from the decoder.
         """
+        #import pdb;pdb.set_trace()
         state:  Dict[str, torch.Tensor] = {}
         if self._seq2seq_mode:
             state.update(self._encode(source_tokens))
@@ -173,5 +175,5 @@ class ComposedLMBase(Model):
 
 
     @overrides
-    def get_metrics(self, reset: bool = False) -> Dict[str, float]:
-        return self._decoder.get_metrics(reset)
+    def get_metrics(self, reset: bool = False, get_exposure_bias=True) -> Dict[str, float]:
+        return self._decoder.get_metrics(reset, get_exposure_bias=True)

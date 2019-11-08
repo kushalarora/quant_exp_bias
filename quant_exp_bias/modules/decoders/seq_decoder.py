@@ -26,9 +26,6 @@ class SeqDecoder(Module, Registrable):
     target_embedder : ``Embedding``
         Embedder for target tokens. Needed in the base class to enable weight tying.
     """
-
-    default_implementation = "auto_regressive_seq_decoder"
-
     def __init__(self, target_embedder: Embedding) -> None:
         super().__init__()
         self.target_embedder = target_embedder
@@ -48,7 +45,7 @@ class SeqDecoder(Module, Registrable):
 
     def forward(self,
                 encoder_out: Dict[str, torch.LongTensor] = None,
-                target_tokens: Optional[Dict[str, torch.LongTensor]] = None,
+                last_predictions_embedding: Optional[Dict[str, torch.LongTensor]] = None,
                 **kwargs,
                ) -> Dict[str, torch.Tensor]:
         """

@@ -11,16 +11,17 @@ from torch.nn import Linear
 
 from allennlp.common.checks import ConfigurationError
 from allennlp.common.util import START_SYMBOL, END_SYMBOL
-from allennlp.data import Vocabulary, DEFAULT_OOV_TOKEN, DEFAULT_PADDING_TOKEN
-from allennlp.modules.seq2seq_decoders.seq_decoder import SeqDecoder
+from allennlp.data.vocabulary import Vocabulary, DEFAULT_OOV_TOKEN, DEFAULT_PADDING_TOKEN
 from allennlp.modules import Embedding
-from allennlp.modules.seq2seq_decoders.decoder_net import DecoderNet
 from allennlp.nn import util
 from allennlp.training.metrics import BLEU, Perplexity, Average
 
 from quant_exp_bias.metrics.exposure_bias import ExposureBias
 from quant_exp_bias.models.sampled_beam_search import SampledBeamSearch
 from quant_exp_bias.oracles.oracle_base import Oracle
+from quant_exp_bias.modules.decoders.seq_decoder import SeqDecoder
+from quant_exp_bias.modules.decoders.decoder_net import DecoderNet
+
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -68,8 +69,6 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                  decoder_net: DecoderNet,
                  target_embedder: Embedding,
                  use_in_seq2seq_mode: bool = False,
-                 target_embedding_dim: int = None,
-                 target_output_dim : int = None,
                  target_namespace: str = "tokens",
                  beam_size: int = None,
                  scheduled_sampling_ratio: float = 0.,
@@ -80,7 +79,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                  sample_output: bool = False, 
                  start_token: str =START_SYMBOL,
                  end_token: str = END_SYMBOL,
-                 num_decoder_layers:int = 1,
+                 num_decoder_layers: int = 1,
                  mask_pad_and_oov: bool = True,
                  tie_output_embedding: bool = False,
                  label_smoothing_ratio: Optional[float] = None,
@@ -109,11 +108,11 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         # At prediction time, we use a beam search to find the most likely sequence of target tokens.
         # We need the start symbol to provide as the input at the first timestep of decoding, and
         # end symbol as a way to indicate the end of the decoded sequence.
-        self._start_index = self.vocab.get_token_index(start_token, self._target_namespace)
-        self._end_index = self.vocab.get_token_index(end_token, self._target_namespace)
+        self._start_index = self._vocab.get_token_index(start_token, self._target_namespace)
+        self._end_index = self._vocab.get_token_index(end_token, self._target_namespace)
         
-        padding_index = self.vocab.get_token_index(DEFAULT_PADDING_TOKEN, self._target_namespace)
-        oov_index = self.vocab.get_token_index(DEFAULT_OOV_TOKEN, self._target_namespace)
+        padding_index = self._vocab.get_token_index(DEFAULT_PADDING_TOKEN, self._target_namespace)
+        oov_index = self._vocab.get_token_index(DEFAULT_OOV_TOKEN, self._target_namespace)
 
         if self._mask_pad_and_oov:
             self._vocab_mask = torch.ones(self._vocab.get_vocab_size(self._target_namespace),
@@ -121,7 +120,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                     .scatter(0, torch.tensor([padding_index,oov_index],
                                                  device=torch.cuda.current_device()), 0)
         if use_bleu:
-            pad_index = self.vocab.get_token_index(self.vocab._padding_token, self._target_namespace)  # pylint: disable=protected-access
+            pad_index = self._vocab.get_token_index(self._vocab._padding_token, self._target_namespace)  # pylint: disable=protected-access
             self._bleu = BLEU(exclude_indices={pad_index, self._end_index, self._start_index})
         else:
             self._bleu = None
@@ -355,7 +354,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             # Collect indices till the first end_symbol
             if truncate and self._end_index in indices:
                 indices = indices[:indices.index(self._end_index)]
-            predicted_tokens = [self.vocab.get_token_from_index(x, namespace=vocab_namespace)
+            predicted_tokens = [self._vocab.get_token_from_index(x, namespace=vocab_namespace)
                                 for x in indices]
             
             all_predicted_tokens.append(predicted_tokens)
@@ -460,7 +459,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         Inputs are the same as for `take_step()`.
         """
         # shape: (batch_size, 1, target_embedding_dim)
-        last_predictions_embeddings = self.target_embedder(last_predictions).unsqueeze(1)
+        last_predictions_embeddings = self.target_embedder(last_predictions)
 
         last_predictions_embeddings_w_dropout = self._dropout(last_predictions_embeddings)
 

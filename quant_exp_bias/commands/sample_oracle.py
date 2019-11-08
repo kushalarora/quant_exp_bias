@@ -95,6 +95,13 @@ def sample_oracle(params: Params,
          "We should have specified model in configuration."
     
     oracle_params = model_oracle_params.get('oracle', {})
+
+    # This is to handle composed LM.
+    if not oracle_params:
+            decoder_params = model_oracle_params.get('decoder', {})
+            if decoder_params:
+                oracle_params = decoder_params.get('oracle', {})
+
     assert oracle_params is not None, \
         "Oracle should be specified in configuration."
 

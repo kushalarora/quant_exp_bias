@@ -11,7 +11,7 @@ from allennlp.nn import util
 from quant_exp_bias.modules.decoders.decoder_net import DecoderNet
 
 
-@DecoderNet.register("lstm_cell")
+@DecoderNet.register("quant_exp_bias_lstm_cell")
 class LstmCellDecoderNet(DecoderNet):
     """
     This decoder net implements simple decoding network with LSTMCell and Attention.
