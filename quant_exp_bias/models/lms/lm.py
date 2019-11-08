@@ -230,7 +230,6 @@ class LMBase(Model):
 
         initializer(self)
 
-
     def take_step(self,
                   timestep,
                   last_predictions: torch.Tensor,
@@ -552,7 +551,6 @@ class LMBase(Model):
                        "scheduled_sampling_ratio": self._scheduled_sampling_ratio}
         return output_dict
 
-
     def _get_start_predictions(self, 
               state: Dict[str, torch.Tensor], 
               target_tokens: torch.LongTensor = None,
@@ -571,7 +569,6 @@ class LMBase(Model):
         return torch.zeros((batch_size,), 
                                        dtype=torch.long, 
                                        device=torch.cuda.current_device()).fill_(self._start_index)
-
 
     def _prepare_output_projections(self,
                                     last_predictions: torch.Tensor,
