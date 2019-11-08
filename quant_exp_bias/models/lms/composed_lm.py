@@ -48,56 +48,64 @@ class ComposedLMBase(Model):
     def __init__(
         self,
         vocab: Vocabulary,
-        source_text_embedder: TextFieldEmbedder,
-        encoder: Seq2SeqEncoder,
+        use_in_seq2seq_mode: bool,
         decoder: SeqDecoder,
-        tied_source_embedder_key: Optional[str] = None,
         initializer: InitializerApplicator = InitializerApplicator(),
         regularizer: Optional[RegularizerApplicator] = None,
+
+        source_text_embedder: TextFieldEmbedder = None,
+        encoder: Seq2SeqEncoder = None,
+        tied_source_embedder_key: Optional[str] = None,
     ) -> None:
 
         super().__init__(vocab, regularizer)
 
+        self._seq2seq_mode = use_in_seq2seq_mode
+        self._decoder = decoder
+        
         self._source_text_embedder = source_text_embedder
         self._encoder = encoder
-        self._decoder = decoder
 
-        if self._encoder.get_output_dim() != self._decoder.get_output_dim():
-            raise ConfigurationError(
-                f"Encoder output dimension {self._encoder.get_output_dim()} should be"
-                f" equal to decoder dimension {self._decoder.get_output_dim()}."
-            )
-        if tied_source_embedder_key:
-            # A bit of a ugly hack to tie embeddings.
-            # Works only for `BasicTextFieldEmbedder`, and since
-            # it can have multiple embedders, and `SeqDecoder` contains only a single embedder, we need
-            # the key to select the source embedder to replace it with the target embedder from the decoder.
-            if not isinstance(self._source_text_embedder, BasicTextFieldEmbedder):
+        if self._seq2seq_mode:
+            if self._encoder.get_output_dim() != self._decoder.get_output_dim():
                 raise ConfigurationError(
-                    "Unable to tie embeddings,"
-                    "Source text embedder is not an instance of `BasicTextFieldEmbedder`."
+                    f"Encoder output dimension {self._encoder.get_output_dim()} should be"
+                    f" equal to decoder dimension {self._decoder.get_output_dim()}."
                 )
+            if tied_source_embedder_key:
+                # A bit of a ugly hack to tie embeddings.
+                # Works only for `BasicTextFieldEmbedder`, and since
+                # it can have multiple embedders, and `SeqDecoder` contains only a single embedder, we need
+                # the key to select the source embedder to replace it with the target embedder from the decoder.
+                if not isinstance(self._source_text_embedder, BasicTextFieldEmbedder):
+                    raise ConfigurationError(
+                        "Unable to tie embeddings,"
+                        "Source text embedder is not an instance of `BasicTextFieldEmbedder`."
+                    )
 
-            source_embedder = self._source_text_embedder._token_embedders[tied_source_embedder_key]
-            if not isinstance(source_embedder, Embedding):
-                raise ConfigurationError(
-                    "Unable to tie embeddings,"
-                    "Selected source embedder is not an instance of `Embedding`."
-                )
-            if source_embedder.get_output_dim() != self._decoder.target_embedder.get_output_dim():
-                raise ConfigurationError(
-                    f"Output Dimensions mismatch between" f"source embedder and target embedder."
-                )
-            self._source_text_embedder._token_embedders[
-                tied_source_embedder_key
-            ] = self._decoder.target_embedder
+                source_embedder = self._source_text_embedder._token_embedders[tied_source_embedder_key]
+                if not isinstance(source_embedder, Embedding):
+                    raise ConfigurationError(
+                        "Unable to tie embeddings,"
+                        "Selected source embedder is not an instance of `Embedding`."
+                    )
+                if source_embedder.get_output_dim() != self._decoder.target_embedder.get_output_dim():
+                    raise ConfigurationError(
+                        f"Output Dimensions mismatch between" f"source embedder and target embedder."
+                    )
+                self._source_text_embedder._token_embedders[
+                    tied_source_embedder_key
+                ] = self._decoder.target_embedder
         initializer(self)
 
     @overrides
     def forward(
         self,  # type: ignore
-        source_tokens: Dict[str, torch.LongTensor],
+        source_tokens: Dict[str, torch.LongTensor] = None,
         target_tokens: Dict[str, torch.LongTensor] = None,
+        compute_exposure_bias: bool = False,
+        generation_batch_size:int = 1024,
+        max_decoding_step: int = None
     ) -> Dict[str, torch.Tensor]:
 
         """
@@ -117,9 +125,14 @@ class ComposedLMBase(Model):
         Dict[str, torch.Tensor]
             The output tensors from the decoder.
         """
-        state = self._encode(source_tokens)
-
-        return self._decoder(state, target_tokens)
+        state:  Dict[str, torch.Tensor] = {}
+        if self._seq2seq_mode:
+            state.update(self._encode(source_tokens))
+        return self._decoder(state, 
+                             target_tokens,
+                             compute_exposure_bias=compute_exposure_bias,
+                             generation_batch_size=generation_batch_size,
+                             max_decoding_step=max_decoding_step)
 
     @overrides
     def decode(self, output_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:

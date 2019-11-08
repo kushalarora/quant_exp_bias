@@ -6,8 +6,9 @@ from torch.nn import LSTMCell, LSTM
 
 from allennlp.common.checks import ConfigurationError
 from allennlp.modules import Attention
-from allennlp.modules.seq2seq_decoders.decoder_net import DecoderNet
 from allennlp.nn import util
+
+from quant_exp_bias.modules.decoders.decoder_net import DecoderNet
 
 
 @DecoderNet.register("lstm_cell")
@@ -32,7 +33,6 @@ class LstmCellDecoderNet(DecoderNet):
         self,
         decoding_dim: int,
         target_embedding_dim: int,
-        use_in_seq2seq_mode: bool,
         attention: Optional[Attention] = None,
         bidirectional_input: bool = False,
         num_decoder_layers: int = 1
@@ -43,8 +43,6 @@ class LstmCellDecoderNet(DecoderNet):
             target_embedding_dim=target_embedding_dim,
             decodes_parallel=False,
         )
-
-        self._seq2seq_mode = use_in_seq2seq_mode
 
         # In this particular type of decoder output of previous step passes directly to the input of current step
         # We also assume that decoder output dimensionality is equal to the encoder output dimensionality
@@ -60,11 +58,10 @@ class LstmCellDecoderNet(DecoderNet):
             decoder_input_dim += decoding_dim
 
         # Ensure that attention is only set during seq2seq setting.
-        if not self._seq2seq_mode and self._attention is not None:
-            raise ConfigurationError("Attention is only specified in Seq2Seq setting.")
+        # if not self._seq2seq_mode and self._attention is not None:
+        #     raise ConfigurationError("Attention is only specified in Seq2Seq setting.")
 
         self._num_decoder_layers = num_decoder_layers
-
         if self._num_decoder_layers > 1:
             self._decoder_cell = LSTM(decoder_input_dim, self.decoding_dim, self._num_decoder_layers)
         else:
@@ -117,9 +114,8 @@ class LstmCellDecoderNet(DecoderNet):
     @overrides
     def forward(self,
                 previous_state: Dict[str, torch.Tensor],
-                source_mask: torch.Tensor,
-                previous_steps_predictions: torch.Tensor,
-                previous_steps_mask: Optional[torch.Tensor] = None,) -> Tuple[Dict[str, torch.Tensor], torch.Tensor]:
+                last_predictions_embedding: torch.Tensor,
+               ) -> Tuple[Dict[str, torch.Tensor], torch.Tensor]:
 
          # shape: ((group_size, decoder_output_dim), (group_size, decoder_output_dim))
         decoder_hidden = previous_state.get("decoder_hidden", None)
@@ -141,12 +137,14 @@ class LstmCellDecoderNet(DecoderNet):
 
 
         # shape: (group_size, output_dim)
-        last_predictions_embedding = previous_steps_predictions[:, -1]
 
-        if self._attention:
+        # shape: (group_size, max_input_sequence_length, encoder_output_dim)
+        encoder_outputs = previous_state.get("encoder_outputs", None)
 
-            # shape: (group_size, max_input_sequence_length, encoder_output_dim)
-            encoder_outputs = previous_state["encoder_outputs"]
+        if encoder_outputs is not None and self._attention:
+
+            # shape: (group_size, max_input_sequence_length)
+            source_mask = previous_state["source_mask"]
 
             # shape: (group_size, encoder_output_dim)
             attended_input = self._prepare_attended_input(decoder_hidden, encoder_outputs, source_mask)
@@ -174,6 +172,7 @@ class LstmCellDecoderNet(DecoderNet):
             decoder_context = decoder_context.transpose(0,1).contiguous()
 
         return (
-            {"decoder_hidden": decoder_hidden, "decoder_context": decoder_context},
+            {"decoder_hidden": decoder_hidden, 
+             "decoder_context": decoder_context},
             decoder_output,
         )
