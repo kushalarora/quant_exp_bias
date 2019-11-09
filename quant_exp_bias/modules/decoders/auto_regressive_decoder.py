@@ -21,7 +21,7 @@ from quant_exp_bias.models.sampled_beam_search import SampledBeamSearch
 from quant_exp_bias.oracles.oracle_base import Oracle
 from quant_exp_bias.modules.decoders.seq_decoder import SeqDecoder
 from quant_exp_bias.modules.decoders.decoder_net import DecoderNet
-
+from quant_exp_bias.modules.cost_functions.cost_function import CostFunction
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -84,7 +84,8 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                  tie_output_embedding: bool = False,
                  label_smoothing_ratio: Optional[float] = None,
                  
-                 oracle: Oracle = None,) -> None:
+                 oracle: Oracle = None,
+                 rollout_cost_function: CostFunction = None,) -> None:
         super().__init__(target_embedder)
 
         self._vocab = vocab
@@ -145,6 +146,11 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             self._exposure_bias = ExposureBias(oracle)
 
         self._ss_ratio = Average()
+
+        self._rollout_cost_function = rollout_cost_function
+        if self._rollout_cost_function:
+            self._rollout_cf_avg = Average()
+
         if dropout:
             self._dropout = torch.nn.Dropout(dropout)
         else:
@@ -164,6 +170,10 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
 
     def get_output_dim(self):
         return self._decoder_net.get_output_dim()
+
+    def rolling_policy(self, 
+                        rolling_policy_type: str = 'teacher-forcing'):
+        pass
 
     def take_step(self,
                   timestep: int,
@@ -257,16 +267,6 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             state = encoder_out
             decoder_init_state = self._decoder_net.init_decoder_state(state)
             state.update(decoder_init_state)
-
-        # These are default for validation and compute exposure bias run.
-        beam_size: int = None; per_node_beam_size: int = None; 
-        sampled: bool = True; truncate_at_end_all: bool = False;
-
-
-        if self.training:
-            beam_size: int = 1; per_node_beam_size: int = self._num_classes; 
-            sampled: bool = False; truncate_at_end_all: bool = False;            
-            self._apply_scheduled_sampling()
             
         targets: torch.LongTensor = None
         if target_tokens:
@@ -280,35 +280,20 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             num_decoding_steps = target_sequence_length - 1
         else:
             num_decoding_steps = self._max_decoding_steps
-
-        # Initialize target predictions with the start index.
+            
+       # Initialize target predictions with the start index.
         # shape: (batch_size,)
         start_predictions = self._get_start_predictions(state,
                                                         target_tokens,
                                                         generation_batch_size)
 
-        rolling_policy=partial(self.take_step, targets=targets)
         output_dict = self._forward_loop(state, 
-                                         start_predictions,
-                                         rolling_policy,
-                                         max_steps=num_decoding_steps,
-                                         beam_size=beam_size,
-                                         per_node_beam_size=per_node_beam_size,
-                                         sampled=sampled,
-                                         truncate_at_end_all=truncate_at_end_all)
-
-        if target_tokens:
-            targets = target_tokens['tokens']
-            logits = output_dict['logits']
-
-            # shape: (batch_size, num_decoding_steps)
-            best_logits = logits[:, 0, :, :].squeeze(1)
-
-            # Compute loss.
-            target_mask = util.get_text_field_mask(target_tokens)
-            loss = self._get_loss(best_logits, targets, target_mask)
-            output_dict["loss"] = loss
-            self._perplexity(loss)
+                                         start_predictions, 
+                                         rollin=not compute_exposure_bias, 
+                                         rollout=compute_exposure_bias,
+                                         rollin_steps=num_decoding_steps,
+                                         rollout_steps=num_decoding_steps,
+                                         target_tokens=target_tokens)
 
         if not self.training:
             if target_tokens and self._bleu:
@@ -393,23 +378,23 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         self.training_iteration += 1
 
 
-    def _forward_loop(self,
-                      state: Dict[str, torch.Tensor],
-                      start_predictions, 
-                      rolling_policy,
-                      max_steps:int = None,
-                      beam_size:int = None, 
-                      per_node_beam_size:int = None,
-                      sampled:bool = True,
-                      truncate_at_end_all: bool = True) -> Dict[str, torch.Tensor]:
-        """
-        Make forward pass during training or do greedy search during prediction.
+    def rollin(self,
+               state: Dict[str, torch.Tensor],
+               start_predictions: torch.LongTensor,
+               rollin_steps: int,
+               rollin_policy: Callable = None,
+               target_tokens: Dict[str, torch.LongTensor] = None,):
+        beam_size:int = 1
+        per_node_beam_size: int = self._num_classes; 
+        sampled: bool = False; 
+        truncate_at_end_all: bool = False;     
 
-        Notes
-        -----
-        We really only use the predictions from the method to test that beam search
-        with a beam size of 1 gives the same results.
-        """
+        targets = target_tokens['tokens']
+
+        if self.training:
+            self._apply_scheduled_sampling()
+
+        rolling_policy=partial(self.take_step, targets=targets)
         # shape (all_top_k_predictions): (batch_size, beam_size, num_decoding_steps)
         # shape (log_probabilities): (batch_size, beam_size)
         # shape (logits): (batch_size, beam_size, num_decoding_steps, num_classes)
@@ -417,7 +402,52 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                     self._beam_search.search(start_predictions, 
                                                 state,
                                                 rolling_policy,
-                                                max_steps=max_steps,
+                                                max_steps=rollin_steps,
+                                                beam_size=beam_size,
+                                                per_node_beam_size=per_node_beam_size,
+                                                sampled=sampled,
+                                                truncate_at_end_all=truncate_at_end_all)
+
+        output_dict = {"predictions": step_predictions,
+                "logits": logits,
+                "class_log_probabilities": log_probabilities,
+                "scheduled_sampling_ratio": self._scheduled_sampling_ratio}
+
+        if target_tokens:
+            # shape: (batch_size, num_decoding_steps)
+            best_logits = logits[:, 0, :, :].squeeze(1)
+
+            # Compute loss.
+            target_mask = util.get_text_field_mask(target_tokens)
+            loss_batch = self._get_loss(best_logits, targets, target_mask)
+            output_dict["rollin_loss_batch"] = loss_batch
+            loss = loss_batch.mean()
+            output_dict['loss'] = loss
+            self._perplexity(loss)
+
+        return output_dict
+
+    def rollout(self,
+               state: Dict[str, torch.Tensor],
+               start_predictions: torch.LongTensor,
+               rollout_steps: int,
+               rollout_policy: Callable = None,
+               beam_size: int = None,
+               per_node_beam_size: int = None,
+               targets: torch.LongTensor = None):
+        sampled: bool = True; 
+        truncate_at_end_all: bool = True;
+        
+        rolling_policy=partial(self.take_step, targets=targets)
+
+        # shape (all_top_k_predictions): (batch_size, beam_size, num_decoding_steps)
+        # shape (log_probabilities): (batch_size, beam_size)
+        # shape (logits): (batch_size, beam_size, num_decoding_steps, num_classes)
+        step_predictions, log_probabilities, logits = \
+                    self._beam_search.search(start_predictions, 
+                                                state,
+                                                rolling_policy,
+                                                max_steps=rollout_steps,
                                                 beam_size=beam_size,
                                                 per_node_beam_size=per_node_beam_size,
                                                 sampled=sampled,
@@ -427,11 +457,55 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                        "logits": logits,
                        "class_log_probabilities": log_probabilities,
                        "scheduled_sampling_ratio": self._scheduled_sampling_ratio}
+
+        if self._rollout_cost_function:
+            top_k_predictions = output_dict["predictions"]
+            top_k_log_probabilities = output_dict["class_log_probabilities"]
+            # shape: (batch_size, max_predicted_sequence_length)
+            best_predictions = top_k_predictions[:, 0, :]
+
+            prediction_loss = top_k_log_probabilities[:,0]
+            predicted_tokens = self._decode_tokens(best_predictions, 
+                                                    vocab_namespace=self._target_namespace,
+                                                    truncate=True)
+
+            loss_batch = self._rollout_cost_function(predicted_tokens)
+            output_dict["rollout_loss_batch"] = loss_batch
+            self._rollout_cf_avg(loss_batch.mean())
+        return output_dict
+
+    def _forward_loop(self,
+                      state: Dict[str, torch.Tensor],
+                      start_predictions: torch.LongTensor, 
+                      rollin: int = True,
+                      rollout: int = False,
+                      rollin_steps: int = 0,
+                      rollout_steps: int = 0,
+                      target_tokens: Dict[str, torch.LongTensor] = None,
+                     ) -> Dict[str, torch.Tensor]:
+        """
+        Make forward pass during training or do greedy search during prediction.
+
+        Notes
+        -----
+        We really only use the predictions from the method to test that beam search
+        with a beam size of 1 gives the same results.
+        """
+        if rollin:
+            output_dict = self.rollin(state,
+                                        start_predictions,
+                                        rollin_steps=rollout_steps,
+                                        target_tokens=target_tokens,)
+
+        if rollout:
+            output_dict = self.rollout(state, 
+                                        start_predictions, 
+                                        rollout_steps=rollin_steps,)
         return output_dict
 
     def _get_start_predictions(self, 
               state: Dict[str, torch.Tensor], 
-              target_tokens: torch.LongTensor = None,
+              target_tokens: Dict[str, torch.LongTensor] = None,
               generation_batch_size:int = None) ->  torch.LongTensor:
 
         if self._seq2seq_mode:
@@ -514,7 +588,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         # shape: (batch_size, num_decoding_steps)
         relevant_mask = target_mask[:, 1:].contiguous()
 
-        return util.sequence_cross_entropy_with_logits(logits, relevant_targets, relevant_mask, label_smoothing=self._label_smoothing_ratio)
+        return util.sequence_cross_entropy_with_logits(logits, relevant_targets, relevant_mask, label_smoothing=self._label_smoothing_ratio, average=None)
 
     @overrides
     def get_metrics(self, reset: bool = False, get_exposure_bias: bool = False) -> Dict[str, float]:
@@ -530,5 +604,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         if self._bleu and not self.training:
             all_metrics.update(self._bleu.get_metric(reset=reset))
 
+        if self._rollout_cost_function:
+            all_metrics.update({self._rollout_cost_function.name: self._rollout_cf_avg.get_metric(reset=reset)})
         return all_metrics
 
