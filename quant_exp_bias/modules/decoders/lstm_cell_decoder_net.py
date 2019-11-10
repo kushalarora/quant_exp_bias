@@ -93,9 +93,9 @@ class LstmCellDecoderNet(DecoderNet):
 
         return attended_input
 
-    def _init_decoder_state(self, 
+    def init_decoder_state(self, 
                             encoder_out: Dict[str, torch.LongTensor]) -> Dict[str, torch.Tensor]:
-        batch_size, _ = encoder_out["source_mask"].size(0)
+        batch_size = encoder_out["source_mask"].size(0)
 
         # Initialize the decoder hidden state with the final output of the encoder,
         # and the decoder context with zeros.

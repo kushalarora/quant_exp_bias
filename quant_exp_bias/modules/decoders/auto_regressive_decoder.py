@@ -301,7 +301,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 top_k_predictions = output_dict["predictions"]
                 # shape: (batch_size, max_predicted_sequence_length)
                 best_predictions = top_k_predictions[:, 0, :]
-
+                
                 self._bleu(best_predictions, target_tokens["tokens"])
 
             
@@ -383,11 +383,16 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                start_predictions: torch.LongTensor,
                rollin_steps: int,
                rollin_policy: Callable = None,
-               target_tokens: Dict[str, torch.LongTensor] = None,):
-        beam_size:int = 1
-        per_node_beam_size: int = self._num_classes; 
-        sampled: bool = False; 
-        truncate_at_end_all: bool = False;     
+               target_tokens: Dict[str, torch.LongTensor] = None,
+               beam_size:int = 1, 
+               per_node_beam_size: int = None,
+               sampled: bool = False,
+               truncate_at_end_all: bool = False,
+              ):
+
+        # We cannot make a class variable as default, so making default value
+        # as None and in case it is None, setting it to num_classes.
+        per_node_beam_size: int = per_node_beam_size or self._num_classes
 
         targets = target_tokens['tokens']
 
@@ -408,6 +413,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                                 sampled=sampled,
                                                 truncate_at_end_all=truncate_at_end_all)
 
+        logits = torch.cat(logits, dim=2)
         output_dict = {"predictions": step_predictions,
                 "logits": logits,
                 "class_log_probabilities": log_probabilities,
@@ -421,23 +427,33 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             target_mask = util.get_text_field_mask(target_tokens)
             loss_batch = self._get_loss(best_logits, targets, target_mask)
             output_dict["rollin_loss_batch"] = loss_batch
-            loss = loss_batch.mean()
+
+            # Generate denominator for normalizing loss across batch.
+            # Ideally this will be equal to batch_size, but this is a
+            # safer way to do this. Here, we ignore sequences with all
+            # pad tokens.
+            non_batch_dims = tuple(range(1, len(target_mask.shape)))
+            # shape : (batch_size,)
+            target_mask_sum = target_mask.sum(dim=non_batch_dims)
+            num_non_empty_sequences = ((target_mask_sum > 0).float().sum() + 1e-13)
+            loss = loss_batch.sum()/num_non_empty_sequences
+
             output_dict['loss'] = loss
             self._perplexity(loss)
 
         return output_dict
 
     def rollout(self,
-               state: Dict[str, torch.Tensor],
-               start_predictions: torch.LongTensor,
-               rollout_steps: int,
-               rollout_policy: Callable = None,
-               beam_size: int = None,
-               per_node_beam_size: int = None,
-               targets: torch.LongTensor = None):
-        sampled: bool = True; 
-        truncate_at_end_all: bool = True;
-        
+                state: Dict[str, torch.Tensor],
+                start_predictions: torch.LongTensor,
+                rollout_steps: int,
+                rollout_policy: Callable = None,
+                beam_size: int = None,
+                per_node_beam_size: int = None,
+                targets: torch.LongTensor = None,
+                sampled: bool = True,
+                truncate_at_end_all: bool = True,
+               ):
         rolling_policy=partial(self.take_step, targets=targets)
 
         # shape (all_top_k_predictions): (batch_size, beam_size, num_decoding_steps)
@@ -471,7 +487,19 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
 
             loss_batch = self._rollout_cost_function(predicted_tokens)
             output_dict["rollout_loss_batch"] = loss_batch
-            self._rollout_cf_avg(loss_batch.mean())
+
+            # Generate denominator for normalizing loss across batch.
+            # Ideally this will be equal to batch_size, but this is a
+            # safer way to do this. Here, we ignore sequences with all
+            # pad tokens.
+            mask = util.get_text_field_mask({'predictions': best_predictions})
+            non_batch_dims = tuple(range(1, len(mask.shape)))
+            # shape : (batch_size,)
+            mask_sum = mask.sum(dim=non_batch_dims)
+            num_non_empty_sequences = ((mask_sum > 0).float().sum() + 1e-13)
+            loss = loss_batch.sum()/num_non_empty_sequences
+
+            self._rollout_cf_avg(loss)
         return output_dict
 
     def _forward_loop(self,
@@ -593,18 +621,17 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
     @overrides
     def get_metrics(self, reset: bool = False, get_exposure_bias: bool = False) -> Dict[str, float]:
         all_metrics: Dict[str, float] = {}
+
+        all_metrics.update({'perplexity': self._perplexity.get_metric(reset=reset),
+                    'ss_ratio': self._ss_ratio.get_metric(reset=reset),
+                    'training_iter': self.training_iteration})
+
         if get_exposure_bias and self._exposure_bias and not self.training:
             all_metrics.update({'exposure_bias': self._exposure_bias.get_metric(reset=reset)})
-            return all_metrics
-
-        if self.training or not self._seq2seq_mode:
-            all_metrics.update({'perplexity': self._perplexity.get_metric(reset=reset),
-                                'ss_ratio': self._ss_ratio.get_metric(reset=reset),
-                                'training_iter': self.training_iteration})
+            
         if self._bleu and not self.training:
             all_metrics.update(self._bleu.get_metric(reset=reset))
 
         if self._rollout_cost_function:
             all_metrics.update({self._rollout_cost_function.name: self._rollout_cf_avg.get_metric(reset=reset)})
         return all_metrics
-

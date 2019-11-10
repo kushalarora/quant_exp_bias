@@ -31,14 +31,14 @@ class ComposedLMBase(Model):
         Vocabulary containing source and target vocabularies. They may be under the same namespace
         (`tokens`) or the target tokens can have a different namespace, in which case it needs to
         be specified as `target_namespace`.
-    source_text_embedders : ``TextFieldEmbedder``, required
+    source_embedders : ``TextFieldEmbedder``, required
         Embedders for source side sequences
     encoder : ``Seq2SeqEncoder``, required
         The encoder of the "encoder/decoder" model
     decoder : ``SeqDecoder``, required
         The decoder of the "encoder/decoder" model
     tied_source_embedder_key : ``str``, optional (default=``None``)
-        If specified, this key is used to obtain token_embedder in `source_text_embedder` and
+        If specified, this key is used to obtain token_embedder in `source_embedder` and
         the weights are shared/tied with the decoder's target embedding weights.
     initializer : ``InitializerApplicator``, optional (default=``InitializerApplicator()``)
         Used to initialize the model parameters.
@@ -54,7 +54,7 @@ class ComposedLMBase(Model):
         initializer: InitializerApplicator = InitializerApplicator(),
         regularizer: Optional[RegularizerApplicator] = None,
 
-        source_text_embedder: TextFieldEmbedder = None,
+        source_embedder: TextFieldEmbedder = None,
         encoder: Seq2SeqEncoder = None,
         tied_source_embedder_key: Optional[str] = None,
     ) -> None:
@@ -64,7 +64,7 @@ class ComposedLMBase(Model):
         self._seq2seq_mode = use_in_seq2seq_mode
         self._decoder = decoder
         
-        self._source_text_embedder = source_text_embedder
+        self._source_embedder = source_embedder
         self._encoder = encoder
 
         if self._seq2seq_mode:
@@ -78,13 +78,13 @@ class ComposedLMBase(Model):
                 # Works only for `BasicTextFieldEmbedder`, and since
                 # it can have multiple embedders, and `SeqDecoder` contains only a single embedder, we need
                 # the key to select the source embedder to replace it with the target embedder from the decoder.
-                if not isinstance(self._source_text_embedder, BasicTextFieldEmbedder):
+                if not isinstance(self._source_embedder, BasicTextFieldEmbedder):
                     raise ConfigurationError(
                         "Unable to tie embeddings,"
                         "Source text embedder is not an instance of `BasicTextFieldEmbedder`."
                     )
 
-                source_embedder = self._source_text_embedder._token_embedders[tied_source_embedder_key]
+                source_embedder = self._source_embedder._token_embedders[tied_source_embedder_key]
                 if not isinstance(source_embedder, Embedding):
                     raise ConfigurationError(
                         "Unable to tie embeddings,"
@@ -94,7 +94,7 @@ class ComposedLMBase(Model):
                     raise ConfigurationError(
                         f"Output Dimensions mismatch between" f"source embedder and target embedder."
                     )
-                self._source_text_embedder._token_embedders[
+                self._source_embedder._token_embedders[
                     tied_source_embedder_key
                 ] = self._decoder.target_embedder
         initializer(self)
@@ -168,12 +168,12 @@ class ComposedLMBase(Model):
         source_mask = util.get_text_field_mask(source_tokens)
 
         # shape: (batch_size, max_input_sequence_length, encoder_input_dim)
-        embedded_input_w_dropout = self._dropout(embedded_input)
+        embedded_input_w_dropout = self._decoder._dropout(embedded_input)
         # shape: (batch_size, max_input_sequence_length, encoder_output_dim)
         encoder_outputs = self._encoder(embedded_input_w_dropout, source_mask)
         return {"source_mask": source_mask, "encoder_outputs": encoder_outputs}
 
 
     @overrides
-    def get_metrics(self, reset: bool = False, get_exposure_bias=True) -> Dict[str, float]:
-        return self._decoder.get_metrics(reset, get_exposure_bias=True)
+    def get_metrics(self, reset: bool = False, get_exposure_bias=False) -> Dict[str, float]:
+        return self._decoder.get_metrics(reset, get_exposure_bias=get_exposure_bias)

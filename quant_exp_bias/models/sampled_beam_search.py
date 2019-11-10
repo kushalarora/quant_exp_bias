@@ -142,11 +142,11 @@ class SampledBeamSearch:
             start_top_log_probabilities, start_predicted_classes = \
                 start_class_log_probabilities.topk(self.beam_size)
                     
-        if self.beam_size == 1 and (start_predicted_classes == self._end_index).all():
+        if truncate_at_end_all and self.beam_size == 1 and (start_predicted_classes == self._end_index).all():
             warnings.warn("Empty sequences predicted. You may want to increase the beam size or ensure "
                           "your step function is working properly.",
                           RuntimeWarning)
-            return start_predicted_classes.unsqueeze(-1), start_top_log_probabilities
+            return start_predicted_classes.unsqueeze(-1), start_top_log_probabilities, step_logits
 
         # The log probabilities for the last time step.
         # shape: (batch_size, beam_size)
@@ -304,5 +304,4 @@ class SampledBeamSearch:
         all_predictions = torch.cat(list(reversed(reconstructed_predictions)), 2)
 
         # reshape step_logits list to a (batch_size, beam_size, max_steps, num_classes) tensor.
-        step_logits = torch.cat(step_logits, dim=2)
         return all_predictions, last_log_probabilities, step_logits
