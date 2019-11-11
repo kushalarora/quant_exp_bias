@@ -25,6 +25,9 @@ from quant_exp_bias.modules.cost_functions.cost_function import CostFunction
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
+RollinPolicyType = Callable[[int, torch.LongTensor, Optional[torch.LongTensor]], torch.LongTensor]
+RolloutPolicyType = Callable[[torch.LongTensor, torch.LongTensor, Optional[torch.LongTensor]], torch.LongTensor]
+
 @SeqDecoder.register("quant_exp_auto_regressive_seq_decoder")
 class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
     """
@@ -74,6 +77,8 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                  scheduled_sampling_ratio: float = 0.,
                  scheduled_sampling_k: int = 100,
                  scheduled_sampling_type: str = 'uniform',
+                 rollin_mode: str = 'teacher-forcing',
+                 rollout_mode: str = 'mixed',
                  use_bleu: bool = True,
                  dropout: float = None,
                  sample_output: bool = False, 
@@ -99,6 +104,9 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         self._target_namespace = target_namespace
         self._label_smoothing_ratio = label_smoothing_ratio
         
+        # TODO (Kushal): Maybe make them modules so that we can add more of these later.
+        self._rollin_mode = rollin_mode
+        self._rollout_mode = rollout_mode
 
         self._scheduled_sampling_ratio = scheduled_sampling_ratio
         self._scheduled_sampling_k = scheduled_sampling_k
@@ -171,15 +179,129 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
     def get_output_dim(self):
         return self._decoder_net.get_output_dim()
 
-    def rolling_policy(self, 
-                        rolling_policy_type: str = 'teacher-forcing'):
-        pass
+    def rollin_policy(self, 
+                      timestep: int,
+                      last_predictions: torch.LongTensor,
+                      targets: torch.LongTensor = None,
+                      rollin_mode = 'teacher-forcing') -> torch.LongTensor:
+        """ Roll-in policy to use.
+            This takes in targets, timestep and last_predictions, and decide
+            which to use for taking next step i.e., generating next token. 
+            What to do is decided by rolling mode. Options are 
+                - teacher-forcing, 
+                - learned, 
+                - scheduled-sampling.
+            
+        Arguments:
+            timestep {int} -- Current timestep decides which target token to use.
+                              In case of teacher-forcing this is usually {t-1}^{th} timestep
+                              for predicting t^{th} token.
+            last_predictions {torch.LongTensor} -- {t-1}^th token predicted by the model.
+        
+        Keyword Arguments:
+            targets {torch.LongTensor} -- Targets value if it is available. This will be
+                                           available in training mode but not in inference mode. (default: {None})
+            rollin_mode {str} -- Rollin mode. Options are 
+                                  teacher-forcing, learned, scheduled-sampling (default: {'teacher_forcing'})
+        Returns:
+            torch.LongTensor -- The method returns input token for predicting next token.
+        """
 
+        if rollin_mode == 'learned' or targets is None:
+            # shape: (batch_size,)
+            input_choices = last_predictions
+        elif rollin_mode == 'teacher-forcing':
+            # shape: (batch_size,)
+            input_choices = targets[:, timestep]
+        elif rollin_mode == 'scheduled-sampling':
+            if self.training and torch.rand(1).item() < self._scheduled_sampling_ratio:
+                # Use gold tokens at test time and at a rate of 1 - _scheduled_sampling_ratio
+                # during training.
+                # shape: (batch_size,)
+                input_choices = last_predictions
+            else:
+                # shape: (batch_size,)
+                input_choices = targets[:, timestep]
+        else:
+            raise ConfigurationError("invalid configuration for rollin policy: {rollin_mode}")
+        return input_choices
+
+    def rollout_policy(self, 
+                       timestep: int,
+                       logits: torch.LongTensor,
+                       targets: torch.LongTensor = None,
+                       rollout_mode: str = 'learned',
+                       rollout_mixing_prob: float = 0.5,
+                      ) -> torch.LongTensor:
+        """Rollout policy to use.
+           This takes in predicted logits at timestep {t}^{th} and 
+           depending upon the rollout_mode replaces some of the predictions
+           with targets.
+           
+           The options for rollout mode are:
+               - learned,
+               - reference,
+               - mixed.
+        
+        Arguments:
+            timestep {int} -- Current timestep decides which target token to use.
+                              In case of teacher-forcing this is usually {t-1}^{th} timestep
+                              for predicting t^{th} token.
+            logits {torch.LongTensor} -- Logits generated by the model for {t}^{th} timestep. 
+                                         (batch_size, num_classes). 
+        
+        Keyword Arguments:
+            targets {torch.LongTensor} -- Targets value if it is available. This will be
+                                available in training mode but not in inference mode. (default: {None})
+            rollout_mode {str} -- Rollout mode: Options are:
+                                    learned, reference, mixed. (default: {'learned'})
+            rollout_mixing_prob {float} -- Probability to choose predicted logits vs targets in case of mixed 
+                                    rollouts.  (default: {0.5})
+
+        Returns:
+            torch.LongTensor -- The method returns logits with rollout policy applied.
+        """
+        output_logits = logits
+        assert rollout_mode == 'learned' or targets is not None, \
+            f"Rollout mode {rollout_mode} needs targets to be specified."
+
+        if rollout_mode == 'learned':
+            # For learned rollout policy, just return the same logits.
+            return output_logits
+
+        # target_logits: (batch_size, num_classes).
+        # This tensor has 0 at targets and (near) -inf at other places.
+        target_at_timesteps = targets[:, timestep]
+        target_logits = (torch.new_zeros(logits) + 1e-45) \
+                            .scatter_(dim=-1,
+                                      index=target_at_timesteps,
+                                      src=1).log()
+        batch_size = logits.size(0)
+        if rollout_mode == 'teacher-forcing':
+             output_logits += target_logits
+        elif rollout_mode == 'mixed':
+            # Based on the mask (Value=1), copy target values. 
+
+            # This returns a (batch_size, num_classes) boolean map where the rows are either all zeros or all ones.
+            rollout_mask = torch.bernoulli(torch.ones(batch_size) * rollout_mixing_prob).expand(logits.shape)
+
+            # The target_logits ranges from (-inf , 0), so, by adding those to logits, 
+            # we turn the values that are not target token to -inf, hence making the distribution
+            # skew towards the target.
+            output_logits += rollout_mask * target_logits
+        else:
+            raise ConfigurationError(f"Incompatible rollout mode: {rollout_mode}")
+        return output_logits
+        
     def take_step(self,
                   timestep: int,
                   last_predictions: torch.Tensor,
                   state: Dict[str, torch.Tensor],
-                  targets: torch.LongTensor = None) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+                  targets: torch.LongTensor = None,
+                  rollin_mode: str = 'teacher-forcing', 
+                  rollout_mode: str = 'learned',
+                  rollout_mixing_prob: float = 0.5,
+                 ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         """
         Take a decoding step. This is called by the beam search class.
 
@@ -210,19 +332,12 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             equal to ``batch_size``, since the group may contain multiple states
             for each source sentence in the batch.
         """
-
-        if self.training and torch.rand(1).item() < self._scheduled_sampling_ratio:
-            # Use gold tokens at test time and at a rate of 1 - _scheduled_sampling_ratio
-            # during training.
-            # shape: (batch_size,)
-            input_choices = last_predictions
-        elif targets is None:
-            # shape: (batch_size,)
-            input_choices = last_predictions
-        else:
-            # shape: (batch_size,)
-            input_choices = targets[:, timestep]
         
+        input_choices = self.rollin_policy(timestep, 
+                                           last_predictions, 
+                                            targets, 
+                                            rollin_mode=rollin_mode)
+
         # shape: (group_size, num_classes)
         class_logits, state = self._prepare_output_projections(input_choices, state)
 
@@ -232,6 +347,11 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             # shape: (group_size, num_classes)
             class_logits = class_logits + mask
 
+        class_logits = self.rollout_policy(timestep, 
+                                            class_logits, 
+                                            targets, 
+                                            rollout_mode=rollout_mode, 
+                                            rollout_mixing_prob=rollout_mixing_prob)
         return class_logits, state
 
     @overrides
@@ -289,11 +409,11 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
 
         output_dict = self._forward_loop(state, 
                                          start_predictions, 
-                                         rollin=not compute_exposure_bias, 
-                                         rollout=compute_exposure_bias,
-                                         rollin_steps=num_decoding_steps,
-                                         rollout_steps=num_decoding_steps,
+                                         num_decoding_steps=num_decoding_steps,
+                                         computing_exposure_bias=compute_exposure_bias, 
                                          target_tokens=target_tokens)
+        
+        output_dict = self._combine_rollin_rollout_losses(output_dict)
 
         if not self.training:
             if target_tokens and self._bleu:
@@ -377,12 +497,28 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         self._ss_ratio(self._scheduled_sampling_ratio)
         self.training_iteration += 1
 
+    def _combine_rollin_rollout_losses(self, 
+                                       output_dict: Dict[str, torch.LongTensor]) -> Dict[str, torch.LongTensor]:
+        """ Given rollin and rollout, how to combine loss from rollin and
+            rollout to compute final loss. This will be used to learning local 
+            loss such that it reflects the global loss as well.
+        
+        Arguments:
+            output_dict {Dict[str, torch.LongTensor]} -- Dictionary with rollin and
+            rollout computations.
+        
+        Returns:
+             output_dict {Dict[str, torch.LongTensor]} -- Updated outptut dict.
+        """
+
+        # Here, we just do rollin for training and rollout for validation, so nothing to compute.
+        return output_dict
 
     def rollin(self,
                state: Dict[str, torch.Tensor],
                start_predictions: torch.LongTensor,
                rollin_steps: int,
-               rollin_policy: Callable = None,
+               rollin_mode: str = 'teacher-forcing',
                target_tokens: Dict[str, torch.LongTensor] = None,
                beam_size:int = 1, 
                per_node_beam_size: int = None,
@@ -399,7 +535,10 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         if self.training:
             self._apply_scheduled_sampling()
 
-        rolling_policy=partial(self.take_step, targets=targets)
+        rolling_policy=partial(self.take_step, 
+                                targets=targets, 
+                                rollin_mode=rollin_mode)
+
         # shape (all_top_k_predictions): (batch_size, beam_size, num_decoding_steps)
         # shape (log_probabilities): (batch_size, beam_size)
         # shape (logits): (batch_size, beam_size, num_decoding_steps, num_classes)
@@ -414,11 +553,11 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                                 truncate_at_end_all=truncate_at_end_all)
 
         logits = torch.cat(logits, dim=2)
-        output_dict = {"predictions": step_predictions,
+        output_dict = {
+                "predictions": step_predictions,
                 "logits": logits,
                 "class_log_probabilities": log_probabilities,
-                "scheduled_sampling_ratio": self._scheduled_sampling_ratio}
-
+                }
         if target_tokens:
             # shape: (batch_size, num_decoding_steps)
             best_logits = logits[:, 0, :, :].squeeze(1)
@@ -426,7 +565,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             # Compute loss.
             target_mask = util.get_text_field_mask(target_tokens)
             loss_batch = self._get_loss(best_logits, targets, target_mask)
-            output_dict["rollin_loss_batch"] = loss_batch
+            output_dict["loss_batch"] = loss_batch
 
             # Generate denominator for normalizing loss across batch.
             # Ideally this will be equal to batch_size, but this is a
@@ -447,14 +586,16 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 state: Dict[str, torch.Tensor],
                 start_predictions: torch.LongTensor,
                 rollout_steps: int,
-                rollout_policy: Callable = None,
+                rollout_mode: str = 'learned',
                 beam_size: int = None,
                 per_node_beam_size: int = None,
                 targets: torch.LongTensor = None,
                 sampled: bool = True,
                 truncate_at_end_all: bool = True,
                ):
-        rolling_policy=partial(self.take_step, targets=targets)
+
+        rolling_policy=partial(self.take_step, 
+                               rollout_mode=rollout_mode)
 
         # shape (all_top_k_predictions): (batch_size, beam_size, num_decoding_steps)
         # shape (log_probabilities): (batch_size, beam_size)
@@ -471,8 +612,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
 
         output_dict = {"predictions": step_predictions,
                        "logits": logits,
-                       "class_log_probabilities": log_probabilities,
-                       "scheduled_sampling_ratio": self._scheduled_sampling_ratio}
+                       "class_log_probabilities": log_probabilities,}
 
         if self._rollout_cost_function:
             top_k_predictions = output_dict["predictions"]
@@ -486,7 +626,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                                     truncate=True)
 
             loss_batch = self._rollout_cost_function(predicted_tokens)
-            output_dict["rollout_loss_batch"] = loss_batch
+            output_dict["loss_batch"] = loss_batch
 
             # Generate denominator for normalizing loss across batch.
             # Ideally this will be equal to batch_size, but this is a
@@ -498,6 +638,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             mask_sum = mask.sum(dim=non_batch_dims)
             num_non_empty_sequences = ((mask_sum > 0).float().sum() + 1e-13)
             loss = loss_batch.sum()/num_non_empty_sequences
+            output_dict['loss'] = loss
 
             self._rollout_cf_avg(loss)
         return output_dict
@@ -505,10 +646,8 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
     def _forward_loop(self,
                       state: Dict[str, torch.Tensor],
                       start_predictions: torch.LongTensor, 
-                      rollin: int = True,
-                      rollout: int = False,
-                      rollin_steps: int = 0,
-                      rollout_steps: int = 0,
+                      num_decoding_steps,
+                      computing_exposure_bias = False,
                       target_tokens: Dict[str, torch.LongTensor] = None,
                      ) -> Dict[str, torch.Tensor]:
         """
@@ -519,16 +658,17 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         We really only use the predictions from the method to test that beam search
         with a beam size of 1 gives the same results.
         """
+        rollin = not computing_exposure_bias; rollout = computing_exposure_bias
         if rollin:
             output_dict = self.rollin(state,
                                         start_predictions,
-                                        rollin_steps=rollout_steps,
+                                        rollin_steps=num_decoding_steps,
                                         target_tokens=target_tokens,)
 
         if rollout:
             output_dict = self.rollout(state, 
                                         start_predictions, 
-                                        rollout_steps=rollin_steps,)
+                                        rollout_steps=num_decoding_steps,)
         return output_dict
 
     def _get_start_predictions(self, 
@@ -622,13 +762,14 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
     def get_metrics(self, reset: bool = False, get_exposure_bias: bool = False) -> Dict[str, float]:
         all_metrics: Dict[str, float] = {}
 
+        if get_exposure_bias and self._exposure_bias and not self.training:
+            all_metrics.update({'exposure_bias': self._exposure_bias.get_metric(reset=reset)})
+            return all_metrics
+
         all_metrics.update({'perplexity': self._perplexity.get_metric(reset=reset),
                     'ss_ratio': self._ss_ratio.get_metric(reset=reset),
                     'training_iter': self.training_iteration})
 
-        if get_exposure_bias and self._exposure_bias and not self.training:
-            all_metrics.update({'exposure_bias': self._exposure_bias.get_metric(reset=reset)})
-            
         if self._bleu and not self.training:
             all_metrics.update(self._bleu.get_metric(reset=reset))
 
