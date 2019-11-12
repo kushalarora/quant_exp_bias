@@ -407,13 +407,16 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                                         target_tokens,
                                                         generation_batch_size)
 
-        output_dict = self._forward_loop(state, 
+        rollin_output_dict, rollout_output_dict = \
+                      self._forward_loop(state, 
                                          start_predictions, 
                                          num_decoding_steps=num_decoding_steps,
                                          computing_exposure_bias=compute_exposure_bias, 
                                          target_tokens=target_tokens)
         
-        output_dict = self._combine_rollin_rollout_losses(output_dict)
+        output_dict = self._combine_rollin_rollout_losses(rollin_output_dict, 
+                                                          rollout_output_dict, 
+                                                          compute_exposure_bias)
 
         if not self.training:
             if target_tokens and self._bleu:
@@ -498,21 +501,25 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         self.training_iteration += 1
 
     def _combine_rollin_rollout_losses(self, 
-                                       output_dict: Dict[str, torch.LongTensor]) -> Dict[str, torch.LongTensor]:
+                                       rollin_output_dict: Dict[str, torch.LongTensor],
+                                       rollout_output_dict: Dict[str, torch.LongTensor], 
+                                       compute_exposure_bias: bool = False) -> Dict[str, torch.LongTensor]:
         """ Given rollin and rollout, how to combine loss from rollin and
             rollout to compute final loss. This will be used to learning local 
             loss such that it reflects the global loss as well.
         
         Arguments:
-            output_dict {Dict[str, torch.LongTensor]} -- Dictionary with rollin and
-            rollout computations.
-        
+            rollin_output_dict {Dict[str, torch.LongTensor]} -- Dictionary with rollin computations.
+            rollout_output_dict {Dict[str, torch.LongTensor]} -- Dictionary with rollin computations.
+            compute_exposure_bias {bool} -- If we are computing exposure bias.
+
         Returns:
-             output_dict {Dict[str, torch.LongTensor]} -- Updated outptut dict.
+             output_dict {Dict[str, torch.LongTensor]} -- Updated outptut dict with global and local
+                                                          loss combined.
         """
 
         # Here, we just do rollin for training and rollout for validation, so nothing to compute.
-        return output_dict
+        return rollout_output_dict if compute_exposure_bias else rollin_output_dict
 
     def rollin(self,
                state: Dict[str, torch.Tensor],
@@ -539,7 +546,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                 targets=targets, 
                                 rollin_mode=rollin_mode)
 
-        # shape (all_top_k_predictions): (batch_size, beam_size, num_decoding_steps)
+        # shape (step_predictions): (batch_size, beam_size, num_decoding_steps)
         # shape (log_probabilities): (batch_size, beam_size)
         # shape (logits): (batch_size, beam_size, num_decoding_steps, num_classes)
         step_predictions, log_probabilities, logits = \
@@ -649,7 +656,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                       num_decoding_steps,
                       computing_exposure_bias = False,
                       target_tokens: Dict[str, torch.LongTensor] = None,
-                     ) -> Dict[str, torch.Tensor]:
+                     ) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
         """
         Make forward pass during training or do greedy search during prediction.
 
@@ -659,17 +666,19 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         with a beam size of 1 gives the same results.
         """
         rollin = not computing_exposure_bias; rollout = computing_exposure_bias
+        rollin_output_dict = {}
+        rollout_output_dict = {}
         if rollin:
-            output_dict = self.rollin(state,
-                                        start_predictions,
-                                        rollin_steps=num_decoding_steps,
-                                        target_tokens=target_tokens,)
+            rollin_output_dict.update(self.rollin(state,
+                                                    start_predictions,
+                                                    rollin_steps=num_decoding_steps,
+                                                    target_tokens=target_tokens,))
 
         if rollout:
-            output_dict = self.rollout(state, 
-                                        start_predictions, 
-                                        rollout_steps=num_decoding_steps,)
-        return output_dict
+            rollout_output_dict.update(self.rollout(state, 
+                                                    start_predictions, 
+                                                    rollout_steps=num_decoding_steps,))
+        return (rollin_output_dict, rollout_output_dict)
 
     def _get_start_predictions(self, 
               state: Dict[str, torch.Tensor], 
