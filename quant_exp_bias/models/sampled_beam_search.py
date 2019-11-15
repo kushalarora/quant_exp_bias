@@ -136,13 +136,13 @@ class SampledBeamSearch:
 
         # shape: (batch_size, beam_size), (batch_size, beam_size)
         if sampled:
-            start_predicted_classes = torch.multinomial(F.softmax(start_class_log_probabilities, dim=-1), self.beam_size)
+            start_predicted_classes = torch.multinomial(F.softmax(start_class_log_probabilities, dim=-1), beam_size)
             start_top_log_probabilities = torch.gather(start_class_log_probabilities, 1, start_predicted_classes)
         else:
             start_top_log_probabilities, start_predicted_classes = \
-                start_class_log_probabilities.topk(self.beam_size)
+                start_class_log_probabilities.topk(beam_size)
                     
-        if truncate_at_end_all and self.beam_size == 1 and (start_predicted_classes == self._end_index).all():
+        if truncate_at_end_all and beam_size == 1 and (start_predicted_classes == self._end_index).all():
             warnings.warn("Empty sequences predicted. You may want to increase the beam size or ensure "
                           "your step function is working properly.",
                           RuntimeWarning)
@@ -155,10 +155,15 @@ class SampledBeamSearch:
         # shape: [(batch_size, beam_size)]
         predictions.append(start_predicted_classes)
 
+        # If there is only one step, then all you need to do the
+        # start step.
+        if max_steps == 1:
+            return predictions[0].unsqueeze(2), last_log_probabilities, step_logits
+
         # Log probability tensor that mandates that the end token is selected.
         # shape: (batch_size * beam_size, num_classes)
         log_probs_after_end = start_class_log_probabilities.new_full(
-                (batch_size * self.beam_size, num_classes),
+                (batch_size * beam_size, num_classes),
                 float("-inf")
         )
         log_probs_after_end[:, self._end_index] = 0.

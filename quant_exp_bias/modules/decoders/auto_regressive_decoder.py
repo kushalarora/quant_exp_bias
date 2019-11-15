@@ -78,7 +78,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                  scheduled_sampling_k: int = 100,
                  scheduled_sampling_type: str = 'uniform',
                  rollin_mode: str = 'teacher-forcing',
-                 rollout_mode: str = 'mixed',
+                 rollout_mode: str = 'learned',
                  use_bleu: bool = True,
                  dropout: float = None,
                  sample_output: bool = False, 
@@ -90,7 +90,9 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                  label_smoothing_ratio: Optional[float] = None,
                  
                  oracle: Oracle = None,
-                 rollout_cost_function: CostFunction = None,) -> None:
+                 rollout_cost_function: CostFunction = None,
+                 rollin_rollout_combination_mode='mle',
+                ) -> None:
         super().__init__(target_embedder)
 
         self._vocab = vocab
@@ -120,13 +122,13 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         self._start_index = self._vocab.get_token_index(start_token, self._target_namespace)
         self._end_index = self._vocab.get_token_index(end_token, self._target_namespace)
         
-        padding_index = self._vocab.get_token_index(DEFAULT_PADDING_TOKEN, self._target_namespace)
-        oov_index = self._vocab.get_token_index(DEFAULT_OOV_TOKEN, self._target_namespace)
+        self._padding_index = self._vocab.get_token_index(DEFAULT_PADDING_TOKEN, self._target_namespace)
+        self._oov_index = self._vocab.get_token_index(DEFAULT_OOV_TOKEN, self._target_namespace)
 
         if self._mask_pad_and_oov:
             self._vocab_mask = torch.ones(self._vocab.get_vocab_size(self._target_namespace),
                                         device=torch.cuda.current_device()) \
-                                    .scatter(0, torch.tensor([padding_index,oov_index],
+                                    .scatter(0, torch.tensor([self._padding_index, self._oov_index, self._start_index],
                                                  device=torch.cuda.current_device()), 0)
         if use_bleu:
             pad_index = self._vocab.get_token_index(self._vocab._padding_token, self._target_namespace)  # pylint: disable=protected-access
@@ -176,13 +178,15 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 )
             self._output_projection_layer.weight = self.target_embedder.weight
 
+        self._combiner_mode = rollin_rollout_combination_mode
+
     def get_output_dim(self):
         return self._decoder_net.get_output_dim()
 
     def rollin_policy(self, 
                       timestep: int,
                       last_predictions: torch.LongTensor,
-                      targets: torch.LongTensor = None,
+                      target_tokens: Dict[str, torch.LongTensor] = None,
                       rollin_mode = 'teacher-forcing') -> torch.LongTensor:
         """ Roll-in policy to use.
             This takes in targets, timestep and last_predictions, and decide
@@ -206,11 +210,16 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         Returns:
             torch.LongTensor -- The method returns input token for predicting next token.
         """
-
-        if rollin_mode == 'learned' or targets is None:
+            # For first timestep, you are passing start token, so don't do anything smart.
+        if (timestep == 0 or
+            # If no targets, no way to do teacher-forcing, so use your own predictions. 
+           target_tokens is None  or
+           rollin_mode == 'learned'): 
             # shape: (batch_size,)
-            input_choices = last_predictions
-        elif rollin_mode == 'teacher-forcing':
+            return last_predictions
+        
+        targets = target_tokens['tokens']
+        if rollin_mode == 'teacher-forcing':
             # shape: (batch_size,)
             input_choices = targets[:, timestep]
         elif rollin_mode == 'scheduled-sampling':
@@ -229,7 +238,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
     def rollout_policy(self, 
                        timestep: int,
                        logits: torch.LongTensor,
-                       targets: torch.LongTensor = None,
+                       target_tokens: Dict[str, torch.LongTensor] = None,
                        rollout_mode: str = 'learned',
                        rollout_mixing_prob: float = 0.5,
                       ) -> torch.LongTensor:
@@ -240,7 +249,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
            
            The options for rollout mode are:
                - learned,
-               - reference,
+               - teacher-forcing,
                - mixed.
         
         Arguments:
@@ -254,7 +263,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             targets {torch.LongTensor} -- Targets value if it is available. This will be
                                 available in training mode but not in inference mode. (default: {None})
             rollout_mode {str} -- Rollout mode: Options are:
-                                    learned, reference, mixed. (default: {'learned'})
+                                    learned, teacher-forcing, mixed. (default: {'learned'})
             rollout_mixing_prob {float} -- Probability to choose predicted logits vs targets in case of mixed 
                                     rollouts.  (default: {0.5})
 
@@ -262,20 +271,34 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             torch.LongTensor -- The method returns logits with rollout policy applied.
         """
         output_logits = logits
-        assert rollout_mode == 'learned' or targets is not None, \
+        assert rollout_mode == 'learned' or target_tokens is not None, \
             f"Rollout mode {rollout_mode} needs targets to be specified."
 
-        if rollout_mode == 'learned':
+        if rollout_mode == 'learned' or target_tokens is None:
             # For learned rollout policy, just return the same logits.
             return output_logits
 
+        targets = target_tokens['tokens']
+        seq_len = targets.size(1)
+
+        # So this must be prediction of last step,
+        # where there are no more 
+        if seq_len > timestep + 1:  # + 1 because timestep is an index, indexed at 0.
+            # As we might be overriding  the next/predicted token/
+            # We have to use the value corresponding to {t+1}^{th}
+            # timestep.
+            target_at_timesteps = targets[:, timestep + 1]
+        else:
+            # We have overshot the seq_len, so just repeat the 
+            # last token which is either _end_token or _pad_token.
+            target_at_timesteps = targets[:, -1]
+
         # target_logits: (batch_size, num_classes).
         # This tensor has 0 at targets and (near) -inf at other places.
-        target_at_timesteps = targets[:, timestep]
-        target_logits = (torch.new_zeros(logits) + 1e-45) \
-                            .scatter_(dim=-1,
-                                      index=target_at_timesteps,
-                                      src=1).log()
+        target_logits = (target_at_timesteps.new_zeros(logits.shape) + 1e-45) \
+                            .scatter_(dim=1,
+                                      index=target_at_timesteps.unsqueeze(1),
+                                      value=1.0).log()
         batch_size = logits.size(0)
         if rollout_mode == 'teacher-forcing':
              output_logits += target_logits
@@ -283,8 +306,11 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             # Based on the mask (Value=1), copy target values. 
 
             # This returns a (batch_size, num_classes) boolean map where the rows are either all zeros or all ones.
-            rollout_mask = torch.bernoulli(torch.ones(batch_size) * rollout_mixing_prob).expand(logits.shape)
-
+            rollout_mask = torch.bernoulli(torch.ones(batch_size) * rollout_mixing_prob) \
+                                .unsqueeze(1) \
+                                .expand(logits.shape) \
+                                .to(torch.cuda.current_device())
+                                
             # The target_logits ranges from (-inf , 0), so, by adding those to logits, 
             # we turn the values that are not target token to -inf, hence making the distribution
             # skew towards the target.
@@ -297,8 +323,8 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                   timestep: int,
                   last_predictions: torch.Tensor,
                   state: Dict[str, torch.Tensor],
-                  targets: torch.LongTensor = None,
-                  rollin_mode: str = 'teacher-forcing', 
+                  target_tokens: Dict[str, torch.LongTensor] = None,
+                  rollin_mode: str = 'learned', 
                   rollout_mode: str = 'learned',
                   rollout_mixing_prob: float = 0.5,
                  ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
@@ -335,13 +361,13 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         
         input_choices = self.rollin_policy(timestep, 
                                            last_predictions, 
-                                            targets, 
+                                            target_tokens, 
                                             rollin_mode=rollin_mode)
 
         # shape: (group_size, num_classes)
         class_logits, state = self._prepare_output_projections(input_choices, state)
 
-        if not self.training and self._mask_pad_and_oov:
+        if False and not self.training and self._mask_pad_and_oov:
             # This implementation is copied from masked_log_softmax from allennlp.nn.util.
             mask = (self._vocab_mask.expand(class_logits.shape) + 1e-45).log()
             # shape: (group_size, num_classes)
@@ -349,7 +375,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
 
         class_logits = self.rollout_policy(timestep, 
                                             class_logits, 
-                                            targets, 
+                                            target_tokens, 
                                             rollout_mode=rollout_mode, 
                                             rollout_mixing_prob=rollout_mixing_prob)
         return class_logits, state
@@ -416,6 +442,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         
         output_dict = self._combine_rollin_rollout_losses(rollin_output_dict, 
                                                           rollout_output_dict, 
+                                                          target_tokens,
                                                           compute_exposure_bias)
 
         if not self.training:
@@ -458,6 +485,12 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             # but we just want the single best.
             if len(indices.shape) > 1:
                 indices = indices[0]
+
+            # We add start token to the predictions. 
+            # In case it is present at position 0, remove it.
+            if self._start_index == indices[0]:
+                indices = indices[1:]
+
             indices = list(indices)
             # Collect indices till the first end_symbol
             if truncate and self._end_index in indices:
@@ -503,6 +536,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
     def _combine_rollin_rollout_losses(self, 
                                        rollin_output_dict: Dict[str, torch.LongTensor],
                                        rollout_output_dict: Dict[str, torch.LongTensor], 
+                                       target_tokens,
                                        compute_exposure_bias: bool = False) -> Dict[str, torch.LongTensor]:
         """ Given rollin and rollout, how to combine loss from rollin and
             rollout to compute final loss. This will be used to learning local 
@@ -537,13 +571,13 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         # as None and in case it is None, setting it to num_classes.
         per_node_beam_size: int = per_node_beam_size or self._num_classes
 
-        targets = target_tokens['tokens']
+
 
         if self.training:
             self._apply_scheduled_sampling()
 
         rolling_policy=partial(self.take_step, 
-                                targets=targets, 
+                                target_tokens=target_tokens, 
                                 rollin_mode=rollin_mode)
 
         # shape (step_predictions): (batch_size, beam_size, num_decoding_steps)
@@ -560,25 +594,38 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                                 truncate_at_end_all=truncate_at_end_all)
 
         logits = torch.cat(logits, dim=2)
-        output_dict = {
-                "predictions": step_predictions,
-                "logits": logits,
-                "class_log_probabilities": log_probabilities,
-                }
+
+        batch_size, beam_size, _ = step_predictions.shape
+        start_prediction_length = start_predictions.size(0)
+        step_predictions = torch.cat([start_predictions.unsqueeze(1) \
+                                        .expand(batch_size, beam_size) \
+                                        .reshape(batch_size, beam_size, 1), 
+                                        step_predictions],
+                                        dim=-1)
+
+        output_dict = {"predictions": step_predictions,
+                        "logits": logits,
+                        "class_log_probabilities": log_probabilities,}
+
         if target_tokens:
+            targets = target_tokens['tokens']
+
             # shape: (batch_size, num_decoding_steps)
             best_logits = logits[:, 0, :, :].squeeze(1)
+            target_mask = util.get_text_field_mask(target_tokens)
+
+            rollin_targets = targets[:, :rollin_steps+1]
+            rollin_target_masks = target_mask[:, :rollin_steps+1]
 
             # Compute loss.
-            target_mask = util.get_text_field_mask(target_tokens)
-            loss_batch = self._get_loss(best_logits, targets, target_mask)
+            loss_batch = self._get_loss(best_logits, rollin_targets, rollin_target_masks)
             output_dict["loss_batch"] = loss_batch
 
             # Generate denominator for normalizing loss across batch.
             # Ideally this will be equal to batch_size, but this is a
             # safer way to do this. Here, we ignore sequences with all
             # pad tokens.
-            non_batch_dims = tuple(range(1, len(target_mask.shape)))
+            non_batch_dims = tuple(range(1, len(rollin_target_masks.shape)))
             # shape : (batch_size,)
             target_mask_sum = target_mask.sum(dim=non_batch_dims)
             num_non_empty_sequences = ((target_mask_sum > 0).float().sum() + 1e-13)
@@ -596,15 +643,18 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 rollout_mode: str = 'learned',
                 beam_size: int = None,
                 per_node_beam_size: int = None,
-                targets: torch.LongTensor = None,
+                target_tokens: Dict[str, torch.LongTensor] = None,
                 sampled: bool = True,
                 truncate_at_end_all: bool = True,
+                # shape (prediction_prefixes): (batch_size, prefix_length)
+                prediction_prefixes: torch.LongTensor = None,
                ):
 
         rolling_policy=partial(self.take_step, 
+                               target_tokens=target_tokens,
                                rollout_mode=rollout_mode)
 
-        # shape (all_top_k_predictions): (batch_size, beam_size, num_decoding_steps)
+        # shape (step_predictions): (batch_size, beam_size, num_decoding_steps)
         # shape (log_probabilities): (batch_size, beam_size)
         # shape (logits): (batch_size, beam_size, num_decoding_steps, num_classes)
         step_predictions, log_probabilities, logits = \
@@ -617,6 +667,29 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                                 sampled=sampled,
                                                 truncate_at_end_all=truncate_at_end_all)
 
+        
+        logits = torch.cat(logits, dim=2)
+
+        # Concatenate the start tokens to the predictions.They are not 
+        # added to the predictions by default.
+        batch_size, beam_size, _ = step_predictions.shape
+
+        start_prediction_length = start_predictions.size(0)
+        step_predictions = torch.cat([start_predictions.unsqueeze(1) \
+                                        .expand(batch_size, beam_size) \
+                                        .reshape(batch_size, beam_size, 1), 
+                                        step_predictions],
+                                        dim=-1)
+
+        # There might be some predictions which might have been made by
+        # rollin policy. If passed, concatenate them here.
+        if prediction_prefixes is not None:
+            prefixes_length = prediction_prefixes.size(1)
+            step_predictions = torch.cat([prediction_prefixes.unsqueeze(1)\
+                                            .expand(batch_size, beam_size, prefixes_length), 
+                                         step_predictions],
+                                         dim=-1)
+
         output_dict = {"predictions": step_predictions,
                        "logits": logits,
                        "class_log_probabilities": log_probabilities,}
@@ -627,11 +700,11 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             # shape: (batch_size, max_predicted_sequence_length)
             best_predictions = top_k_predictions[:, 0, :]
 
-            prediction_loss = top_k_log_probabilities[:,0]
             predicted_tokens = self._decode_tokens(best_predictions, 
                                                     vocab_namespace=self._target_namespace,
                                                     truncate=True)
 
+            output_dict['predicted_tokens'] = predicted_tokens
             loss_batch = self._rollout_cost_function(predicted_tokens)
             output_dict["loss_batch"] = loss_batch
 
@@ -647,7 +720,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             loss = loss_batch.sum()/num_non_empty_sequences
             output_dict['loss'] = loss
 
-            self._rollout_cf_avg(loss)
+            self._rollout_cf_avg(float(loss.cpu()))
         return output_dict
 
     def _forward_loop(self,

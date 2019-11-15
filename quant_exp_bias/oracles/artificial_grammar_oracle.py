@@ -33,7 +33,8 @@ class ArtificialLanguageOracle(Oracle):
                  grammar_file:str,
                  use_weighted_choice: bool = True,
                  parallelize=True, 
-                 num_threads=32):
+                 num_threads=128,
+                 max_len=20):
         """ TODO (Kushal): Add function doc.
         """
         super(Oracle, self).__init__()
@@ -45,6 +46,7 @@ class ArtificialLanguageOracle(Oracle):
 
         self._num_threads = num_threads
 
+        self._max_len = max_len
 
         self._pool = Pool(self._num_threads)
 
@@ -196,7 +198,8 @@ class ArtificialLanguageOracle(Oracle):
         """ TODO (Kushal): Add function doc.
         """
         # TODO (Kushal): Reformat the code to move generator to the base class and derived class only overloads generate_sequence method.
-        return self._pool.starmap(ArtificialLanguageOracle.generate_sequence, [(self._grammar_string, self._use_weighted_choice)]* num_samples)
+        samples = self._pool.starmap(ArtificialLanguageOracle.generate_sequence, [(self._grammar_string, self._use_weighted_choice)]* num_samples * 2)
+        return [sample for sample in samples if len(sample) <= self._max_len][:num_samples]
 
     def compute_sent_probs(self, sequences: List[List[str]]):
         """ TODO (Kushal): Add function doc.
@@ -213,7 +216,8 @@ class ArtificialLanguageOracle(Oracle):
                 if parses and len(parses) > 0:
                     probs += np.exp(np.log(reduce(lambda a, b: a + b.prob(), parses, 0)/len(parses))/len(sequence))
             except Exception as e:
-                logging.warn(e)
-                probs = -1
+                # Ideally if you fail to parse, the prob is zero.
+                #logging.warn(e)
+                probs = 0
 
             return probs

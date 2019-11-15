@@ -18,7 +18,7 @@ class NoiseOracleCostFunction(CostFunction):
     def __init__(self, 
                  oracle: Oracle, 
                  noise_type=None) -> None:
-        self.oracle = oracle
+        self._oracle = oracle
         self._noise_type = noise_type
 
         if self._noise_type is not None:
@@ -35,5 +35,6 @@ class NoiseOracleCostFunction(CostFunction):
         """
         batch_size = len(predictions)
         oracle_probs = self._oracle.compute_sent_probs(predictions)
-        return torch.FloatTensor(oracle_probs, 
-                                 device=torch.cuda.current_device())
+        # We return neg log prob. 
+        # The objective should be minimize this cost to 0.
+        return -1 * torch.log(torch.cuda.FloatTensor(oracle_probs)+ 1e-45).to(torch.cuda.current_device())

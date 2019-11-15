@@ -35,7 +35,8 @@ class LstmCellDecoderNet(DecoderNet):
         target_embedding_dim: int,
         attention: Optional[Attention] = None,
         bidirectional_input: bool = False,
-        num_decoder_layers: int = 1
+        num_decoder_layers: int = 1,
+        accumulate_hidden_states: bool = False,
     ) -> None:
 
         super().__init__(
@@ -72,6 +73,7 @@ class LstmCellDecoderNet(DecoderNet):
 
         self._bidirectional_input = bidirectional_input
 
+        self._accumulate_hidden_states = accumulate_hidden_states
 
     def _prepare_attended_input(self,
                                 decoder_hidden_state: torch.Tensor = None,
@@ -104,11 +106,16 @@ class LstmCellDecoderNet(DecoderNet):
             encoder_out["encoder_outputs"],
             encoder_out["source_mask"],
             bidirectional=self._bidirectional_input,)
+        
+        # shape: (batch_size, 1, decoder_output_dim)
+        decoder_hidden = final_encoder_output.unsqueeze(1)
+       
+        # shape: (batch_size, 1, decoder_output_dim)
+        decoder_context = final_encoder_output.new_zeros(batch_size, self.decoding_dim).unsqueeze(1)
 
         return {
-            "decoder_hidden": final_encoder_output,  # shape: (batch_size, decoder_output_dim)
-            "decoder_context": final_encoder_output.new_zeros(batch_size, self.decoding_dim)
-            #                  shape: (batch_size, decoder_output_dim)
+            "decoder_hiddens": decoder_hidden,  
+            "decoder_contexts": decoder_context
         }
 
     @overrides
@@ -116,12 +123,16 @@ class LstmCellDecoderNet(DecoderNet):
                 previous_state: Dict[str, torch.Tensor],
                 last_predictions_embedding: torch.Tensor,
                ) -> Tuple[Dict[str, torch.Tensor], torch.Tensor]:
+        
+        # shape (decoder_hidden): (batch_size, 1, decoder_output_dim)
+        decoder_hiddens = previous_state.get("decoder_hiddens", None)
 
-         # shape: ((group_size, decoder_output_dim), (group_size, decoder_output_dim))
-        decoder_hidden = previous_state.get("decoder_hidden", None)
+        # shape (decoder_context):  (batch_size, 1, decoder_output_dim)
+        decoder_contexts = previous_state.get("decoder_contexts", None)
 
-        # shape (decoder_context): (batch_size, decoder_output_dim)
-        decoder_context = previous_state.get("decoder_context", None)
+        decoder_hidden = decoder_hiddens[:,-1, :] if decoder_hiddens is not None else None
+
+        decoder_context = decoder_contexts[:, -1, :] if decoder_contexts is not None else None
 
         assert decoder_hidden is None and decoder_context is None or \
             decoder_hidden is not None and decoder_context is not None, \
@@ -170,9 +181,20 @@ class LstmCellDecoderNet(DecoderNet):
         if self._num_decoder_layers > 1:
             decoder_hidden = decoder_hidden.transpose(0,1).contiguous()
             decoder_context = decoder_context.transpose(0,1).contiguous()
+    
+        decoder_hidden = decoder_hidden.unsqueeze(1)
+        decoder_context = decoder_context.unsqueeze(1)
+
+        if decoder_hiddens is None or not self._accumulate_hidden_states:
+            decoder_hiddens = decoder_hidden
+            decoder_contexts = decoder_context
+        elif self._accumulate_hidden_states:
+            decoder_hiddens = torch.cat([decoder_hiddens, decoder_hidden], dim=1)
+            decoder_contexts = torch.cat([decoder_contexts, decoder_context], dim=1)
+        
 
         return (
-            {"decoder_hidden": decoder_hidden, 
-             "decoder_context": decoder_context},
+            {"decoder_hiddens": decoder_hiddens, 
+             "decoder_contexts": decoder_contexts},
             decoder_output,
         )
