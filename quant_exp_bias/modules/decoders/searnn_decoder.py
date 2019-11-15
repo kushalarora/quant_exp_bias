@@ -100,8 +100,6 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
 
         if computing_exposure_bias:
             self._decoder_net._accumulate_hidden_states = False
-            import pdb;pdb.set_trace()
-
             return None, self.rollout(state, 
                                       start_predictions, 
                                       rollout_steps=num_decoding_steps,
@@ -111,6 +109,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
 
         rollin_output_dict = self.rollin(state,
                                          start_predictions,
+                                         rollin_mode=self._rollin_mode,
                                          rollin_steps=rollin_steps,
                                          target_tokens=target_tokens,)
 
@@ -189,18 +188,20 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
             
             # decoder_context: (batch_size *  non_skippable_num_classes, 1, hidden_state_size)
             state['decoder_contexts'] = decoder_context_step_expanded.reshape(-1, 1, hidden_size)
-            
-            prediction_prefixes = rollin_predictions[:, :step] \
-                                    .unsqueeze(1) \
-                                    .expand(batch_size, non_skippable_num_classes, step) \
-                                    .reshape(batch_size * non_skippable_num_classes, step) \
-                                        if step > 0 else None
 
-            # prediction_prefixes = targets[:, :step] \
-            #                         .unsqueeze(1) \
-            #                         .expand(batch_size, non_skippable_num_classes, step) \
-            #                         .reshape(batch_size * non_skippable_num_classes, step) \
-            #                             if step > 0 else None
+            if self._rollin_mode == 'reference':            
+                prediction_prefixes = rollin_predictions[:, :step] \
+                                        .unsqueeze(1) \
+                                        .expand(batch_size, non_skippable_num_classes, step) \
+                                        .reshape(batch_size * non_skippable_num_classes, step) \
+                                            if step > 0 else None
+
+            else:
+                prediction_prefixes = targets[:, :step] \
+                                        .unsqueeze(1) \
+                                        .expand(batch_size, non_skippable_num_classes, step) \
+                                        .reshape(batch_size * non_skippable_num_classes, step) \
+                                            if step > 0 else None
 
             self._decoder_net._accumulate_hidden_states = False
 
@@ -240,7 +241,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                 non_batch_dims = tuple(range(1, len(target_mask.shape)))
 
                 x = F.log_softmax(rollin_output_dict['logits'].squeeze(1), dim=-1)
-                y = F.softmax(-1 * rollout_output_dict['loss_batch'], dim=-1)
+                y = F.softmax(-1000 * rollout_output_dict['loss_batch'], dim=-1)
                 kl_losses = self._combiner_loss(x,y).sum(dim=-1)
                 kl_loss_batch = (kl_losses * target_mask).sum(dim=non_batch_dims)
             

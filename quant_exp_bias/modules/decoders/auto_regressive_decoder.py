@@ -74,7 +74,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                  use_in_seq2seq_mode: bool = False,
                  target_namespace: str = "tokens",
                  beam_size: int = None,
-                 scheduled_sampling_ratio: float = 0.,
+                 scheduled_sampling_ratio: float = 0.2,
                  scheduled_sampling_k: int = 100,
                  scheduled_sampling_type: str = 'uniform',
                  rollin_mode: str = 'teacher-forcing',
@@ -210,11 +210,12 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         Returns:
             torch.LongTensor -- The method returns input token for predicting next token.
         """
-            # For first timestep, you are passing start token, so don't do anything smart.
+        # For first timestep, you are passing start token, so don't do anything smart.
         if (timestep == 0 or
-            # If no targets, no way to do teacher-forcing, so use your own predictions. 
+           # If no targets, no way to do teacher-forcing, so use your own predictions. 
            target_tokens is None  or
-           rollin_mode == 'learned'): 
+           rollin_mode == 'learned' or 
+           rollin_mode == 'reference'): 
             # shape: (batch_size,)
             return last_predictions
         
@@ -222,7 +223,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         if rollin_mode == 'teacher-forcing':
             # shape: (batch_size,)
             input_choices = targets[:, timestep]
-        elif rollin_mode == 'scheduled-sampling':
+        elif rollin_mode == 'mixed':
             if self.training and torch.rand(1).item() < self._scheduled_sampling_ratio:
                 # Use gold tokens at test time and at a rate of 1 - _scheduled_sampling_ratio
                 # during training.
@@ -232,7 +233,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 # shape: (batch_size,)
                 input_choices = targets[:, timestep]
         else:
-            raise ConfigurationError("invalid configuration for rollin policy: {rollin_mode}")
+            raise ConfigurationError(f"invalid configuration for rollin policy: {rollin_mode}")
         return input_choices
 
     def rollout_policy(self, 
@@ -667,7 +668,6 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                                 sampled=sampled,
                                                 truncate_at_end_all=truncate_at_end_all)
 
-        
         logits = torch.cat(logits, dim=2)
 
         # Concatenate the start tokens to the predictions.They are not 
