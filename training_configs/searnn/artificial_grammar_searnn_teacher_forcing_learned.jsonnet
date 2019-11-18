@@ -19,7 +19,7 @@
         "type": "quant_exp_searnn_decoder",
         "max_decoding_steps": 50,
         "generation_batch_size": 32, 
-        "rollin_mode": "teacher-forcing",
+        "rollin_mode": "teacher_forcing",
         "rollout_mode": "learned",
         "decoder_net": {
           "type": "quant_exp_bias_lstm_cell",
