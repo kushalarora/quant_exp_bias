@@ -34,7 +34,8 @@ class ArtificialLanguageOracle(Oracle):
                  use_weighted_choice: bool = True,
                  parallelize=True, 
                  num_threads=128,
-                 max_len=20):
+                 max_len=50,
+                 min_len=3):
         """ TODO (Kushal): Add function doc.
         """
         super(Oracle, self).__init__()
@@ -47,6 +48,8 @@ class ArtificialLanguageOracle(Oracle):
         self._num_threads = num_threads
 
         self._max_len = max_len
+
+        self._min_len = min_len
 
         self._pool = Pool(self._num_threads)
 
@@ -199,7 +202,11 @@ class ArtificialLanguageOracle(Oracle):
         """
         # TODO (Kushal): Reformat the code to move generator to the base class and derived class only overloads generate_sequence method.
         samples = self._pool.starmap(ArtificialLanguageOracle.generate_sequence, [(self._grammar_string, self._use_weighted_choice)]* num_samples * 2)
-        return [sample for sample in samples if len(sample) <= self._max_len][:num_samples]
+        outputs = []
+        for sample in samples:
+            if (len(sample) <= self._max_len) and (len(sample) >= self._min_len):
+                outputs.append(sample)
+        return outputs[:num_samples]
 
     def compute_sent_probs(self, sequences: List[List[str]]):
         """ TODO (Kushal): Add function doc.
