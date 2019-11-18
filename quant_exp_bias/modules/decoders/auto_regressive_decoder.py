@@ -142,8 +142,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             self._hamming = HammingLoss()
         else:
             self._hamming = None
-
-        
+    
         # At prediction time, we use a beam search to find the most likely sequence of target tokens.
         beam_size = beam_size or 1     
 
