@@ -19,8 +19,8 @@
         "type": "quant_exp_searnn_decoder",
         "max_decoding_steps": 50,
         "generation_batch_size": 32, 
-        "rollin_mode": "learned",
-        "rollout_mode": "teacher-forcing",
+        "rollin_mode":  std.extVar("rollin_mode"),
+        "rollout_mode": std.extVar("rollout_mode"),
         "decoder_net": {
           "type": "quant_exp_bias_lstm_cell",
           "decoding_dim": 300, 
@@ -42,6 +42,13 @@
           "type": "artificial_lang_oracle",
           "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME"),
           "parallelize": true
+        },
+        "rollout_cost_function": {
+          "type": "noisy_oracle",
+          "oracle": {
+            "type": "artificial_lang_oracle",
+            "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME"),
+          },
         },
       }
     },
