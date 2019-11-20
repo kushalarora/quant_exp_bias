@@ -99,8 +99,18 @@ class SampledBeamSearch:
         """
         step_logits: List[torch.Tensor] = []
 
-        beam_size = beam_size or self.beam_size
-        per_node_beam_size = per_node_beam_size or self.per_node_beam_size
+        if beam_size is None:
+            beam_size = self.beam_size
+        
+        if per_node_beam_size is None:
+            per_node_beam_size = self.per_node_beam_size
+
+        if max_steps is None:
+            max_steps = self.global_max_steps
+
+        # If max_step == 0, then just return with 
+        assert max_steps > 0, "There should atlease be 1 step."
+
         batch_size = start_predictions.size()[0]
 
         # List of (batch_size, beam_size) tensors. One for each time step. Does not
@@ -157,7 +167,7 @@ class SampledBeamSearch:
 
         # If there is only one step, then all you need to do the
         # start step.
-        if max_steps == 1:
+        if max_steps < 2:
             return predictions[0].unsqueeze(2), last_log_probabilities, step_logits
 
         # Log probability tensor that mandates that the end token is selected.
@@ -178,7 +188,6 @@ class SampledBeamSearch:
                     reshape(batch_size * beam_size, *last_dims)
 
 
-        max_steps = max_steps or self.global_max_steps
         for timestep in range(1, max_steps):
             # shape: (batch_size * beam_size,)
             last_predictions = predictions[-1].reshape(batch_size * beam_size)
