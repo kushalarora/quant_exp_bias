@@ -665,6 +665,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 truncate_at_end_all: bool = True,
                 # shape (prediction_prefixes): (batch_size, prefix_length)
                 prediction_prefixes: torch.LongTensor = None,
+                target_prefixes: torch.LongTensor = None,
                ):
 
         rolling_policy=partial(self.take_step, 
@@ -706,6 +707,13 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                          step_predictions],
                                          dim=-1)
 
+        step_targets = None
+        if target_prefixes is not None and \
+            target_tokens is not None:
+            targets = target_tokens['tokens']
+            prefixes_length = target_prefixes.size(1)
+            step_targets = torch.cat([target_prefixes, targets], dim=-1)
+
         output_dict = {"predictions": step_predictions,
                        "logits": logits,
                        "class_log_probabilities": log_probabilities,}
@@ -715,13 +723,27 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             top_k_log_probabilities = output_dict["class_log_probabilities"]
             # shape: (batch_size, max_predicted_sequence_length)
             best_predictions = top_k_predictions[:, 0, :]
-
+            
             predicted_tokens = self._decode_tokens(best_predictions, 
                                                     vocab_namespace=self._target_namespace,
                                                     truncate=True)
-
+      
             output_dict['predicted_tokens'] = predicted_tokens
-            loss_batch = self._rollout_cost_function(predicted_tokens)
+
+            if self._rollout_cost_function.takes_decoded_input():
+                # This is for rollout cost function like BLEU or Noisy Oracle for OCR.
+                decoded_targets = None
+                if step_targets is not None:
+                    decoded_targets = self._decode_tokens(step_targets, 
+                                            vocab_namespace=self._target_namespace,
+                                            truncate=True)
+                                            
+                loss_batch = self._rollout_cost_function(predicted_tokens, decoded_targets)
+            else:
+                # This is for rollout cost function like hamming loss for OCR.
+                target_mask = util.get_text_field_mask({'tokens': step_targets})
+                loss_batch = self._rollout_cost_function(best_predictions, step_targets, target_mask)
+            
             output_dict["loss_batch"] = loss_batch
 
             # Generate denominator for normalizing loss across batch.
@@ -737,6 +759,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             output_dict['loss'] = loss
 
             self._rollout_cf_avg(float(loss.cpu()))
+        
         return output_dict
 
     def _forward_loop(self,
