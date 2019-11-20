@@ -33,9 +33,10 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                  scheduled_sampling_ratio: float = 0.,
                  scheduled_sampling_k: int = 100,
                  scheduled_sampling_type: str = 'uniform',
-                 rollin_mode: str = 'teacher-forcing',
-                 rollout_mode: str = 'teacher-forcing',
-                 use_bleu: bool = True,
+                 rollin_mode: str = 'teacher_forcing',
+                 rollout_mode: str = 'reference',
+                 use_bleu: bool = False,
+                 use_hamming: bool = False,
                  dropout: float = None,
                  sample_output: bool = False, 
                  start_token: str =START_SYMBOL,
@@ -64,6 +65,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                          rollin_mode=rollin_mode,
                          rollout_mode=rollout_mode,
                          use_bleu=use_bleu,
+                         use_hamming=use_hamming,
                          dropout=dropout,
                          sample_output=sample_output, 
                          start_token=start_token,
@@ -73,7 +75,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                          tie_output_embedding=tie_output_embedding,
                          label_smoothing_ratio=label_smoothing_ratio,
                          oracle=oracle,
-                         rollout_cost_function=NoiseOracleCostFunction(oracle),
+                         rollout_cost_function=rollout_cost_function,
                          rollin_rollout_combination_mode=rollin_rollout_combination_mode,
                         )
 
@@ -121,13 +123,13 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         #                         self._padding_index,
         #                         self._oov_index])
 
-        non_skippable_tokens = [x for x in range(0, num_classes) if x not in skippable_tokens]
-        non_skippable_num_classes = len(non_skippable_tokens)
+        tokens_to_rollout = [x for x in range(0, num_classes) if x not in skippable_tokens]
+        num_tokens_to_rollout = len(tokens_to_rollout)
 
-        # shape (rollin_predictions) : (batch_size * num_decoding_steps * non_skippable_num_classes)
-        rollin_start_predictions = torch.LongTensor(non_skippable_tokens) \
+        # shape (rollin_predictions) : (batch_size * num_decoding_steps * num_tokens_to_rollout)
+        rollin_start_predictions = torch.LongTensor(tokens_to_rollout) \
                                          .unsqueeze(0) \
-                                         .expand(batch_size, non_skippable_num_classes) \
+                                         .expand(batch_size, num_tokens_to_rollout) \
                                          .reshape(-1).to(torch.cuda.current_device())
 
         rollin_predictions = rollin_output_dict['predictions'].squeeze(1)
@@ -138,87 +140,119 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         
         # decoder_context: (batch_size, num_rollin_steps,  hidden_state_size)
         rollin_decoder_context = state['decoder_contexts']
+        
+
+        source_mask = state.get('source_mask', None)
+        if source_mask is not None:
+            batch_size, source_length = source_mask.shape
+            source_mask = source_mask \
+                            .unsqueeze(1) \
+                            .expand(batch_size, num_tokens_to_rollout, source_length) \
+                            .reshape(batch_size * num_tokens_to_rollout, source_length)
+
+            state['source_mask'] = source_mask
+
+        encoder_outputs = state.get('encoder_outputs', None)
+        if encoder_outputs is not None:
+            batch_size, source_length, hidden_size = encoder_outputs.shape
+            encoder_outputs = encoder_outputs \
+                                .unsqueeze(1) \
+                                .expand(batch_size, num_tokens_to_rollout, source_length, hidden_size) \
+                                .reshape(batch_size * num_tokens_to_rollout, source_length, hidden_size)
+            
+            state['encoder_outputs'] = encoder_outputs
             
         rollout_logits = []
         rollout_predictions = []
-
-        # targets_plus_1 = None
-        # if target_tokens is not None:
-        #     # targets Shape: (batch_size, num_decoding_steps + 1)
-        #     targets = target_tokens['tokens']
-
-        #     # targets_plus_1 Shape: (batch_size, num_decoding_steps + 2)
-        #     targets_plus_1 = torch.cat([targets, targets[:, -1].unsqueeze(1)], dim=-1)
         
+        # For SEARNN, we will have one extra step as we look at
+        # rollout happening given certain actions were taken. 
+        # So, we extend targets by 1 to get cost for last action
+        # Which should ideally be a padding or end token. 
+        targets_plus_1 = None
+        if target_tokens is not None:
+            # targets Shape: (batch_size, num_decoding_steps + 1)
+            targets = target_tokens['tokens']
+
+            # targets_plus_1 Shape: (batch_size, num_decoding_steps + 2)
+            # TODO(Kushal): Maybe append padding token instead of copying the last row.
+            targets_plus_1 = torch.cat([targets, targets[:, -1].unsqueeze(1)], dim=-1)
+               
         for step in range(1, num_decoding_steps + 1):
-            # import pdb;pdb.set_trace()
-            rollout_steps = num_decoding_steps + 1 - step 
+            rollout_steps = num_decoding_steps + 1 - step
 
             target_tokens_truncated = None
-            if target_tokens is not None:
+            target_prefixes = None
+            if targets_plus_1 is not None:
                 # targets Shape: (batch_size, num_decoding_steps + 1)
                 targets = target_tokens['tokens']
-                targets_step_onwards = targets[:, step:]
+                target_len = targets_plus_1.size(1)
 
-                targets_step_onwards_expanded = targets_step_onwards \
-                                                    .unsqueeze(1) \
-                                                    .expand(batch_size, non_skippable_num_classes, rollout_steps) \
-                                                    .reshape(batch_size * non_skippable_num_classes, rollout_steps)
+                targets_expanded = targets_plus_1 \
+                                    .unsqueeze(1) \
+                                    .expand(batch_size, num_tokens_to_rollout, target_len) \
+                                    .reshape(batch_size * num_tokens_to_rollout, target_len)
 
+                targets_step_onwards_expanded = targets_expanded[:, step:]
                 target_tokens_truncated = {'tokens': targets_step_onwards_expanded}
+                
+                # This is needed to compute the cost which are based on target
+                # such as BLEU score or hamming loss.
+                target_prefixes = targets_expanded[:, :step]
 
             # decoder_hidden_step: (batch_size, hidden_state_size)
             decoder_hidden_step = rollin_decoder_hiddens[:, step - 1, :]
 
-            # decoder_hidden_step_expanded: (batch_size, non_skippable_num_classes, hidden_state_size)
+            # decoder_hidden_step_expanded: (batch_size, num_tokens_to_rollout, hidden_state_size)
             decoder_hidden_step_expanded = decoder_hidden_step \
                                             .unsqueeze(1) \
-                                            .expand(batch_size, non_skippable_num_classes, hidden_size)
+                                            .expand(batch_size, num_tokens_to_rollout, hidden_size)
 
             # decoder_context_step: (batch_size, hidden_state_size)
             decoder_context_step = rollin_decoder_context[:, step - 1, :]
 
-            # decoder_hidden_step_expanded: (batch_size, non_skippable_num_classes, hidden_state_size)
+            # decoder_hidden_step_expanded: (batch_size, num_tokens_to_rollout, hidden_state_size)
             decoder_context_step_expanded = decoder_context_step \
                                                 .unsqueeze(1) \
-                                                .expand(batch_size, non_skippable_num_classes, hidden_size)
+                                                .expand(batch_size, num_tokens_to_rollout, hidden_size)
 
-            # decoder_hidden: (batch_size * non_skippable_num_classes, 1, hidden_state_size)
+            # decoder_hidden: (batch_size * num_tokens_to_rollout, 1, hidden_state_size)
             state['decoder_hiddens'] = decoder_hidden_step_expanded.reshape(-1, 1,  hidden_size)
             
-            # decoder_context: (batch_size *  non_skippable_num_classes, 1, hidden_state_size)
+            # decoder_context: (batch_size *  num_tokens_to_rollout, 1, hidden_state_size)
             state['decoder_contexts'] = decoder_context_step_expanded.reshape(-1, 1, hidden_size)
 
             if self._rollin_mode == 'reference':            
                 prediction_prefixes = rollin_predictions[:, :step] \
                                         .unsqueeze(1) \
-                                        .expand(batch_size, non_skippable_num_classes, step) \
-                                        .reshape(batch_size * non_skippable_num_classes, step) \
+                                        .expand(batch_size, num_tokens_to_rollout, step) \
+                                        .reshape(batch_size * num_tokens_to_rollout, step) \
                                             if step > 0 else None
 
             else:
                 prediction_prefixes = targets[:, :step] \
                                         .unsqueeze(1) \
-                                        .expand(batch_size, non_skippable_num_classes, step) \
-                                        .reshape(batch_size * non_skippable_num_classes, step) \
+                                        .expand(batch_size, num_tokens_to_rollout, step) \
+                                        .reshape(batch_size * num_tokens_to_rollout, step) \
                                             if step > 0 else None
 
             self._decoder_net._accumulate_hidden_states = False
-
+            
             rollout_output_dict = self.rollout(state, 
                                                 rollin_start_predictions, 
                                                 rollout_steps=rollout_steps,
                                                 rollout_mode=self._rollout_mode,
                                                 target_tokens=target_tokens_truncated, 
-                                                prediction_prefixes=prediction_prefixes, 
+                                                prediction_prefixes=prediction_prefixes,
+                                                target_prefixes=target_prefixes, 
                                                 truncate_at_end_all=False)
             
             rollout_output_dict['predictions'] = rollout_output_dict['predictions']\
-                                                    .reshape(batch_size, non_skippable_num_classes, -1)
+                                                    .reshape(batch_size, num_tokens_to_rollout, -1)
 
             rollout_predictions.append(rollout_output_dict['predictions'].unsqueeze(1))
             rollout_output_dict['loss_batch'] =  rollout_output_dict['loss_batch'] \
-                                                    .reshape(batch_size, 1, non_skippable_num_classes)
+                                                    .reshape(batch_size, 1, num_tokens_to_rollout)
                                                     
             rollout_logits.append(rollout_output_dict['loss_batch'])
         rollout_output_dict['loss_batch'] = torch.cat(rollout_logits, dim=1)
@@ -232,8 +266,6 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
             return rollout_output_dict
 
         if self._combiner_mode == 'kl':
-            
-            # import pdb;pdb.set_trace()
             output_dict = { 'predictions': rollin_output_dict['predictions']}
             if target_tokens:
                 target_mask = util.get_text_field_mask(target_tokens)
