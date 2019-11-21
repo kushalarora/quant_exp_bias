@@ -50,6 +50,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                  rollout_cost_function: CostFunction = None,
                  rollin_steps: int = 50, 
                  rollin_rollout_combination_mode='kl',
+                 rollout_mixing_probs: float = 0.5,
                 ) -> None:
         super().__init__(vocab=vocab,
                          max_decoding_steps=max_decoding_steps,
@@ -77,6 +78,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                          oracle=oracle,
                          rollout_cost_function=rollout_cost_function,
                          rollin_rollout_combination_mode=rollin_rollout_combination_mode,
+                         rollout_mixing_probs=rollout_mixing_probs,
                         )
 
         self._rollin_steps = rollin_steps
@@ -141,6 +143,11 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         # decoder_context: (batch_size, num_rollin_steps,  hidden_state_size)
         rollin_decoder_context = state['decoder_contexts']
         
+        def rollout_mixing_func():
+            return torch.bernoulli(torch.ones(batch_size) * self._rollout_mixing_prob) \
+                        .unsqueeze(1) \
+                        .expand(batch_size, num_tokens_to_rollout) \
+                        .reshape(-1)              
 
         source_mask = state.get('source_mask', None)
         if source_mask is not None:
@@ -245,7 +252,8 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                                                 target_tokens=target_tokens_truncated, 
                                                 prediction_prefixes=prediction_prefixes,
                                                 target_prefixes=target_prefixes, 
-                                                truncate_at_end_all=False)
+                                                truncate_at_end_all=False,
+                                                rollout_mixing_func=rollout_mixing_func)
             
             rollout_output_dict['predictions'] = rollout_output_dict['predictions']\
                                                     .reshape(batch_size, num_tokens_to_rollout, -1)

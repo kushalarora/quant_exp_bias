@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 RollinPolicyType = Callable[[int, torch.LongTensor, Optional[torch.LongTensor]], torch.LongTensor]
 RolloutPolicyType = Callable[[torch.LongTensor, torch.LongTensor, Optional[torch.LongTensor]], torch.LongTensor]
+RolloutMixingProbFuncType = Callable[[], torch.Tensor]
 
 @SeqDecoder.register("quant_exp_auto_regressive_seq_decoder")
 class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
@@ -94,6 +95,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                  oracle: Oracle = None,
                  rollout_cost_function: CostFunction = None,
                  rollin_rollout_combination_mode='mle',
+                 rollout_mixing_prob:float = 0.5,
                 ) -> None:
         super().__init__(target_embedder)
 
@@ -117,6 +119,8 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         self._scheduled_sampling_type = scheduled_sampling_type
         self._sample_output = sample_output
         self._mask_pad_and_oov = mask_pad_and_oov
+
+        self._rollout_mixing_prob = rollout_mixing_prob
 
         # At prediction time, we use a beam search to find the most likely sequence of target tokens.
         # We need the start symbol to provide as the input at the first timestep of decoding, and
@@ -247,7 +251,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                        logits: torch.LongTensor,
                        target_tokens: Dict[str, torch.LongTensor] = None,
                        rollout_mode: str = 'learned',
-                       rollout_mixing_prob: float = 0.5,
+                       rollout_mixing_func: RolloutMixingProbFuncType = None,
                       ) -> torch.LongTensor:
         """Rollout policy to use.
            This takes in predicted logits at timestep {t}^{th} and 
@@ -271,7 +275,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                 available in training mode but not in inference mode. (default: {None})
             rollout_mode {str} -- Rollout mode: Options are:
                                     learned, reference, mixed. (default: {'learned'})
-            rollout_mixing_prob {float} -- Probability to choose predicted logits vs targets in case of mixed 
+            rollout_mixing_func {RolloutMixingProbFuncType} -- Function to get mask to choose predicted logits vs targets in case of mixed 
                                     rollouts.  (default: {0.5})
 
         Returns:
@@ -312,16 +316,21 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         elif rollout_mode == 'mixed':
             # Based on the mask (Value=1), copy target values. 
 
-            # This returns a (batch_size, num_classes) boolean map where the rows are either all zeros or all ones.
-            rollout_mask = torch.bernoulli(torch.ones(batch_size) * rollout_mixing_prob) \
-                                .unsqueeze(1) \
-                                .expand(logits.shape) \
-                                .to(torch.cuda.current_device())
+            if rollout_mixing_func is not None:
+                rollout_mixing_prob_tensor = rollout_mixing_func()
+            else:
+                # This returns a (batch_size, num_classes) boolean map where the rows are either all zeros or all ones.
+                rollout_mixing_prob_tensor = torch.bernoulli(torch.ones(batch_size) * self._rollout_mixing_prob) 
+                
+            rollout_mixing_mask = rollout_mixing_prob_tensor \
+                                                .unsqueeze(1) \
+                                                .expand(logits.shape) \
+                                                .to(torch.cuda.current_device())
                                 
             # The target_logits ranges from (-inf , 0), so, by adding those to logits, 
             # we turn the values that are not target token to -inf, hence making the distribution
             # skew towards the target.
-            output_logits += rollout_mask * target_logits
+            output_logits += rollout_mixing_mask * target_logits
         else:
             raise ConfigurationError(f"Incompatible rollout mode: {rollout_mode}")
         return output_logits
@@ -333,7 +342,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                   target_tokens: Dict[str, torch.LongTensor] = None,
                   rollin_mode: str = 'learned', 
                   rollout_mode: str = 'learned',
-                  rollout_mixing_prob: float = 0.5,
+                  rollout_mixing_func: RolloutMixingProbFuncType = None,
                  ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         """
         Take a decoding step. This is called by the beam search class.
@@ -384,7 +393,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                             class_logits, 
                                             target_tokens, 
                                             rollout_mode=rollout_mode, 
-                                            rollout_mixing_prob=rollout_mixing_prob)
+                                            rollout_mixing_func=rollout_mixing_func)
         return class_logits, state
 
     @overrides
@@ -666,11 +675,13 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 # shape (prediction_prefixes): (batch_size, prefix_length)
                 prediction_prefixes: torch.LongTensor = None,
                 target_prefixes: torch.LongTensor = None,
+                rollout_mixing_func: RolloutMixingProbFuncType = None,
                ):
 
         rolling_policy=partial(self.take_step, 
                                target_tokens=target_tokens,
-                               rollout_mode=rollout_mode)
+                               rollout_mode=rollout_mode,
+                               rollout_mixing_func=rollout_mixing_func)
 
         # shape (step_predictions): (batch_size, beam_size, num_decoding_steps)
         # shape (log_probabilities): (batch_size, beam_size)
