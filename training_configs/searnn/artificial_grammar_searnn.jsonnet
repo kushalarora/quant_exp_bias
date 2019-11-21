@@ -53,8 +53,12 @@
       }
     },
     "iterator": {
-      "type": "basic",
-      "batch_size": 512, 
+      "type": "bucket",
+      "sorting_keys": [["target_tokens", "num_tokens"]],
+      "batch_size": 128, 
+      
+      // This is needed stupidly for bucket iterator to work.
+      "max_instances_in_memory": 50000
     },
     "trainer": {
       "num_epochs": 50,
@@ -69,7 +73,7 @@
           "mode": "max",
           "patience": 0
       },
-      "patience": 5, 
+      "patience": 10,
       "should_log_learning_rate": true,
       "log_batch_size_period": 50,
       "num_serialized_models_to_keep": -1
