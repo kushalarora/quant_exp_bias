@@ -84,7 +84,5 @@ class LanguageModelingDatasetReader(DatasetReader):
                     yield instance
                 else:
                     dropped_instances += 1
-        if not dropped_instances:
-            logger.info(f"No instances dropped from {file_path}.")
-        else:
+
             logger.warning(f"Dropped {dropped_instances} instances from {file_path}.")
