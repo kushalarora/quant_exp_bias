@@ -50,7 +50,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                  rollout_cost_function: CostFunction = None,
                  rollin_steps: int = 50, 
                  rollin_rollout_combination_mode='kl',
-                 rollout_mixing_probs: float = 0.5,
+                 rollout_mixing_prob: float = 0.5,
                 ) -> None:
         super().__init__(vocab=vocab,
                          max_decoding_steps=max_decoding_steps,
@@ -78,7 +78,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                          oracle=oracle,
                          rollout_cost_function=rollout_cost_function,
                          rollin_rollout_combination_mode=rollin_rollout_combination_mode,
-                         rollout_mixing_probs=rollout_mixing_probs,
+                         rollout_mixing_prob=rollout_mixing_prob,
                         )
 
         self._rollin_steps = rollin_steps
