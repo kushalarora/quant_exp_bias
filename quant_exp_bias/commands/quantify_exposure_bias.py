@@ -98,12 +98,12 @@ class QuantifyExposureBias(Subcommand):
 
         subparser.add_argument('--num-samples-per-length',
                                  type=int,
-                                 default=2000,
+                                 default=200,
                                  help='Number of samples to draw from $w_{1}^{n}~p$ for approximating expectation.')
 
         subparser.add_argument('--num-length-samples',
                                  type=int,
-                                 default=1,
+                                 default=10,
                                  help='Number of samples to draw from $n~\mathcal{N}$" + \
                                         "for approximating expectation over sequence lengths.')
         
