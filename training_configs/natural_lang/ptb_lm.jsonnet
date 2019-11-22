@@ -47,15 +47,18 @@
       }
   },
   "iterator": {
-    "type": "basic",
-    "batch_size": 128
+      "type": "bucket",
+      "sorting_keys": [["target_tokens", "num_tokens"]],
+      "batch_size": 128,
+      // This is needed stupidly for bucket iterator to work.
+      "max_instances_in_memory": 50000
   },
   "trainer": {
     "num_epochs": 100,
     "cuda_device" : 0,
     "optimizer": {
-      "type": "adam",
-      "lr": 0.001
+      "type": "sgd",
+      "lr": 20,
     },
     "learning_rate_scheduler": {
         "type": "reduce_on_plateau",
