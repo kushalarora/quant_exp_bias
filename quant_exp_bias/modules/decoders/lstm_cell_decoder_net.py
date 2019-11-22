@@ -171,12 +171,12 @@ class LstmCellDecoderNet(DecoderNet):
         if self._num_decoder_layers > 1:
             _, (decoder_hidden, decoder_context) = self._decoder_cell(decoder_input.unsqueeze(0),
                                                                       decoder_hidden_and_context)
+            decoder_output = decoder_hidden[-1]
         else:
             decoder_hidden, decoder_context = self._decoder_cell(decoder_input, 
                                                                  decoder_hidden_and_context)
+            decoder_output = decoder_hidden
                                                             
-        decoder_output = decoder_hidden
-
         # TODO(Kushal:) Maybe this is not needed and so is line 141 changes.
         if self._num_decoder_layers > 1:
             decoder_hidden = decoder_hidden.transpose(0,1).contiguous()
