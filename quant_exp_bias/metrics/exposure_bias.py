@@ -36,7 +36,20 @@ class ExposureBias(Metric):
         value : ``float``
             The value to average.
         """
+        filtered_predictions = []
+        filtered_predictions_losses = []
+
+        # If it is an empty sequence or 1 word sequence, 
+        # ignore it.
+        for i, prediction in enumerate(predictions):
+            if len(prediction) > 1:
+                filtered_predictions.append(prediction)
+                filtered_predictions_losses.append(predictions_losses[i])
+
+        predictions = filtered_predictions
+        predictions_losses = predictions_losses.new_tensor(filtered_predictions_losses)
         batch_size = len(predictions)
+
         oracle_probs = self._oracle.compute_sent_probs(predictions)
         model_probs = []
 
