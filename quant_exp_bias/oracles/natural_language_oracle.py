@@ -46,6 +46,6 @@ class NaturalLanguageOracle(Oracle):
         tensor_input = torch.tensor([self.tokenizer.convert_tokens_to_ids(tokenize_input)])
 
         with torch.no_grad():
-            loss = self.model(tensor_input, labels=tensor_input)
+            loss = self.model(tensor_input, labels=tensor_input)[0]
 
         return math.exp(loss.item())  # perplexity
