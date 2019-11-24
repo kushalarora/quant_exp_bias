@@ -29,6 +29,13 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 RollinPolicyType = Callable[[int, torch.LongTensor, Optional[torch.LongTensor]], torch.LongTensor]
 RolloutPolicyType = Callable[[torch.LongTensor, torch.LongTensor, Optional[torch.LongTensor]], torch.LongTensor]
 RolloutMixingProbFuncType = Callable[[], torch.Tensor]
+DeTokenizerType = Callable[[List[List[str]]], List[str]]
+
+def default_tokenizer(token_list_list: List[List[str]]):
+    str_list = []
+    for token_list in token_list_list:
+        str_list.append(' '.join(token_list))
+    return str_list
 
 @SeqDecoder.register("quant_exp_auto_regressive_seq_decoder")
 class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
@@ -96,6 +103,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                  rollout_cost_function: CostFunction = None,
                  rollin_rollout_combination_mode='mle',
                  rollout_mixing_prob:float = 0.5,
+                 detokenizer: DeTokenizerType = default_tokenizer
                 ) -> None:
         super().__init__(target_embedder)
 
@@ -189,6 +197,8 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             self._output_projection_layer.weight = self.target_embedder.weight
 
         self._combiner_mode = rollin_rollout_combination_mode
+
+        self._detokenizer = detokenizer
 
     def get_output_dim(self):
         return self._decoder_net.get_output_dim()
@@ -497,6 +507,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
 
                 output_dict['predicted_tokens'] = predicted_tokens
                 output_dict['prediction_loss'] = prediction_loss
+                output_dict['predicted_sequences'] = self._detokenizer(predicted_tokens)
         return output_dict
 
     def _decode_tokens(self, 

@@ -180,8 +180,8 @@ def quantify_exposure_bias(archive_file: str,
 
         if output_dir_trail:                
             with open(os.path.join(output_dir_trail, 'generated.txt'), "w") as file:
-                for seq in output_dict['predicted_tokens']:
-                    print(' '.join(seq), file=file)
+                for seq in output_dict['predicted_sequences']:
+                    print(seq, file=file)
 
     metrics = {
         'exposure_bias_mean': np.mean(exp_biases),
