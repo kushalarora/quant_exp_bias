@@ -24,7 +24,13 @@ import json
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
 main_args, serialization_dir, param_path, experiment_id = initialize_experiments('model_size_experiments')
-model_sizes  = ['xsmall', 'small', 'medium', 'large', 'xlarge']
+model_sizes  = {
+    'xsmall' : (30, 30, 1),
+    'small': (100, 100, 1),
+    'medium': (300, 300, 1),
+    'large': (300, 1200, 1),
+    'xlarge': (300, 1200, 2)
+    }
 num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
 
 def model_size_experiments(model_sizes,
@@ -35,8 +41,16 @@ def model_size_experiments(model_sizes,
     
     # Setup variables needed later.
     orig_serialization_dir = serialization_dir
-    for model_size in reversed(model_sizes):
-        param_path = f'training_configs/model_size_experiments/artificial_grammar_{model_size}.jsonnet'
+    for model_size, model_tuple in model_sizes.items():
+        overrides = json.dumps({'model':{
+                                    'decoder': {
+                                        'decoder_net': {
+                                            'decoding_dim': model_tuple[0],
+                                            'target_embedding_dim': model_tuple[1],
+                                            'num_decoder_layers': model_tuple[2]
+                                        }
+                                    }
+                                }})
         serialization_dir = os.path.join(orig_serialization_dir, model_size)
         for num_samples, num_runs in num_samples_and_runs:
             for num_run in range(num_runs):

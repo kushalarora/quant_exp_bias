@@ -53,8 +53,9 @@ def vocabulary_size_experiments(grammar_vocab_size_and_dist,
             f.write(grammar_string)
         
         overrides = json.dumps({'model':{
-                                    'oracle': {
-                                        'grammar_file': grammar_filename}}})
+                                    'decoder': {
+                                        'oracle': {
+                                            'grammar_file': grammar_filename}}}})
         for num_samples, num_runs in num_samples_and_runs:
             for num_run in range(num_runs):
                 run_metrics = one_exp_run(serialization_dir=vsexp_serialization_dir, 
