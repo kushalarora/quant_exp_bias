@@ -26,15 +26,15 @@
         "generation_batch_size": 32, 
         "decoder_net": {
           "type": "quant_exp_bias_lstm_cell",
-          "decoding_dim": 1200, 
-          "target_embedding_dim": 400,
+          "decoding_dim": 128, 
+          "target_embedding_dim": 128,
           # This doesn't seem to be working as of
           # now.
           "num_decoder_layers": 2,
         },
         "target_embedder": {
           "vocab_namespace": "target_tokens",
-          "embedding_dim": 400,
+          "embedding_dim": 128,
         },
         "use_in_seq2seq_mode": false,
         "target_namespace": "target_tokens",
@@ -47,6 +47,10 @@
           "type": "gpt2_oracle",
           "model_name": "gpt2"
         },
+        "detokenizer": {
+          "type": "gpt2_detokenizer",
+          "model_name": "gpt2"
+        },
       }
   },
   "iterator": {
@@ -57,7 +61,7 @@
       "max_instances_in_memory": 50000
   },
   "trainer": {
-    "num_epochs": 100,
+    "num_epochs": 10,
     "cuda_device" : 0,
     "optimizer": {
       "type": "adam",
