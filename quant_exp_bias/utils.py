@@ -47,7 +47,7 @@ def get_args(args: argparse.Namespace = None):
     parser.add_argument('--version', action='version', version='%(prog)s ' + __version__)
 
 
-    parser.add_argument('--config', type=str, default='training_configs/artificial_grammar_composed.jsonnet', help='config files to run experiments.')
+    parser.add_argument('--config', type=str, default='training_configs/artificial_grammar/artificial_grammar_composed.jsonnet', help='config files to run experiments.')
 
     parser.add_argument('--output_dir', type=str, default='results/artificial_grammar/', help='Output directory')
 
