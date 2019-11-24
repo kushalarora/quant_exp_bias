@@ -20,7 +20,7 @@ OverrideFuncType = Callable[[], Dict[str, Union[float, str, int]]]
 ExpBiasEpochsFuncType = Callable[[str], List[Tuple[int, str, str]]]
 
 def initialize_experiments(experiment_name: str, 
-                           grammar_template: str='grammar_templates/grammar_1.template',
+                           grammar_template: str='grammar_templates/grammar_2.template',
                            vocabulary_size: int=6,
                            vocabulary_distribution: str='uniform'):
     # Ipython by default adds some arguments to sys.argv.
