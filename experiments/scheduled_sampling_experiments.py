@@ -44,10 +44,13 @@ def scheduled_sampling_experiments(scheduled_sampling_ratios,
     orig_serialization_dir = serialization_dir
     for ss_type, ss_ratio, ss_k in scheduled_sampling_ratios:
         serialization_dir = os.path.join(orig_serialization_dir, f'{ss_type}_{ss_ratio}_{ss_k}')
-        overrides = json.dumps({'model':{'scheduled_sampling_ratio': ss_ratio, 
-                                    'scheduled_sampling_k': ss_k,
-                                    'scheduled_sampling_type': ss_type},
-                               })
+        overrides = json.dumps({'model': {
+                                    'decoder': {
+                                        'scheduled_sampling_ratio': ss_ratio, 
+                                        'scheduled_sampling_k': ss_k,
+                                        'scheduled_sampling_type': ss_type},
+                                    }
+                                })
         for num_samples, num_runs in num_samples_and_runs:
             for run in range(num_runs):
                 run_metrics = one_exp_run(serialization_dir=serialization_dir, 
