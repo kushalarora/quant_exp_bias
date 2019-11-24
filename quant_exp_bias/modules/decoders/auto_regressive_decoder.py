@@ -22,7 +22,11 @@ from quant_exp_bias.oracles.oracle_base import Oracle
 from quant_exp_bias.modules.decoders.seq_decoder import SeqDecoder
 from quant_exp_bias.modules.decoders.decoder_net import DecoderNet
 from quant_exp_bias.modules.cost_functions.cost_function import CostFunction
+from quant_exp_bias.modules.detokenizers.detokenizer import DeTokenizer
+
 from quant_exp_bias.metrics.hamming_loss import HammingLoss
+
+
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -103,7 +107,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                  rollout_cost_function: CostFunction = None,
                  rollin_rollout_combination_mode='mle',
                  rollout_mixing_prob:float = 0.5,
-                 detokenizer: DeTokenizerType = default_tokenizer
+                 detokenizer: DeTokenizer = default_tokenizer
                 ) -> None:
         super().__init__(target_embedder)
 
