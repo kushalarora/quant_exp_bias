@@ -26,15 +26,15 @@
         "generation_batch_size": 32, 
         "decoder_net": {
           "type": "quant_exp_bias_lstm_cell",
-          "decoding_dim": 128, 
-          "target_embedding_dim": 128,
+          "decoding_dim": 1200, 
+          "target_embedding_dim": 400,
           # This doesn't seem to be working as of
           # now.
-          // "num_decoder_layers": 4,
+          "num_decoder_layers": 2,
         },
         "target_embedder": {
           "vocab_namespace": "target_tokens",
-          "embedding_dim": 128,
+          "embedding_dim": 400,
         },
         "use_in_seq2seq_mode": false,
         "target_namespace": "target_tokens",
@@ -60,8 +60,8 @@
     "num_epochs": 100,
     "cuda_device" : 0,
     "optimizer": {
-      "type": "sgd",
-      "lr": 2,
+      "type": "adam",
+      "lr": 0.001,
     },
     "learning_rate_scheduler": {
         "type": "reduce_on_plateau",
