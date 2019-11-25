@@ -38,6 +38,7 @@
   "trainer": {
     "num_epochs": 50,
     "cuda_device" : 0,
+    "validation_metric": "-perplexity",
     "optimizer": {
       "type": "adam",
       "lr": 0.01
@@ -45,7 +46,7 @@
     "learning_rate_scheduler": {
         "type": "reduce_on_plateau",
         "factor": 0.5,
-        "mode": "max",
+        "mode": "min",
         "patience": 0
     },
     "patience": 5, 

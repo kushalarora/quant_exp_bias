@@ -91,7 +91,7 @@
     "learning_rate_scheduler": {
       "type": "reduce_on_plateau",
       "factor": 0.5,
-      "mode": "max",
+      "mode": "min",
       "patience": 2
     },
     "should_log_learning_rate": true,
