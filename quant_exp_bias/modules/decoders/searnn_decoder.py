@@ -51,6 +51,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                  rollin_steps: int = 50, 
                  rollin_rollout_combination_mode='kl',
                  rollout_mixing_prob: float = 0.5,
+                 num_tokens_to_rollout:int = -1,
                 ) -> None:
         super().__init__(vocab=vocab,
                          max_decoding_steps=max_decoding_steps,
@@ -90,6 +91,8 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         if self._combiner_mode == 'kl':
             self._combiner_loss = torch.nn.KLDivLoss(reduction='none')
 
+        self._num_tokens_to_rollout = num_tokens_to_rollout
+
     @overrides
     def _forward_loop(self,
                       state: Dict[str, torch.Tensor],
@@ -101,7 +104,6 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         output_dict:  Dict[str, torch.Tensor] = {}
         rollin_steps = num_decoding_steps
 
-
         if computing_exposure_bias:
             self._decoder_net._accumulate_hidden_states = False
             return None, self.rollout(state, 
@@ -110,7 +112,6 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                                       rollout_mode='learned')
 
         self._decoder_net._accumulate_hidden_states = True
-
         rollin_output_dict = self.rollin(state,
                                          start_predictions,
                                          rollin_mode=self._rollin_mode,
@@ -119,21 +120,10 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
 
         batch_size, beam_size, num_rollin_steps, num_classes = rollin_output_dict['logits'].size()
         
-        skippable_tokens = set([])
-        # skippable_tokens = set([self._end_index, 
-        #                         self._start_index,
-        #                         self._padding_index,
-        #                         self._oov_index])
-
-        tokens_to_rollout = [x for x in range(0, num_classes) if x not in skippable_tokens]
-        num_tokens_to_rollout = len(tokens_to_rollout)
-
-        # shape (rollin_predictions) : (batch_size * num_decoding_steps * num_tokens_to_rollout)
-        rollin_start_predictions = torch.LongTensor(tokens_to_rollout) \
-                                         .unsqueeze(0) \
-                                         .expand(batch_size, num_tokens_to_rollout) \
-                                         .reshape(-1).to(torch.cuda.current_device())
-
+        # rollin_logits: (batch_size, num_rollin_steps, num_classes)
+        rollin_logits = rollin_output_dict['logits'].squeeze(1)
+        
+        # rollin_predictions: (batch_size, num_rollin_steps)
         rollin_predictions = rollin_output_dict['predictions'].squeeze(1)
 
         # decoder_hidden: (batch_size, num_rollin_steps, hidden_state_size)
@@ -142,7 +132,10 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         
         # decoder_context: (batch_size, num_rollin_steps,  hidden_state_size)
         rollin_decoder_context = state['decoder_contexts']
-        
+
+        # If num_tokens_to_rollout is not specified (default value: -1), consider all tokens for next step.
+        num_tokens_to_rollout = self._num_tokens_to_rollout if self._num_tokens_to_rollout > 0 else num_classes
+
         def rollout_mixing_func():
             return torch.bernoulli(torch.ones(batch_size) * self._rollout_mixing_prob) \
                         .unsqueeze(1) \
@@ -182,11 +175,19 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
             targets = target_tokens['tokens']
 
             # targets_plus_1 Shape: (batch_size, num_decoding_steps + 2)
-            # TODO(Kushal): Maybe append padding token instead of copying the last row.
             targets_plus_1 = torch.cat([targets, targets[:, -1].unsqueeze(1)], dim=-1)
                
         for step in range(1, num_decoding_steps + 1):
             rollout_steps = num_decoding_steps + 1 - step
+
+            _, searnn_next_step_tokens = torch.topk(rollin_logits[:, step - 1, :], 
+                                                    num_tokens_to_rollout, 
+                                                    dim=-1)
+
+            searnn_next_step_num_classes = len(searnn_next_step_tokens)
+            
+            # shape (rollin_start_predictions) : (batch_size * num_tokens_to_rollout)
+            rollin_start_predictions = searnn_next_step_tokens.reshape(-1)
 
             target_tokens_truncated = None
             target_prefixes = None
