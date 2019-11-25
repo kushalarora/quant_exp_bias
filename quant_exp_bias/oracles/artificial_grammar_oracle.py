@@ -33,7 +33,7 @@ class ArtificialLanguageOracle(Oracle):
                  use_weighted_choice: bool = True,
                  parallelize=True, 
                  num_threads=64,
-                 max_len=50,
+                 max_len=25,
                  min_len=3):
         """ TODO (Kushal): Add function doc.
         """
