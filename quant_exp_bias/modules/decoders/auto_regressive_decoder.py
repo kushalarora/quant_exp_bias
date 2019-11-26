@@ -462,18 +462,28 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         start_predictions = self._get_start_predictions(state,
                                                         target_tokens,
                                                         generation_batch_size)
-
-        rollin_output_dict, rollout_output_dict = \
-                      self._forward_loop(state, 
-                                         start_predictions, 
-                                         num_decoding_steps=num_decoding_steps,
-                                         computing_exposure_bias=compute_exposure_bias, 
-                                         target_tokens=target_tokens)
+        # Computing exposure bias involves rolling out
+        # learned policy and the output of this rollout
+        # is used to compute exposure bias value.
         
-        output_dict = self._combine_rollin_rollout_losses(rollin_output_dict, 
-                                                          rollout_output_dict, 
-                                                          target_tokens,
-                                                          compute_exposure_bias)
+        # TODO (Kushal): Maybe re-order and do all exp. bias computation here.
+        # No else would be needed in that case.
+        if compute_exposure_bias:
+            output_dict = \
+                        self.rollout(state, 
+                                      start_predictions, 
+                                      rollout_steps=num_decoding_steps,
+                                      rollout_mode='learned')        
+        else:
+            rollin_output_dict, rollout_output_dict = \
+                        self._forward_loop(state, 
+                                            start_predictions, 
+                                            num_decoding_steps=num_decoding_steps,
+                                            target_tokens=target_tokens)
+            
+            output_dict = self._combine_rollin_rollout_losses(rollin_output_dict, 
+                                                            rollout_output_dict, 
+                                                            target_tokens,)
 
         if not self.training:
             if target_tokens and self._bleu:
@@ -577,8 +587,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
     def _combine_rollin_rollout_losses(self, 
                                        rollin_output_dict: Dict[str, torch.LongTensor],
                                        rollout_output_dict: Dict[str, torch.LongTensor], 
-                                       target_tokens,
-                                       compute_exposure_bias: bool = False) -> Dict[str, torch.LongTensor]:
+                                       target_tokens) -> Dict[str, torch.LongTensor]:
         """ Given rollin and rollout, how to combine loss from rollin and
             rollout to compute final loss. This will be used to learning local 
             loss such that it reflects the global loss as well.
@@ -594,7 +603,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         """
 
         # Here, we just do rollin for training and rollout for validation, so nothing to compute.
-        return rollout_output_dict if compute_exposure_bias else rollin_output_dict
+        return rollin_output_dict
 
     def rollin(self,
                state: Dict[str, torch.Tensor],
@@ -792,7 +801,6 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                       state: Dict[str, torch.Tensor],
                       start_predictions: torch.LongTensor, 
                       num_decoding_steps,
-                      computing_exposure_bias = False,
                       target_tokens: Dict[str, torch.LongTensor] = None,
                      ) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
         """
@@ -803,19 +811,14 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         We really only use the predictions from the method to test that beam search
         with a beam size of 1 gives the same results.
         """
-        rollin = not computing_exposure_bias; rollout = computing_exposure_bias
         rollin_output_dict = {}
         rollout_output_dict = {}
-        if rollin:
-            rollin_output_dict.update(self.rollin(state,
-                                                    start_predictions,
-                                                    rollin_steps=num_decoding_steps,
-                                                    target_tokens=target_tokens,))
+        
+        rollin_output_dict.update(self.rollin(state,
+                                                start_predictions,
+                                                rollin_steps=num_decoding_steps,
+                                                target_tokens=target_tokens,))
 
-        if rollout:
-            rollout_output_dict.update(self.rollout(state, 
-                                                    start_predictions, 
-                                                    rollout_steps=num_decoding_steps,))
         return (rollin_output_dict, rollout_output_dict)
 
     def _get_start_predictions(self, 

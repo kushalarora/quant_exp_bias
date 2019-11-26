@@ -98,18 +98,10 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                       state: Dict[str, torch.Tensor],
                       start_predictions: torch.LongTensor, 
                       num_decoding_steps,
-                      computing_exposure_bias = False,
                       target_tokens: Dict[str, torch.LongTensor] = None,
                      ) -> Dict[str, torch.Tensor]:
         output_dict:  Dict[str, torch.Tensor] = {}
         rollin_steps = num_decoding_steps
-
-        if computing_exposure_bias:
-            self._decoder_net._accumulate_hidden_states = False
-            return None, self.rollout(state, 
-                                      start_predictions, 
-                                      rollout_steps=num_decoding_steps,
-                                      rollout_mode='learned')
 
         self._decoder_net._accumulate_hidden_states = True
         rollin_output_dict = self.rollin(state,
@@ -273,9 +265,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         return rollin_output_dict, rollout_output_dict
 
     @overrides
-    def _combine_rollin_rollout_losses(self, rollin_output_dict, rollout_output_dict, target_tokens, compute_exposure_bias):
-        if compute_exposure_bias:
-            return rollout_output_dict
+    def _combine_rollin_rollout_losses(self, rollin_output_dict, rollout_output_dict, target_tokens):
 
         # rollin_logits: (batch_size, num_rollin_steps, num_classes)
         logits = rollin_output_dict['logits'].squeeze(1)
