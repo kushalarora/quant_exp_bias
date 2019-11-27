@@ -754,8 +754,9 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                        "class_log_probabilities": log_probabilities,}
 
         if self._rollout_cost_function:
+            # TODO (Kushal): Maybe return loss batches for
+            # all beams.
             top_k_predictions = output_dict["predictions"]
-            top_k_log_probabilities = output_dict["class_log_probabilities"]
             # shape: (batch_size, max_predicted_sequence_length)
             best_predictions = top_k_predictions[:, 0, :]
             
