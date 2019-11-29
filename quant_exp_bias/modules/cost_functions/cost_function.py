@@ -38,3 +38,6 @@ class CostFunction(Registrable):
         the CPU.
         """
         return (x.detach().cpu() if isinstance(x, torch.Tensor) else x for x in tensors)
+
+    def takes_decoded_input(self):
+        return self._use_decoded_inputs

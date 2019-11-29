@@ -41,7 +41,7 @@ class NoiseOracleCostFunction(CostFunction):
         # The objective should be minimize this cost to 0.
         return -1 * torch.log(torch.cuda.FloatTensor(oracle_probs)+ 1e-45).to(torch.cuda.current_device())
 
-    @staticmethod
-    def takes_decoded_input():
+    @overrides
+    def takes_decoded_input(self):
         return True
     

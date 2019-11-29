@@ -47,7 +47,7 @@ class HammingCostFunction(CostFunction):
         """
         return (x.detach() if isinstance(x, torch.Tensor) else x for x in tensors)
     
-    @staticmethod
-    def takes_decoded_input():
+    @overrides
+    def takes_decoded_input(self):
         return False
     
