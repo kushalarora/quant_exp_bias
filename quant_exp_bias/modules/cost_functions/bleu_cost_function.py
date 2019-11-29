@@ -1,11 +1,13 @@
 from typing import Dict, Optional, Tuple, Union, List
+
 from fairseq.bleu import Scorer, SacrebleuScorer
+from overrides import overrides
 
 import torch
 
 from quant_exp_bias.modules.cost_functions import CostFunction
 
-@CostFunction.register("hamming")
+@CostFunction.register("bleu")
 class BLEUCostFunction(CostFunction):
     """ This call computes BLEU loss function between prediction and 
         gold targets. This is used to train NMT model.

@@ -1,8 +1,10 @@
 from typing import Dict, Optional, Tuple, Union, List
 
-import torch
+from overrides import overrides
 
 from quant_exp_bias.modules.cost_functions import CostFunction
+
+import torch
 
 @CostFunction.register("hamming")
 class HammingCostFunction(CostFunction):
