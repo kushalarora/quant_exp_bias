@@ -20,6 +20,16 @@ import numpy as np
 from multiprocessing import Pool
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
+# Init routine for pool so that these objects aren't instantiated evertime. 
+# https://stackoverflow.com/questions/9944370/use-of-initialize-in-python-multiprocessing-worker-pool
+parser = None
+grammar = None
+def init_pool(grammar_string):
+    global parser
+    global grammar
+    grammar = PCFG.fromstring(grammar_string)
+    parser = InsideChartParser(grammar)
+
 
 @Oracle.register('artificial_lang_oracle')
 class ArtificialLanguageOracle(Oracle):
@@ -27,6 +37,8 @@ class ArtificialLanguageOracle(Oracle):
     TODO (Kushal): Expand class doc.
     SO: https://stackoverflow.com/questions/15009656/how-to-use-nltk-to-generate-sentences-from-an-induced-grammar
     """
+    
+
 
     def __init__(self,
                  grammar_file:str,
@@ -50,7 +62,7 @@ class ArtificialLanguageOracle(Oracle):
 
         self._min_len = min_len
 
-        self._pool = Pool(self._num_threads)
+        self._pool = Pool(self._num_threads, init_pool, [self._grammar_string])
 
 
     @staticmethod
@@ -179,10 +191,10 @@ class ArtificialLanguageOracle(Oracle):
         the_list[index:index] = replacements
 
     @staticmethod
-    def generate_sequence(grammar_string, use_weighted_choice):
+    def generate_sequence(use_weighted_choice):
         """ TODO (Kushal): Add function doc.
         """
-        grammar = PCFG.fromstring(grammar_string)
+        global grammar
         sentence_list = [grammar.start()]
         all_terminals = False
         choice = ArtificialLanguageOracle._weighted_choice if use_weighted_choice else random.choice
@@ -200,7 +212,7 @@ class ArtificialLanguageOracle(Oracle):
         """ TODO (Kushal): Add function doc.
         """
         # TODO (Kushal): Reformat the code to move generator to the base class and derived class only overloads generate_sequence method.
-        samples = self._pool.starmap(ArtificialLanguageOracle.generate_sequence, [(self._grammar_string, self._use_weighted_choice)]* num_samples * 2)
+        samples = self._pool.starmap(ArtificialLanguageOracle.generate_sequence, [(self._use_weighted_choice)]* num_samples * 2)
         outputs = []
         for sample in samples:
             if (len(sample) <= self._max_len) and (len(sample) >= self._min_len):
@@ -211,11 +223,11 @@ class ArtificialLanguageOracle(Oracle):
         """ TODO (Kushal): Add function doc.
         """
         # TODO (Kushal): Reformat the code to move the for loop in the base class.
-        return self._pool.starmap(ArtificialLanguageOracle._compute_one_sent_prob, [(self._grammar_string, sequence) for sequence in sequences])
+        return self._pool.starmap(ArtificialLanguageOracle._compute_one_sent_prob, sequences)
 
     @staticmethod
-    def _compute_one_sent_prob(grammar_string, sequence: List[str]):
-            parser = InsideChartParser(PCFG.fromstring(grammar_string))
+    def _compute_one_sent_prob(sequence: List[str]):
+            global parser
             probs = 1e-20
             try:
                 parses = list(parser.parse(sequence))
