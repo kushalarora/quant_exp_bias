@@ -3,7 +3,7 @@ import torch
 import logging
 
 from typing import List
-from pytorch_transformers import GPT2Tokenizer, GPT2LMHeadModel
+from transformers import GPT2Tokenizer, GPT2LMHeadModel
 
 from quant_exp_bias.oracles.oracle_base import Oracle
 from multiprocessing import Pool
@@ -18,16 +18,16 @@ class NaturalLanguageOracle(Oracle):
                        parallelize=True,
                        num_threads=128):
         super(Oracle, self).__init__()
-        self._parallelize = parallelize
+        # self._parallelize = parallelize
 
         self._num_threads = num_threads
-        self._pool = Pool(self._num_threads)
+        # self._pool = Pool(self._num_threads)
 
         # Load pre-trained model tokenizer (vocabulary)
         self.tokenizer = GPT2Tokenizer.from_pretrained(model_name)
 
         # Load pre-trained model (weights)
-        self.model = GPT2LMHeadModel.from_pretrained(model_name)
+        self.model = GPT2LMHeadModel.from_pretrained(model_name).to(torch.cuda.current_device())
 
         self.model.eval()
 

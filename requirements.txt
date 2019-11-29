@@ -6,3 +6,4 @@ wandb==0.8.13
 python-Levenshtein==0.12.0
 spacy==2.1.8
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-2.2.0/en_core_web_sm-2.2.0.tar.gz
+transformers==2.2.0
