@@ -440,6 +440,10 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         state:  Dict[str, torch.Tensor] = {}
         decoder_init_state: Dict[str, torch.Tensor] = {}
 
+        # In Seq2Seq setting, we will encode the source sequence,
+        # and init the state object with encoder output and decoder
+        # cell will use these encoder outputs for attention/initing
+        # the decoder states.
         if self._seq2seq_mode:
             state = encoder_out
             decoder_init_state = self._decoder_net.init_decoder_state(state)
@@ -463,30 +467,27 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         start_predictions = self._get_start_predictions(state,
                                                         target_tokens,
                                                         generation_batch_size)
-        # Computing exposure bias involves rolling out
-        # learned policy and the output of this rollout
-        # is used to compute exposure bias value.
-        
-        # TODO (Kushal): Maybe re-order and do all exp. bias computation here.
-        # No else would be needed in that case.
-        if compute_exposure_bias:
-            output_dict = \
-                        self.rollout(state, 
-                                      start_predictions, 
-                                      rollout_steps=num_decoding_steps,
-                                      rollout_mode='learned')        
-        else:
+        if target_tokens:
             rollin_output_dict, rollout_output_dict = \
-                        self._forward_loop(state, 
-                                            start_predictions, 
-                                            num_decoding_steps=num_decoding_steps,
-                                            target_tokens=target_tokens)
-            
-            output_dict = self._combine_rollin_rollout_losses(rollin_output_dict, 
-                                                            rollout_output_dict, 
-                                                            target_tokens,)
+                    self._forward_loop(state, 
+                                        start_predictions, 
+                                        num_decoding_steps=num_decoding_steps,
+                                        target_tokens=target_tokens)
 
+            output_dict.update(self._combine_rollin_rollout_losses(rollin_output_dict, 
+                                                                    rollout_output_dict, 
+                                                                    target_tokens,))
+    
         if not self.training:
+            # While validating, testing, or computing exposure bias 
+            # we need to roll out the learned policy and the output 
+            # of this rollout is used to compute the secondary metrics 
+            # like BLEU, or exposure bias.
+            output_dict.update(self.rollout(state, 
+                                            start_predictions, 
+                                            rollout_steps=num_decoding_steps,
+                                            rollout_mode='learned')) 
+
             if target_tokens and self._bleu:
                 # shape: (batch_size, beam_size, max_sequence_length)
                 top_k_predictions = output_dict["predictions"]
@@ -621,8 +622,6 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         # We cannot make a class variable as default, so making default value
         # as None and in case it is None, setting it to num_classes.
         per_node_beam_size: int = per_node_beam_size or self._num_classes
-
-
 
         if self.training:
             self._apply_scheduled_sampling()
