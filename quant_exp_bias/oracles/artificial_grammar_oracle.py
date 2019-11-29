@@ -20,7 +20,7 @@ import numpy as np
 from multiprocessing import Pool
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
-# Init routine for pool so that these objects aren't instantiated evertime. 
+# Init routine for pool so that these objects aren't instantiated evertime.
 # https://stackoverflow.com/questions/9944370/use-of-initialize-in-python-multiprocessing-worker-pool
 parser = None
 grammar = None
@@ -37,13 +37,11 @@ class ArtificialLanguageOracle(Oracle):
     TODO (Kushal): Expand class doc.
     SO: https://stackoverflow.com/questions/15009656/how-to-use-nltk-to-generate-sentences-from-an-induced-grammar
     """
-    
-
 
     def __init__(self,
                  grammar_file:str,
                  use_weighted_choice: bool = True,
-                 parallelize=True, 
+                 parallelize=True,
                  num_threads=64,
                  max_len=25,
                  min_len=3):
@@ -66,7 +64,7 @@ class ArtificialLanguageOracle(Oracle):
 
 
     @staticmethod
-    def generate_grammar_string(grammar_template_file: str, 
+    def generate_grammar_string(grammar_template_file: str,
                                  vocabulary_size: int,
                                  vocabulary_distribution: str,):
         epsilon = 10**-4
