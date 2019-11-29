@@ -191,7 +191,7 @@ class ArtificialLanguageOracle(Oracle):
         the_list[index:index] = replacements
 
     @staticmethod
-    def generate_sequence(use_weighted_choice):
+    def generate_sequence(grammar_string, use_weighted_choice):
         """ TODO (Kushal): Add function doc.
         """
         global grammar
@@ -212,7 +212,7 @@ class ArtificialLanguageOracle(Oracle):
         """ TODO (Kushal): Add function doc.
         """
         # TODO (Kushal): Reformat the code to move generator to the base class and derived class only overloads generate_sequence method.
-        samples = self._pool.starmap(ArtificialLanguageOracle.generate_sequence, [(self._use_weighted_choice)]* num_samples * 2)
+        samples = self._pool.starmap(ArtificialLanguageOracle.generate_sequence, [(self._grammar_string, self._use_weighted_choice)]* num_samples * 2)
         outputs = []
         for sample in samples:
             if (len(sample) <= self._max_len) and (len(sample) >= self._min_len):
@@ -223,7 +223,7 @@ class ArtificialLanguageOracle(Oracle):
         """ TODO (Kushal): Add function doc.
         """
         # TODO (Kushal): Reformat the code to move the for loop in the base class.
-        return self._pool.starmap(ArtificialLanguageOracle._compute_one_sent_prob, sequences)
+        return self._pool.starmap(ArtificialLanguageOracle._compute_one_sent_prob, [(sequence, ) for sequence in sequences])
 
     @staticmethod
     def _compute_one_sent_prob(sequence: List[str]):
