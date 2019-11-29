@@ -239,12 +239,13 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
            # If no targets, no way to do teacher_forcing, so use your own predictions. 
            target_tokens is None  or
            rollin_mode == 'learned' or 
-           rollin_mode == 'reference'): 
+           rollin_mode == 'reference_l'): 
             # shape: (batch_size,)
             return last_predictions
         
         targets = target_tokens['tokens']
-        if rollin_mode == 'teacher_forcing':
+        if rollin_mode == 'teacher_forcing' or \
+           rollin_mode == 'reference_tf':
             # shape: (batch_size,)
             input_choices = targets[:, timestep]
         elif rollin_mode == 'mixed':
