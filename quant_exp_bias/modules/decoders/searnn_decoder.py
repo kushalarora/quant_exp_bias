@@ -50,7 +50,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                  rollout_cost_function: CostFunction = None,
                  rollin_steps: int = 50, 
                  rollin_rollout_combination_mode='kl',
-                 rollout_mixing_prob: float = 0.5,
+                 rollout_mixing_prob: float = 0.8,
                  num_tokens_to_rollout:int = -1,
                 ) -> None:
         super().__init__(vocab=vocab,
@@ -126,7 +126,10 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         rollin_decoder_context = state['decoder_contexts']
 
         # If num_tokens_to_rollout is not specified (default value: -1), consider all tokens for next step.
-        num_tokens_to_rollout = self._num_tokens_to_rollout if self._num_tokens_to_rollout > 0 else num_classes
+        num_tokens_to_rollout = 1 if not self.training else \
+                                    self._num_tokens_to_rollout \
+                                        if self._num_tokens_to_rollout > 0 else \
+                                             num_classes
 
         def rollout_mixing_func():
             return torch.bernoulli(torch.ones(batch_size) * self._rollout_mixing_prob) \
@@ -169,7 +172,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
 
             # targets_plus_1 Shape: (batch_size, num_decoding_steps + 2)
             targets_plus_1 = torch.cat([targets, targets[:, -1].unsqueeze(1)], dim=-1)
-               
+        
         for step in range(1, num_decoding_steps + 1):
             rollout_steps = num_decoding_steps + 1 - step
 

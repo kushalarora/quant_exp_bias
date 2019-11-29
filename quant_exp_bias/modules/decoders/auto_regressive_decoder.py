@@ -2,6 +2,7 @@ from typing import Dict, List, Tuple, Optional, Callable
 from overrides import overrides
 from functools import partial
 
+import copy
 import logging
 import math
 import numpy
@@ -483,10 +484,13 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             # we need to roll out the learned policy and the output 
             # of this rollout is used to compute the secondary metrics 
             # like BLEU, or exposure bias.
+            state = {}
+            state.update(decoder_init_state)
             output_dict.update(self.rollout(state, 
                                             start_predictions, 
                                             rollout_steps=num_decoding_steps,
-                                            rollout_mode='learned')) 
+                                            rollout_mode='learned',
+                                            truncate_at_end_all=False)) 
 
             if target_tokens and self._bleu:
                 # shape: (batch_size, beam_size, max_sequence_length)
@@ -623,6 +627,8 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         # as None and in case it is None, setting it to num_classes.
         per_node_beam_size: int = per_node_beam_size or self._num_classes
 
+
+
         if self.training:
             self._apply_scheduled_sampling()
 
@@ -753,7 +759,8 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                        "logits": logits,
                        "class_log_probabilities": log_probabilities,}
 
-        if self._rollout_cost_function:
+        if step_targets is not None and \
+           self._rollout_cost_function is not None:
             # TODO (Kushal): Maybe return loss batches for
             # all beams.
             top_k_predictions = output_dict["predictions"]

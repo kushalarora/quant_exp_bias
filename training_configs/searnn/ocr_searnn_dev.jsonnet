@@ -28,8 +28,8 @@
         "type": "quant_exp_searnn_decoder",
         "max_decoding_steps": 14,
         "generation_batch_size": 1024, 
-        "rollin_mode": "teacher_forcing",
-        "rollout_mode": "reference",
+        "rollin_mode":  std.extVar("rollin_mode"),
+        "rollout_mode": std.extVar("rollout_mode"),
         "decoder_net": {
             "type": "quant_exp_bias_lstm_cell",
             "decoding_dim": 256, 
@@ -80,13 +80,13 @@
     "sorting_keys": [["source_tokens", "num_tokens"]],
   },
   "trainer": {
-    "num_epochs": 80,
-    "patience": 5,
+    "num_epochs": 150,
+    "patience": 10,
     "cuda_device": 0,
     "validation_metric": "-hamming",
     "optimizer": {
-      "type": "sgd",
-      "lr": 0.5
+      "type": "adam",
+      "lr": 0.001
     },
     "learning_rate_scheduler": {
       "type": "reduce_on_plateau",

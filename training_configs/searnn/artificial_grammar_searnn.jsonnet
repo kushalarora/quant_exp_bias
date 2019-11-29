@@ -41,7 +41,8 @@
         "oracle": {
           "type": "artificial_lang_oracle",
           "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME"),
-          "parallelize": true
+          "parallelize": true,
+          "max_len": 50,
         },
         "rollout_cost_function": {
           "type": "noisy_oracle",
@@ -66,14 +67,12 @@
       "validation_metric": "-perplexity",
       "optimizer": {
         "type": "adam",
-        "lr": 0.01
+        "lr": 0.001
       },
-      "learning_rate_scheduler": {
-          "type": "reduce_on_plateau",
-          "factor": 0.5,
-          "mode": "min",
-          "patience": 2
-      },
+    "learning_rate_scheduler": {
+      "type": "exponential",
+      "gamma": 0.99
+    },
       "patience": 10,
       "should_log_learning_rate": true,
       "log_batch_size_period": 50,
