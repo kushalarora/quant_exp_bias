@@ -1,1 +1,2 @@
 from quant_exp_bias.token_indexers.pretrained_transformer_indexer import QEBPretrainedTransformerIndexer
+from quant_exp_bias.token_indexers.ocr_token_indexer import OCRTokenIndexer 
