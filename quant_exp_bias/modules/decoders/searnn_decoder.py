@@ -126,10 +126,9 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         rollin_decoder_context = state['decoder_contexts']
 
         # If num_tokens_to_rollout is not specified (default value: -1), consider all tokens for next step.
-        num_tokens_to_rollout = 1 if not self.training else \
-                                    self._num_tokens_to_rollout \
-                                        if self._num_tokens_to_rollout > 0 else \
-                                             num_classes
+        num_tokens_to_rollout = self._num_tokens_to_rollout \
+                                    if self._num_tokens_to_rollout > 0 else \
+                                        num_classes
 
         def rollout_mixing_func():
             return torch.bernoulli(torch.ones(batch_size) * self._rollout_mixing_prob) \
@@ -172,7 +171,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
 
             # targets_plus_1 Shape: (batch_size, num_decoding_steps + 2)
             targets_plus_1 = torch.cat([targets, targets[:, -1].unsqueeze(1)], dim=-1)
-        
+
         for step in range(1, num_decoding_steps + 1):
             rollout_steps = num_decoding_steps + 1 - step
 
@@ -180,10 +179,11 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                                                     num_tokens_to_rollout, 
                                                     dim=-1)
 
+            searnn_next_step_tokens, _ = torch.sort(searnn_next_step_tokens)
             next_tokens_list.append(searnn_next_step_tokens)
 
             searnn_next_step_num_classes = len(searnn_next_step_tokens)
-            
+
             # shape (rollin_start_predictions) : (batch_size * num_tokens_to_rollout)
             rollin_start_predictions = searnn_next_step_tokens.reshape(-1)
 
@@ -283,8 +283,8 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                 non_batch_dims = tuple(range(1, len(target_mask.shape)))
 
                 x = F.log_softmax(scattered_logits, dim=-1)
-                y = F.softmax(-1000 * rollout_output_dict['loss_batch'], dim=-1)
-                kl_losses = self._combiner_loss(x,y).sum(dim=-1)
+                y = F.softmax(-10 * rollout_output_dict['loss_batch'], dim=-1)
+                kl_losses = self._combiner_loss(x, y).sum(dim=-1)
                 kl_loss_batch = (kl_losses * target_mask).sum(dim=non_batch_dims)
             
                 # Generate denominator for normalizing loss across batch.
