@@ -62,7 +62,7 @@ class ExposureBias(Metric):
         for i in range(batch_size):
             value = 0
             if oracle_probs[i] > 0:
-                value = torch.log(model_probs[i]/oracle_probs[i]).item()
+                value = torch.log(model_probs[i]/(oracle_probs[i] + 1e-45)).item()
                 if  numpy.isneginf(value) or numpy.isposinf(value):
                     # with a warning. 
                     logging.warn(f'{value}=log({model_probs[i]}/{oracle_probs[i]}) for {predictions[i]}.')

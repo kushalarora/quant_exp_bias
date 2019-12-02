@@ -226,7 +226,7 @@ class ArtificialLanguageOracle(Oracle):
     @staticmethod
     def _compute_one_sent_prob(sequence: List[str]):
             global parser
-            probs = 1e-20
+            probs = 1e-45
             try:
                 parses = list(parser.parse(sequence))
                 if parses and len(parses) > 0:
@@ -234,6 +234,4 @@ class ArtificialLanguageOracle(Oracle):
             except Exception as e:
                 # Ideally if you fail to parse, the prob is zero.
                 #logging.warn(e)
-                probs = 0
-
             return probs
