@@ -56,7 +56,7 @@
     "iterator": {
       "type": "bucket",
       "sorting_keys": [["target_tokens", "num_tokens"]],
-      "batch_size": 128, 
+      "batch_size": 256, 
       
       // This is needed stupidly for bucket iterator to work.
       "max_instances_in_memory": 50000
@@ -64,7 +64,7 @@
     "trainer": {
       "num_epochs": 50,
       "cuda_device" : 0,
-      "validation_metric": "-perplexity",
+      "validation_metric": "-noisy_oracle_cf",
       "optimizer": {
         "type": "adam",
         "lr": 0.001
