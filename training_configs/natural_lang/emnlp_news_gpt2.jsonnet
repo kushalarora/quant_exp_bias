@@ -45,7 +45,7 @@
         "end_token": "</S>",
         "oracle": {
           "type": "gpt2_oracle",
-          "model_name": "gpt2"
+          "model_name": "gpt2-xl"
         },
         "detokenizer": {
           "type": "gpt2_detokenizer",
@@ -61,7 +61,8 @@
       "max_instances_in_memory": 50000
   },
   "trainer": {
-    "num_epochs": 10,
+    "num_epochs": 100,
+    "validation_metric": "-perplexity",
     "cuda_device" : 0,
     "optimizer": {
       "type": "adam",
