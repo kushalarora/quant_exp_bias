@@ -234,4 +234,6 @@ class ArtificialLanguageOracle(Oracle):
             except Exception as e:
                 # Ideally if you fail to parse, the prob is zero.
                 #logging.warn(e)
+                pass
+            
             return probs
