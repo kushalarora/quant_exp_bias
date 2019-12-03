@@ -134,7 +134,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
             return torch.bernoulli(torch.ones(batch_size) * self._rollout_mixing_prob) \
                         .unsqueeze(1) \
                         .expand(batch_size, num_tokens_to_rollout) \
-                        .reshape(-1)              
+                        .reshape(-1)
 
         source_mask = state.get('source_mask', None)
         if source_mask is not None:
@@ -283,7 +283,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                 non_batch_dims = tuple(range(1, len(target_mask.shape)))
 
                 x = F.log_softmax(scattered_logits, dim=-1)
-                y = F.softmax(-10 * rollout_output_dict['loss_batch'], dim=-1)
+                y = F.softmax(-1000 * rollout_output_dict['loss_batch'], dim=-1)
                 kl_losses = self._combiner_loss(x, y).sum(dim=-1)
                 kl_loss_batch = (kl_losses * target_mask).sum(dim=non_batch_dims)
             
