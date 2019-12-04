@@ -49,6 +49,7 @@
         "rollout_cost_function": {
             "type": "hamming",
         },
+        "temperature": 1000,
     },
     "source_embedder": {
       "tokens": {

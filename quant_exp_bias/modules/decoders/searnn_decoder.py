@@ -52,6 +52,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                  rollin_rollout_combination_mode='kl',
                  rollout_mixing_prob: float = 0.8,
                  num_tokens_to_rollout:int = -1,
+                 temperature: int = 1,
                 ) -> None:
         super().__init__(vocab=vocab,
                          max_decoding_steps=max_decoding_steps,
@@ -92,6 +93,8 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
             self._combiner_loss = torch.nn.KLDivLoss(reduction='none')
 
         self._num_tokens_to_rollout = num_tokens_to_rollout
+
+        self._temperature = temperature
 
     @overrides
     def _forward_loop(self,
@@ -283,15 +286,15 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                 non_batch_dims = tuple(range(1, len(target_mask.shape)))
 
                 x = F.log_softmax(scattered_logits, dim=-1)
-                y = F.softmax(-1000 * rollout_output_dict['loss_batch'], dim=-1)
+                y = F.softmax(-1 * self._temperature * rollout_output_dict['loss_batch'], dim=-1)
                 kl_losses = self._combiner_loss(x, y).sum(dim=-1)
                 kl_loss_batch = (kl_losses * target_mask).sum(dim=non_batch_dims)
-            
+
                 # Generate denominator for normalizing loss across batch.
                 # Ideally this will be equal to batch_size, but this is a
                 # safer way to do this. Here, we ignore sequences with all
                 # pad tokens.
-              
+
                 # shape : (batch_size,)
                 target_mask_sum = target_mask.sum(dim=non_batch_dims)
                 num_non_empty_sequences = ((target_mask_sum > 0).float().sum() + 1e-13)
