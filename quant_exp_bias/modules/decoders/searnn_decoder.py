@@ -231,7 +231,8 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
             # decoder_context: (batch_size *  num_tokens_to_rollout, 1, hidden_state_size)
             state['decoder_contexts'] = decoder_context_step_expanded.reshape(-1, 1, hidden_size)
 
-            if self._rollin_mode == 'reference':            
+            if self._rollin_mode == 'reference_tf' or \
+                self._rollin_mode == 'reference_l':            
                 prediction_prefixes = targets[:, :step] \
                                         .unsqueeze(1) \
                                         .expand(batch_size, num_tokens_to_rollout, step) \
