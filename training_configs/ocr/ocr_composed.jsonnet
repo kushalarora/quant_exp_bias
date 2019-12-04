@@ -21,6 +21,8 @@
   },
   "train_data_path": "data/ocr/train.txt",
   "validation_data_path": "data/ocr/valid.txt",
+  "test_data_path": "data/ocr/test.txt",
+  "evaluate_on_test": true,
   "model": {
     "type": "quant_exp_composed_lm",
     "use_in_seq2seq_mode": true,
