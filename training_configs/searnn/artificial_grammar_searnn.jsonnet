@@ -11,19 +11,19 @@
       "end_tokens": ["</S>"]
     },
     "train_data_path": std.extVar("ARTIFICIAL_GRAMMAR_TRAIN"),
-    "validation_data_path": std.extVar("ARTIFICIAL_GRAMMAR_DEV"), 
+    "validation_data_path": std.extVar("ARTIFICIAL_GRAMMAR_DEV"),
     "model": {
       "type": "quant_exp_composed_lm",
       "use_in_seq2seq_mode": false,
       "decoder": {
         "type": "quant_exp_searnn_decoder",
         "max_decoding_steps": 50,
-        "generation_batch_size": 32, 
+        "generation_batch_size": 32,
         "rollin_mode":  std.extVar("rollin_mode"),
         "rollout_mode": std.extVar("rollout_mode"),
         "decoder_net": {
           "type": "quant_exp_bias_lstm_cell",
-          "decoding_dim": 300, 
+          "decoding_dim": 300,
           "target_embedding_dim": 300,
         },
         "target_embedder": {
@@ -51,20 +51,20 @@
             "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME"),
           },
         },
+        "temperature": 1000,
       }
     },
     "iterator": {
       "type": "bucket",
       "sorting_keys": [["target_tokens", "num_tokens"]],
-      "batch_size": 256, 
-      
+      "batch_size": 64,
       // This is needed stupidly for bucket iterator to work.
       "max_instances_in_memory": 50000
     },
     "trainer": {
       "num_epochs": 50,
       "cuda_device" : 0,
-      "validation_metric": "-noisy_oracle_cf",
+      // "validation_metric": "-perplexity",
       "optimizer": {
         "type": "adam",
         "lr": 0.001
@@ -73,10 +73,9 @@
       "type": "exponential",
       "gamma": 0.99
     },
-      "patience": 10,
+      /*"patience": 10,*/
       "should_log_learning_rate": true,
       "log_batch_size_period": 50,
       "num_serialized_models_to_keep": -1
     },
   }
-  

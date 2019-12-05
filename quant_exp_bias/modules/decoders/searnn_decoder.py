@@ -232,7 +232,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
             state['decoder_contexts'] = decoder_context_step_expanded.reshape(-1, 1, hidden_size)
 
             if self._rollin_mode == 'reference_tf' or \
-                self._rollin_mode == 'reference_l':            
+                self._rollin_mode == 'reference_l':
                 prediction_prefixes = targets[:, :step] \
                                         .unsqueeze(1) \
                                         .expand(batch_size, num_tokens_to_rollout, step) \
@@ -271,37 +271,64 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         rollout_output_dict['next_tokens'] = torch.stack(next_tokens_list, dim=1)
         return rollin_output_dict, rollout_output_dict
 
+    # This code is dead for now. 
+    # Leaving it here in case we need it.
+    def _get_mask(self, predictions, target_tokens, loss_batch):
+        # SEARNN with KL might not produce the sequences that 
+        # match target sequence on length. This is especially true
+        # with LM done with learned rollins. The pattern observed
+        # here is that sequence lengths keep shrinking.
+        
+        # This code computes mask from predicted tokens by observing 
+        # first time eos token is produces. Everything after that is
+        # masked out.
+        target_mask = util.get_text_field_mask(target_tokens)
+        mask = predictions.new_ones(predictions.shape)
+
+        for i, indices in enumerate(predictions.detach().cpu().tolist()):
+            if self._end_index in indices:
+                end_idx = indices.index(self._end_index)
+                mask[i, :end_idx + 1] = 1
+                mask[i, end_idx + 1:] = 0
+            else:
+                mask[i] = target_mask[i]
+                end_idx = target_mask[i].sum() - 1
+                loss_batch[i, end_idx - 1, self._end_index] = 1e-45
+        return mask
+
     @overrides
     def _combine_rollin_rollout_losses(self, rollin_output_dict, rollout_output_dict, target_tokens):
 
         # rollin_logits: (batch_size, num_rollin_steps, num_classes)
         logits = rollin_output_dict['logits'].squeeze(1)
-        
+
         next_tokens = rollout_output_dict['next_tokens']
         scattered_logits = torch.gather(input=logits, dim=-1, index=next_tokens)
+        predictions = rollin_output_dict['predictions'].squeeze(1)
+        loss_batch = rollout_output_dict['loss_batch']
         if self._combiner_mode == 'kl':
-            output_dict = { 'predictions': rollin_output_dict['predictions']}
-            if target_tokens:
-                target_mask = util.get_text_field_mask(target_tokens)
-                target_mask = target_mask[:, 1:].float()
-                non_batch_dims = tuple(range(1, len(target_mask.shape)))
+            output_dict = {'predictions': predictions}
 
-                x = F.log_softmax(scattered_logits, dim=-1)
-                y = F.softmax(-1 * self._temperature * rollout_output_dict['loss_batch'], dim=-1)
-                kl_losses = self._combiner_loss(x, y).sum(dim=-1)
-                kl_loss_batch = (kl_losses * target_mask).sum(dim=non_batch_dims)
+            target_mask = util.get_text_field_mask(target_tokens)
+            target_mask = target_mask[:, 1:].float()
+            non_batch_dims = tuple(range(1, len(target_mask.shape)))
 
-                # Generate denominator for normalizing loss across batch.
-                # Ideally this will be equal to batch_size, but this is a
-                # safer way to do this. Here, we ignore sequences with all
-                # pad tokens.
+            x = F.log_softmax(scattered_logits, dim=-1)
+            y = F.softmax(-1 * self._temperature * loss_batch, dim=-1)
+            kl_losses = self._combiner_loss(x, y).sum(dim=-1)
+            kl_loss_batch = (kl_losses * target_mask).sum(dim=non_batch_dims)
 
-                # shape : (batch_size,)
-                target_mask_sum = target_mask.sum(dim=non_batch_dims)
-                num_non_empty_sequences = ((target_mask_sum > 0).float().sum() + 1e-13)
-                loss = kl_loss_batch.sum()/num_non_empty_sequences
-                # output_dict['loss'] = rollin_output_dict['loss'] if self.training_iteration < 10 else rollin_output_dict['loss'] + loss
-                output_dict['loss'] = loss
+            # Generate denominator for normalizing loss across batch.
+            # Ideally this will be equal to batch_size, but this is a
+            # safer way to do this. Here, we ignore sequences with all
+            # pad tokens.
+
+            # shape : (batch_size,)
+            target_mask_sum = target_mask.sum(dim=non_batch_dims)
+            num_non_empty_sequences = ((target_mask_sum > 0).float().sum() + 1e-13)
+            loss = kl_loss_batch.sum()/num_non_empty_sequences
+            # output_dict['loss'] = rollin_output_dict['loss'] if self.training_iteration < 10 else rollin_output_dict['loss'] + loss
+            output_dict['loss'] = loss
 
             return output_dict
         elif self._combiner_mode == 'mle':
