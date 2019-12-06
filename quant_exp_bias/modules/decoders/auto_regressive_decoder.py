@@ -100,7 +100,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                  start_token: str =START_SYMBOL,
                  end_token: str = END_SYMBOL,
                  num_decoder_layers: int = 1,
-                 mask_pad_and_oov: bool = True,
+                 mask_pad_and_oov: bool = False,
                  tie_output_embedding: bool = False,
                  label_smoothing_ratio: Optional[float] = None,
                  
@@ -399,7 +399,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         # shape: (group_size, num_classes)
         class_logits, state = self._prepare_output_projections(input_choices, state)
 
-        if False and not self.training and self._mask_pad_and_oov:
+        if not self.training and self._mask_pad_and_oov:
             # This implementation is copied from masked_log_softmax from allennlp.nn.util.
             mask = (self._vocab_mask.expand(class_logits.shape) + 1e-45).log()
             # shape: (group_size, num_classes)
@@ -432,7 +432,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         source_tokens : ``Dict[str, torch.LongTensor]``, optional (default = None)
            The output of `TextField.as_array()` applied on the source `TextField`. This will be
            passed through a `TextFieldEmbedder` and then through an encoder.
- 
+
         Returns
         -------
         Dict[str, torch.Tensor]
@@ -449,8 +449,10 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             state = encoder_out
             decoder_init_state = self._decoder_net.init_decoder_state(state)
             state.update(decoder_init_state)
-            
-        targets: torch.LongTensor = None
+
+        # In case we have target_tokens, roll-in and roll-out
+        # only till those many steps, otherwise we roll-out for
+        # `self._max_decoding_steps`.
         if target_tokens:
             # shape: (batch_size, max_target_sequence_length)
             targets = target_tokens["tokens"]
@@ -462,23 +464,28 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             num_decoding_steps = target_sequence_length - 1
         else:
             num_decoding_steps = self._max_decoding_steps
-            
+
        # Initialize target predictions with the start index.
         # shape: (batch_size,)
         start_predictions = self._get_start_predictions(state,
                                                         target_tokens,
                                                         generation_batch_size)
+
+        # This is training loop.
         if target_tokens:
             rollin_output_dict, rollout_output_dict = \
-                    self._forward_loop(state, 
-                                        start_predictions, 
+                    self._forward_loop(state,
+                                        start_predictions,
                                         num_decoding_steps=num_decoding_steps,
                                         target_tokens=target_tokens)
 
-            output_dict.update(self._combine_rollin_rollout_losses(rollin_output_dict, 
-                                                                    rollout_output_dict, 
+            output_dict.update(self._combine_rollin_rollout_losses(rollin_output_dict,
+                                                                    rollout_output_dict,
                                                                     target_tokens,))
-    
+
+            # The rollin loss (w or w/o teacher_forcing is perplexity.)
+            self._perplexity(rollin_output_dict['loss'])
+
         if not self.training:
             # While validating, testing, or computing exposure bias 
             # we need to roll out the learned policy and the output 
@@ -490,14 +497,46 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                             start_predictions, 
                                             rollout_steps=num_decoding_steps,
                                             rollout_mode='learned',
-                                            truncate_at_end_all=False)) 
+                                            sampled=compute_exposure_bias,
+                                            truncate_at_end_all=False))
+
+            if target_tokens and self._rollout_cost_function:
+                # all beams.
+                top_k_predictions = output_dict["predictions"]
+                # shape: (batch_size, max_predicted_sequence_length)
+                best_predictions = top_k_predictions[:, 0, :]
+
+                if self._rollout_cost_function.takes_decoded_input():
+                    predicted_tokens = self._decode_tokens(best_predictions,
+                                                            vocab_namespace=self._target_namespace,
+                                                            truncate=True)
+
+                    decoded_targets = self._decode_tokens(target_tokens['tokens'],
+                                                          vocab_namespace=self._target_namespace,
+                                                          truncate=True)
+
+                    loss_batch = self._rollout_cost_function(predicted_tokens, decoded_targets)
+
+                else:
+                    # This is for rollout cost function like hamming loss for OCR.
+                    target_mask = util.get_text_field_mask(target_tokens)
+                    loss_batch = self._rollout_cost_function(best_predictions, target_tokens['tokens'], target_mask)
+
+                mask = util.get_text_field_mask({'predictions': best_predictions})
+                non_batch_dims = tuple(range(1, len(mask.shape)))
+                # shape : (batch_size,)
+                mask_sum = mask.sum(dim=non_batch_dims)
+                num_non_empty_sequences = ((mask_sum > 0).float().sum() + 1e-13)
+                loss = loss_batch.sum()/num_non_empty_sequences
+
+                self._rollout_cf_avg(float(loss.cpu()))
 
             if target_tokens and self._bleu:
                 # shape: (batch_size, beam_size, max_sequence_length)
                 top_k_predictions = output_dict["predictions"]
                 # shape: (batch_size, max_predicted_sequence_length)
                 best_predictions = top_k_predictions[:, 0, :]
-                
+
                 self._bleu(best_predictions, target_tokens["tokens"])
 
 
@@ -506,11 +545,11 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 top_k_predictions = output_dict["predictions"]
                 # shape: (batch_size, max_predicted_sequence_length)
                 best_predictions = top_k_predictions[:, 0, :]
-                
+
                 target_mask = util.get_text_field_mask(target_tokens)
 
                 self._hamming(best_predictions, target_tokens["tokens"], target_mask)
-            
+
             if compute_exposure_bias and self._exposure_bias:
                 # shape: (batch_size, beam_size, max_sequence_length)
                 top_k_predictions = output_dict["predictions"]
@@ -522,7 +561,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 predicted_tokens = self._decode_tokens(best_predictions, 
                                                         vocab_namespace=self._target_namespace,
                                                         truncate=True)
-                
+
                 self._exposure_bias(prediction_loss.data, predicted_tokens)
 
                 output_dict['predicted_tokens'] = predicted_tokens
@@ -530,20 +569,20 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 output_dict['predicted_sequences'] = self._detokenizer(predicted_tokens)
         return output_dict
 
-    def _decode_tokens(self, 
-                       predicted_indices: torch.Tensor, 
+    def _decode_tokens(self,
+                       predicted_indices: torch.Tensor,
                        vocab_namespace:str ='tokens',
                        truncate=False) -> List[str]:
         if not isinstance(predicted_indices, numpy.ndarray):
             predicted_indices = predicted_indices.detach().cpu().numpy()
-        all_predicted_tokens = []    
+        all_predicted_tokens = []
         for indices in predicted_indices:
             # Beam search gives us the top k results for each source sentence in the batch
             # but we just want the single best.
             if len(indices.shape) > 1:
                 indices = indices[0]
 
-            # We add start token to the predictions. 
+            # We add start token to the predictions.
             # In case it is present at position 0, remove it.
             if self._start_index == indices[0]:
                 indices = indices[1:]
@@ -554,7 +593,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 indices = indices[:indices.index(self._end_index)]
             predicted_tokens = [self._vocab.get_token_from_index(x, namespace=vocab_namespace)
                                 for x in indices]
-            
+
             all_predicted_tokens.append(predicted_tokens)
         return all_predicted_tokens
 
@@ -586,21 +625,21 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             self.scheduled_sampling_ratio =  1 -  k/(k + math.exp(self.training_iteration/k))
         else:
             raise ConfigurationError(f"{self._scheduled_sampling_type} is not a valid scheduled sampling type.")
-    
+
         self._ss_ratio(self._scheduled_sampling_ratio)
         self.training_iteration += 1
 
     def _combine_rollin_rollout_losses(self, 
-                                       rollin_output_dict: Dict[str, torch.LongTensor],
-                                       rollout_output_dict: Dict[str, torch.LongTensor], 
+                                       rollin_output_dict: Dict[str, torch.Tensor],
+                                       rollout_output_dict: Dict[str, torch.Tensor], 
                                        target_tokens) -> Dict[str, torch.LongTensor]:
         """ Given rollin and rollout, how to combine loss from rollin and
             rollout to compute final loss. This will be used to learning local 
             loss such that it reflects the global loss as well.
-        
+
         Arguments:
-            rollin_output_dict {Dict[str, torch.LongTensor]} -- Dictionary with rollin computations.
-            rollout_output_dict {Dict[str, torch.LongTensor]} -- Dictionary with rollin computations.
+            rollin_output_dict {Dict[str, torch.Tensor]} -- Dictionary with rollin computations.
+            rollout_output_dict {Dict[str, torch.Tensor]} -- Dictionary with rollin computations.
             compute_exposure_bias {bool} -- If we are computing exposure bias.
 
         Returns:
@@ -626,8 +665,6 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         # We cannot make a class variable as default, so making default value
         # as None and in case it is None, setting it to num_classes.
         per_node_beam_size: int = per_node_beam_size or self._num_classes
-
-
 
         if self.training:
             self._apply_scheduled_sampling()
@@ -688,8 +725,6 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             loss = loss_batch.sum()/num_non_empty_sequences
 
             output_dict['loss'] = loss
-            self._perplexity(loss)
-
         return output_dict
 
     def rollout(self,
@@ -766,11 +801,11 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             top_k_predictions = output_dict["predictions"]
             # shape: (batch_size, max_predicted_sequence_length)
             best_predictions = top_k_predictions[:, 0, :]
-            
+
             predicted_tokens = self._decode_tokens(best_predictions, 
                                                     vocab_namespace=self._target_namespace,
                                                     truncate=True)
-      
+
             output_dict['predicted_tokens'] = predicted_tokens
 
             if self._rollout_cost_function.takes_decoded_input():
@@ -780,29 +815,14 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                     decoded_targets = self._decode_tokens(step_targets, 
                                             vocab_namespace=self._target_namespace,
                                             truncate=True)
-                                            
+
                 loss_batch = self._rollout_cost_function(predicted_tokens, decoded_targets)
             else:
                 # This is for rollout cost function like hamming loss for OCR.
                 target_mask = util.get_text_field_mask({'tokens': step_targets})
                 loss_batch = self._rollout_cost_function(best_predictions, step_targets, target_mask)
-            
+
             output_dict["loss_batch"] = loss_batch
-
-            # Generate denominator for normalizing loss across batch.
-            # Ideally this will be equal to batch_size, but this is a
-            # safer way to do this. Here, we ignore sequences with all
-            # pad tokens.
-            mask = util.get_text_field_mask({'predictions': best_predictions})
-            non_batch_dims = tuple(range(1, len(mask.shape)))
-            # shape : (batch_size,)
-            mask_sum = mask.sum(dim=non_batch_dims)
-            num_non_empty_sequences = ((mask_sum > 0).float().sum() + 1e-13)
-            loss = loss_batch.sum()/num_non_empty_sequences
-            output_dict['loss'] = loss
-
-            self._rollout_cf_avg(float(loss.cpu()))
-        
         return output_dict
 
     def _forward_loop(self,
