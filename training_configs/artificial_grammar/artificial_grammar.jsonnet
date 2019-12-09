@@ -26,7 +26,8 @@
     "oracle": {
       "type": "artificial_lang_oracle",
       "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME"),
-      "parallelize": true
+      "parallelize": true,
+      "max_len": 50,
     },
     "start_token": "<S>",
     "end_token": "</S>"
