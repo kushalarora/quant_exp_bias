@@ -69,11 +69,11 @@
         "type": "adam",
         "lr": 0.01
       },
-    "learning_rate_scheduler": {
-      "type": "exponential",
-      "gamma": 0.99
-    },
-      "patience": 10,
+    /*"learning_rate_scheduler": {*/
+      /*"type": "exponential",*/
+      /*"gamma": 0.99*/
+    /*},*/
+      /*"patience": 10,*/
       "should_log_learning_rate": true,
       "log_batch_size_period": 50,
       "num_serialized_models_to_keep": -1
