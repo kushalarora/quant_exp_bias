@@ -109,7 +109,7 @@ class QuantifyExposureBias(Subcommand):
         
         subparser.add_argument('--num-trials',
                                  type=int,
-                                 default=5,
+                                 default=10,
                                  help='Number of samples to draw from $n~\mathcal{N}$" + \
                                         "for approximating expectation over sequence lengths.')
         

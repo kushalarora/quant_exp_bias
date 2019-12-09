@@ -65,7 +65,7 @@
           "mode": "min",
           "patience": 0
       },
-      "patience": 5, 
+      "patience": 10, 
       "should_log_learning_rate": true,
       "log_batch_size_period": 50,
       "num_serialized_models_to_keep": -1
