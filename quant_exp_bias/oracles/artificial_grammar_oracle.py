@@ -230,7 +230,7 @@ class ArtificialLanguageOracle(Oracle):
             try:
                 parses = list(parser.parse(sequence))
                 if parses and len(parses) > 0:
-                    probs += np.exp(np.log(reduce(lambda a, b: a + b.prob(), parses, 0)/len(parses))/len(sequence))
+                    probs += np.exp(np.log(reduce(lambda a, b: a + b.prob(), parses, 1e-45)/len(parses))/len(sequence))
             except Exception as e:
                 # Ideally if you fail to parse, the prob is zero.
                 #logging.warn(e)
