@@ -8,6 +8,7 @@ import argparse
 import logging
 import os
 import random
+import time
 
 from overrides import overrides
 
@@ -110,10 +111,23 @@ def train_runner(args: argparse.Namespace,
 
     serialization_dir = os.path.join(serialization_dir, 'training')
     params = Params.from_file(args.param_path, args.overrides)
-    train_model(params,
-                serialization_dir=serialization_dir,
-                file_friendly_logging=True,
-                force=False)
+    model = train_model(params,
+                        serialization_dir=serialization_dir,
+                        file_friendly_logging=True,
+                        force=False)
+
+    # HACK (Kushal): This is a hack to fix pool workers not dying
+    # at the end of the train call. Somehow the __del__ method of the
+    # model class is not be called. This is an issue, as for artificial 
+    # language use case, the pool workers hog memory and if not cleaned, 
+    # the redundant pool workers retain the memory leading to memory leak
+    # resulting in oom errors.
+    if model._decoder is not None and \
+            model._decoder._oracle is not None and \
+            model._decoder._oracle._pool is not None:
+                model._decoder._oracle._pool.terminate()
+                model._decoder._oracle._pool.join()
+                time.sleep(2)
 
     return serialization_dir
 
