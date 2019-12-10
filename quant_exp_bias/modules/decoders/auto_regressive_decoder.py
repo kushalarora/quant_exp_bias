@@ -176,7 +176,8 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         self._perplexity = Perplexity()
 
         if oracle is not None:
-            self._exposure_bias = ExposureBias(oracle)
+            self._oracle = oracle
+            self._exposure_bias = ExposureBias(self._oracle)
 
         self._ss_ratio = Average()
 
@@ -958,3 +959,9 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         if self._rollout_cost_function:
             all_metrics.update({self._rollout_cost_function.name: self._rollout_cf_avg.get_metric(reset=reset)})
         return all_metrics
+
+    def __del__(self):
+        del self._oracle
+
+    def __delete__(self):
+        del self._oracle
