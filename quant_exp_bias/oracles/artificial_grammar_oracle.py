@@ -17,6 +17,8 @@ import time
 import string
 import numpy as np
 
+import time
+
 from multiprocessing import Pool
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -210,6 +212,13 @@ class ArtificialLanguageOracle(Oracle):
         """ TODO (Kushal): Add function doc.
         """
         # TODO (Kushal): Reformat the code to move generator to the base class and derived class only overloads generate_sequence method.
+        # with Pool(self._num_threads, init_pool, [self._grammar_string]) as pool:
+        #     samples = pool.starmap(ArtificialLanguageOracle.generate_sequence, [(self._grammar_string, self._use_weighted_choice)]* num_samples * 2)
+        # for sample in samples:
+        #     if (len(sample) <= self._max_len) and (len(sample) >= self._min_len):
+        #         outputs.append(sample)
+        # return outputs[:num_samples]
+
         samples = self._pool.starmap(ArtificialLanguageOracle.generate_sequence, [(self._grammar_string, self._use_weighted_choice)]* num_samples * 2)
         outputs = []
         for sample in samples:
@@ -221,6 +230,8 @@ class ArtificialLanguageOracle(Oracle):
         """ TODO (Kushal): Add function doc.
         """
         # TODO (Kushal): Reformat the code to move the for loop in the base class.
+        # with Pool(self._num_threads, init_pool, [self._grammar_string]) as pool:
+            # return self._pool.starmap(ArtificialLanguageOracle._compute_one_sent_prob, [(sequence, ) for sequence in sequences])
         return self._pool.starmap(ArtificialLanguageOracle._compute_one_sent_prob, [(sequence, ) for sequence in sequences])
 
     @staticmethod
@@ -237,3 +248,13 @@ class ArtificialLanguageOracle(Oracle):
                 pass
             
             return probs
+
+    def __del__(self):
+        self._pool.terminate()
+        time.sleep(2)
+        self._pool = None
+
+    def __delete__(self):
+        self._pool.terminate()
+        time.sleep(2)
+        self._pool = None
