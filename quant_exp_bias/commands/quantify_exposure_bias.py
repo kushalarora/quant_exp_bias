@@ -145,6 +145,10 @@ def quantify_exposure_bias(archive_file: str,
     # Disable some of the more verbose logging statements
     logging.getLogger('allennlp.common.params').disabled = True
     logging.getLogger('allennlp.nn.initializers').disabled = True
+    
+    logger.info(f'Num Trials: {num_trials}')
+    logger.info(f'Num Length Samples: {num_length_samples}')
+    logger.info(f'Num Samples Per Length: {num_samples_per_length}')
 
     # Load from archive
     archive = load_archive(archive_file, cuda_device, overrides, weights_file)
