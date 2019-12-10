@@ -114,3 +114,5 @@ logs/
 worker-*
 wandb/
 slurm-*
+*/*logs/*
+*/*results/*
