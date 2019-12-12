@@ -6,12 +6,12 @@ from torch import nn
 import torch.nn.functional as F
 
 import numpy as np
-import copy
 
 from allennlp.common.util import START_SYMBOL, END_SYMBOL
 from allennlp.data.vocabulary import Vocabulary, DEFAULT_OOV_TOKEN, DEFAULT_PADDING_TOKEN
 from allennlp.modules import Embedding
 from allennlp.nn import util
+from allennlp.training.metrics import Average
 
 from quant_exp_bias.modules.decoders.decoder_net import DecoderNet
 from quant_exp_bias.oracles.oracle_base import Oracle
@@ -54,7 +54,7 @@ class QuantExpReinforceDecoder(QuantExpAutoRegressiveSeqDecoder):
                  rollin_rollout_combination_mode='rl',
                  rollout_mixing_prob: float = 0.5,
                  num_tokens_to_rollout:int = -1,
-                 num_mle_iters: int = 1000,
+                 num_mle_iters: int = 4000,
                  rollin_rollout_mixing_coeff:float = 0.5,
                 ) -> None:
         super().__init__(vocab=vocab,
@@ -71,6 +71,7 @@ class QuantExpReinforceDecoder(QuantExpAutoRegressiveSeqDecoder):
                          rollin_mode=rollin_mode,
                          rollout_mode=rollout_mode,
                          use_bleu=use_bleu,
+                         use_hamming=use_hamming,
                          dropout=dropout,
                          sample_output=sample_output, 
                          start_token=start_token,
@@ -95,9 +96,13 @@ class QuantExpReinforceDecoder(QuantExpAutoRegressiveSeqDecoder):
             self._combiner_loss = torch.nn.KLDivLoss(reduction='none')
 
         self._num_mle_iters = num_mle_iters
-        self._rollin_rollout_mixing_coeff = rollin_rollout_mixing_coeff
+        self._rollin_rollout_mixing_coeff = 0 * rollin_rollout_mixing_coeff
 
-        self._baseline_regressor = torch.nn.Linear(self._decoder_net.get_output_dim(), 1)
+        self._baseline_regressor = torch.nn.Sequential(torch.nn.Linear(self._decoder_net.get_output_dim(), self._decoder_net.get_output_dim()),
+                                                       torch.nn.ReLU(),
+                                                      torch.nn.Linear(self._decoder_net.get_output_dim(), 1))
+
+        self._regressor_loss = Average()
 
     @overrides
     def _forward_loop(self,
@@ -110,23 +115,26 @@ class QuantExpReinforceDecoder(QuantExpAutoRegressiveSeqDecoder):
         rollout_output_dict: Dict[str, torch.Tensor] = {}
         rollin_steps = num_decoding_steps
 
-        rollin_state = copy.deepcopy(state)
-        rollout_state = copy.deepcopy(state)
-        
+        rollin_state = {}
+        rollin_state.update(state)
+        rollout_state = {}
+        rollout_state.update(state)
+
         self._decoder_net._accumulate_hidden_states = False
         rollin_output_dict.update(self.rollin(rollin_state,
                                              start_predictions,
                                              rollin_mode=self._rollin_mode,
                                              rollin_steps=num_decoding_steps,
                                              target_tokens=target_tokens,))
-        
-        
+
+
         self._decoder_net._accumulate_hidden_states = True
         rollout_output_dict.update(self.rollout(rollout_state, 
                                                 start_predictions, 
                                                 rollout_steps=num_decoding_steps,
                                                 rollout_mode=self._rollout_mode,
-                                                target_tokens=target_tokens))
+                                                target_tokens=target_tokens,
+                                                truncate_at_end_all=False))
         rollout_output_dict['baseline_rewards'] = self._baseline_regressor(rollout_state['decoder_hiddens'].detach()).squeeze(-1)
         return rollin_output_dict, rollout_output_dict
 
@@ -138,23 +146,24 @@ class QuantExpReinforceDecoder(QuantExpAutoRegressiveSeqDecoder):
                 target_mask = util.get_text_field_mask(target_tokens)
                 target_mask = target_mask[:, 1:].float()
                 non_batch_dims = tuple(range(1, len(target_mask.shape)))
-                
+
                 # rollout_loss_batch : (batch_size,)
                 rollout_reward_batch = torch.exp(-1 * rollout_output_dict['loss_batch'])
                 rollout_baseline_reward = rollout_output_dict['baseline_rewards']
 
-                rollout_reward_batch_expanded = rollout_reward_batch \
-                                                .unsqueeze(1) \
-                                                .expand(rollout_baseline_reward.shape)
-
-                baseline_reward_regressor_loss = torch.dist(rollout_reward_batch_expanded, 
-                                                            rollout_baseline_reward,
+                baseline_reward_regressor_loss = torch.dist(rollout_reward_batch, 
+                                                            rollout_baseline_reward.sum(dim=-1),
                                                             p=2)
 
+                self._regressor_loss(baseline_reward_regressor_loss)
                 if self.training_iteration < self._num_mle_iters:
                     loss_batch = rollin_output_dict['loss_batch']
                 else:
-                    rewards = (rollout_reward_batch_expanded - rollout_baseline_reward).detach()
+
+                    if self.training_iteration % 100 == 0:
+                        import pdb; pdb.set_trace()
+                        
+                    rewards = (rollout_reward_batch - 0 * rollout_baseline_reward.sum(dim=-1)).detach()
                     # rewards = rollout_reward_batch_expanded.detach()
                     rollout_logits = F.softmax(rollout_output_dict["logits"].squeeze(1))
                     predictions = rollout_output_dict["predictions"].squeeze(1)[:, 1:].unsqueeze(2)
@@ -172,6 +181,15 @@ class QuantExpReinforceDecoder(QuantExpAutoRegressiveSeqDecoder):
                 num_non_empty_sequences = ((target_mask_sum > 0).float().sum() + 1e-13)
                 loss = loss_batch.sum()/num_non_empty_sequences
                 # output_dict['loss'] = rollin_output_dict['loss'] if self.training_iteration < 10 else rollin_output_dict['loss'] + loss
+
                 output_dict['loss'] = loss + baseline_reward_regressor_loss
             return output_dict
         return None
+
+    @overrides
+    def get_metrics(self, reset: bool = False, get_exposure_bias: bool = False) -> Dict[str, float]:
+        all_metrics: Dict[str, float] = {}
+        all_metrics.update(super().get_metrics(reset, get_exposure_bias))
+        all_metrics.update({'regressor_loss':  float(self._regressor_loss.get_metric(reset=reset))})
+
+        return all_metrics

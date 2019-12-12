@@ -4,8 +4,8 @@ set -eux
 
 export NUM_SAMPLES=10000
 export indir="$(date '+%Y_%m_%d_%H_%M')/"
-#export FSA_GRAMMAR_FILENAME='grammar_templates/zipf_grammar_2_6.txt'
-export FSA_GRAMMAR_FILENAME='grammar_templates/default_grammar.txt'
+export FSA_GRAMMAR_FILENAME='grammar_templates/zipf_grammar_2_6.txt'
+#export FSA_GRAMMAR_FILENAME='grammar_templates/default_grammar.txt'
 export ARTIFICIAL_GRAMMAR_TRAIN="results/artificial_grammar/${indir}/oracle_samples_train.txt"
 export ARTIFICIAL_GRAMMAR_DEV="results/artificial_grammar/${indir}/oracle_samples_dev.txt"
 

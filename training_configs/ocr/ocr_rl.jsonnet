@@ -27,11 +27,11 @@
     "type": "quant_exp_composed_lm",
     "use_in_seq2seq_mode": true,
     "decoder": {
-        "type": "quant_exp_searnn_decoder",
+        "type": "quant_exp_reinforce_decoder",
         "max_decoding_steps": 14,
         "generation_batch_size": 1024, 
-        "rollin_mode":  std.extVar("rollin_mode"),
-        "rollout_mode": std.extVar("rollout_mode"),
+        "rollin_mode": "teacher_forcing", 
+        "rollout_mode": "learned", 
         "decoder_net": {
             "type": "quant_exp_bias_lstm_cell",
             "decoding_dim": 256, 
@@ -49,7 +49,6 @@
         "rollout_cost_function": {
             "type": "hamming",
         },
-        "temperature": 1000,
     },
     "source_embedder": {
       "tokens": {
