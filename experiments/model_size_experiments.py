@@ -25,7 +25,7 @@ import json
 
 main_args, serialization_dir, param_path, experiment_id = initialize_experiments('model_size_experiments')
 model_sizes  = {
-    'xsmall' : (30, 30, 1),
+    'xsmall' : (10, 10, 1),
     'small': (100, 100, 1),
     'medium': (300, 300, 1),
     'large': (300, 1200, 1),
@@ -48,6 +48,9 @@ def model_size_experiments(model_sizes,
                                             'decoding_dim': model_tuple[0],
                                             'target_embedding_dim': model_tuple[1],
                                             'num_decoder_layers': model_tuple[2]
+                                        },
+                                        'target_embedder': {
+                                            'embedding_dim': model_tuple[1],
                                         }
                                     }
                                 }})
@@ -57,7 +60,8 @@ def model_size_experiments(model_sizes,
                 run_metrics = one_exp_run(serialization_dir=serialization_dir, 
                                             num_samples=num_samples,
                                             run=num_run, 
-                                            param_path=param_path)
+                                            param_path=param_path,
+                                            overides_func=lambda:overrides)
             
                 assert len(run_metrics) == 1, \
                     'For this experiment, there should only be one final metric object for a run.'
@@ -72,6 +76,6 @@ def model_size_experiments(model_sizes,
                                 'val_ppl': run_metrics['best_validation_perplexity'],
                                 'best_val_epoch': run_metrics['best_epoch']
                             }
-                wandb.log(result)
+                    wandb.log(result)
 
 model_size_experiments(model_sizes, num_samples_and_runs, main_args, serialization_dir, param_path)
