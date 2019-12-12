@@ -46,7 +46,7 @@ class ArtificialLanguageOracle(Oracle):
                  parallelize=True,
                  num_threads=64,
                  max_len=50,
-                 min_len=3):
+                 min_len=0):
         """ TODO (Kushal): Add function doc.
         """
         super(Oracle, self).__init__()
@@ -83,7 +83,7 @@ class ArtificialLanguageOracle(Oracle):
 
             return p_vocab
 
-        printables = [f"'{x}'" for x in string.printable[:-7] if x not in set(["'", '"'])]
+        printables = [f"'{x}'" for x in string.ascii_letters if x not in set(["'", '"'])]
         assert vocabulary_size <= len(printables)
         vocab = [printables[i] for i in range(vocabulary_size)]
         extended_vocab = ["'SOS'", "'EOS'"] + vocab
