@@ -36,6 +36,7 @@
         "sample_output": true,
         "start_token": "<S>",
         "end_token": "</S>",
+        "mask_pad_and_oov": true,
         "oracle": {
           "type": "artificial_lang_oracle",
           "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME"),
