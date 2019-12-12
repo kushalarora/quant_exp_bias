@@ -26,7 +26,7 @@ import json
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
 main_args, serialization_dir, param_path, experiment_id = initialize_experiments('vocabulary_size_experiments')
-vocabulary_sizes  = [6, 12, 24, 48, 90]
+vocabulary_sizes  = [6, 12, 24, 48]
 vocab_distributions = ['zipf', 'uniform']
 grammar_templates = ['grammar_templates/grammar_2.template', 'grammar_templates/grammar_1.template']
 
@@ -79,7 +79,7 @@ def vocabulary_size_experiments(grammar_vocab_size_and_dist,
                             'best_val_epoch': run_metrics['best_epoch'],
                             'grammar': grammar_template
                         }
-                wandb.log(result)
+                    wandb.log(result)
 
 vocabulary_size_experiments(grammar_vocab_size_and_dist, 
                             num_samples_and_runs, 
