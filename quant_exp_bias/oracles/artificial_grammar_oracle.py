@@ -69,7 +69,7 @@ class ArtificialLanguageOracle(Oracle):
     def generate_grammar_string(grammar_template_file: str,
                                  vocabulary_size: int,
                                  vocabulary_distribution: str,):
-        epsilon = 10**-10
+        epsilon = 10**-5
 
         def _get_vocab_prob(vsize, offset=0):
             if vocabulary_distribution == 'zipf':
