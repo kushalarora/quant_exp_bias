@@ -41,11 +41,13 @@
         "beam_size": 1,
         "use_bleu" : false,
         "sample_output": true,
+        "dropout": 0.2,
         "start_token": "<S>",
         "end_token": "</S>",
         "oracle": {
           "type": "gpt2_oracle",
-          "model_name": "gpt2-xl"
+          "model_name": "gpt2-xl",
+          "batch_size": 10,
         },
         "detokenizer": {
           "type": "gpt2_detokenizer",
@@ -61,7 +63,7 @@
       "max_instances_in_memory": 50000
   },
   "trainer": {
-    "num_epochs": 100,
+    "num_epochs": 30,
     "validation_metric": "-perplexity",
     "cuda_device" : 0,
     "optimizer": {
