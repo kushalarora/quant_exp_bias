@@ -8,6 +8,7 @@ from quant_exp_bias.oracles.oracle_base import Oracle
 import logging
 import torch
 import numpy 
+import math
 from functools import reduce
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -54,15 +55,15 @@ class ExposureBias(Metric):
         model_probs = []
 
         for i  in range(len(predictions)):
-            model_log_prob_i = predictions_losses[i]/len(predictions[i])
-            model_prob_i = torch.exp(model_log_prob_i)
+            model_log_prob_i = predictions_losses[i].item()/len(predictions[i])
+            model_prob_i = math.exp(model_log_prob_i)
             model_probs.append(model_prob_i)
 
         total_value = 0
         for i in range(batch_size):
             value = 0
             if oracle_probs[i] > 0:
-                value = torch.log(model_probs[i]/(oracle_probs[i] + 1e-45)).item()
+                value = math.log(model_probs[i]/(oracle_probs[i] + 1e-45))
                 if  numpy.isneginf(value) or numpy.isposinf(value):
                     # with a warning. 
                     logging.warn(f'{value}=log({model_probs[i]}/{oracle_probs[i]}) for {predictions[i]}.')
