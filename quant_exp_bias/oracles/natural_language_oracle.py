@@ -49,38 +49,37 @@ class NaturalLanguageOracle(Oracle):
     def compute_sent_probs(self, sequences: List[List[str]]):
         # TODO (Kushal): Try to figure out how to do this efficiently
         # by batching the inputs.
-        max_len = max([len(sequence) for sequence in sequences])
-        ids = [self.tokenizer.convert_tokens_to_ids(sequence) + [self.tokenizer.eos_token_id] * (max_len - len(sequence)) for sequence in sequences]
-        tensor_input = torch.tensor(ids).to(torch.cuda.current_device())
-        attention_mask = (tensor_input != self.tokenizer.eos_token_id).float().to(torch.cuda.current_device())
-        
         seq_batch_size = len(sequences)
         probs = []
 
         for i in range(0, seq_batch_size, self.batch_size):
-            inp = tensor_input[i:i+self.batch_size] if i + self.batch_size < len(sequences) else tensor_input[i:seq_batch_size]
-            mask = attention_mask[i:i+self.batch_size] if i + self.batch_size < len(sequences) else attention_mask[i:seq_batch_size]
-            
-            with torch.no_grad():
+            batch = sequences[i:i + self.batch_size] if i + self.batch_size < seq_batch_size else sequences[i:seq_batch_size]
+            bsize = self.batch_size if i + self.batch_size < len(sequences) else seq_batch_size - i
 
-                results =  model(inp, labels=inp, attention_mask=mask)
+            max_len = max([len(sequence) for sequence in batch])
+            ids = [self.tokenizer.convert_tokens_to_ids(sequence) + [self.tokenizer.eos_token_id] * (max_len - len(sequence)) for sequence in batch]
+            tensor_input = torch.tensor(ids).to(torch.cuda.current_device())
+            attention_mask = (tensor_input != self.tokenizer.eos_token_id).float().to(torch.cuda.current_device())
+
+            with torch.no_grad():
+                results =  self.model(tensor_input, labels=tensor_input, attention_mask=attention_mask)
                 logits = results[1]
-                labels = inp
+                labels = tensor_input
 
                 shift_logits = logits[..., :-1, :].contiguous()
                 shift_labels = labels[..., 1:].contiguous()
 
                 loss_batch_seq = F.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), 
                                                     shift_labels.view(-1),
-                                                    ignore_index = -1, reduction='none').view(self.batch_size, -1)
+                                                    ignore_index = -1, reduction='none').view(bsize, -1)
 
-                loss_batch_seq *=mask[:, 1:]
-                seq_sizes = mask.sum(dim=-1)
+                loss_batch_seq *=attention_mask[:, 1:]
+                seq_sizes = attention_mask.sum(dim=-1)
 
                 loss_batch = loss_batch_seq.sum(dim=-1)/seq_sizes
 
                 for j in range(self.batch_size):
-                    probs.append(math.exp(loss_batch[j].item()))
+                    probs.append(math.exp(-1 * loss_batch[j].item()))
 
         # for i, sequence in enumerate(sequences):
         #     tensor_input = torch.tensor([self.tokenizer.convert_tokens_to_ids(sequence)])
