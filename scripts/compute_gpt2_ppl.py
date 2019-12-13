@@ -19,7 +19,7 @@ else:
 # model = OpenAIGPTLMHeadModel.from_pretrained(model_name).to(torch.cuda.current_device())
 
 tokenizer = GPT2Tokenizer.from_pretrained(model_name)
-model = GPT2LMHeadModel.from_pretrained(model_name)#.to(torch.cuda.current_device())
+model = GPT2LMHeadModel.from_pretrained(model_name).to(torch.cuda.current_device())
 model.eval()
 loss = 0.
 count = 0
@@ -44,9 +44,9 @@ loss2 = 0.
 count2 = 0.
 max_len = max([len(sequence) for sequence in sequences])
 ids = [tokenizer.convert_tokens_to_ids(sequence) + [tokenizer.eos_token_id] * (max_len - len(sequence)) for sequence in sequences]
-tensor_input = torch.tensor(ids)#.to(torch.cuda.current_device())
-attention_mask = (tensor_input != tokenizer.eos_token_id).float()#.to(torch.cuda.current_device())
-batch_size = 100
+tensor_input = torch.tensor(ids).to(torch.cuda.current_device())
+attention_mask = (tensor_input != tokenizer.eos_token_id).float().to(torch.cuda.current_device())
+batch_size = 10
 import pdb;pdb.set_trace()
 
 for i in range(0, len(sequences), batch_size):
