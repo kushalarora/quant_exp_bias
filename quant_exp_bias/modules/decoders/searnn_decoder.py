@@ -306,8 +306,8 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         scattered_logits = torch.gather(input=logits, dim=-1, index=next_tokens)
         predictions = rollin_output_dict['predictions'].squeeze(1)
         loss_batch = rollout_output_dict['loss_batch']
+        output_dict = {'predictions': predictions.data.cpu()}
         if self._combiner_mode == 'kl':
-            output_dict = {'predictions': predictions}
 
             target_mask = util.get_text_field_mask(target_tokens)
             target_mask = target_mask[:, 1:].float()
@@ -332,5 +332,6 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
 
             return output_dict
         elif self._combiner_mode == 'mle':
-            return rollin_output_dict
-        return None
+            output_dict['loss'] = rollin_output_dict['loss']
+            return output_dict
+        return output_dict

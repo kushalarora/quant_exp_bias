@@ -494,16 +494,16 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             # like BLEU, or exposure bias.
             state = {}
             state.update(decoder_init_state)
-            output_dict.update(self.rollout(state, 
-                                            start_predictions, 
-                                            rollout_steps=num_decoding_steps,
-                                            rollout_mode='learned',
-                                            sampled=compute_exposure_bias,
-                                            truncate_at_end_all=False))
+            rollout_output_dict = self.rollout(state, 
+                                                start_predictions, 
+                                                rollout_steps=num_decoding_steps,
+                                                rollout_mode='learned',
+                                                sampled=compute_exposure_bias,
+                                                truncate_at_end_all=False)
 
             if target_tokens and self._rollout_cost_function:
                 # all beams.
-                top_k_predictions = output_dict["predictions"]
+                top_k_predictions = rollout_output_dict["predictions"]
                 # shape: (batch_size, max_predicted_sequence_length)
                 best_predictions = top_k_predictions[:, 0, :]
 
@@ -534,7 +534,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
 
             if target_tokens and self._bleu:
                 # shape: (batch_size, beam_size, max_sequence_length)
-                top_k_predictions = output_dict["predictions"]
+                top_k_predictions = rollout_output_dict["predictions"]
                 # shape: (batch_size, max_predicted_sequence_length)
                 best_predictions = top_k_predictions[:, 0, :]
 
@@ -543,7 +543,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
 
             if target_tokens and self._hamming:
                 # shape: (batch_size, beam_size, max_sequence_length)
-                top_k_predictions = output_dict["predictions"]
+                top_k_predictions = rollout_output_dict["predictions"]
                 # shape: (batch_size, max_predicted_sequence_length)
                 best_predictions = top_k_predictions[:, 0, :]
 
@@ -553,8 +553,8 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
 
             if compute_exposure_bias and self._exposure_bias:
                 # shape: (batch_size, beam_size, max_sequence_length)
-                top_k_predictions = output_dict["predictions"]
-                top_k_log_probabilities = output_dict["class_log_probabilities"]
+                top_k_predictions = rollout_output_dict["predictions"]
+                top_k_log_probabilities = rollout_output_dict["class_log_probabilities"]
                 # shape: (batch_size, max_predicted_sequence_length)
                 best_predictions = top_k_predictions[:, 0, :]
 
@@ -563,10 +563,10 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                                         vocab_namespace=self._target_namespace,
                                                         truncate=True)
 
-                self._exposure_bias(prediction_loss.data, predicted_tokens)
+                self._exposure_bias(prediction_loss.data.cpu(), predicted_tokens)
 
                 output_dict['predicted_tokens'] = predicted_tokens
-                output_dict['prediction_loss'] = prediction_loss
+                output_dict['prediction_loss'] = prediction_loss.data.cpu()
                 output_dict['predicted_sequences'] = self._detokenizer(predicted_tokens)
         return output_dict
 
@@ -649,7 +649,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         """
 
         # Here, we just do rollin for training and rollout for validation, so nothing to compute.
-        return rollin_output_dict
+        return {'loss': rollin_output_dict['loss']}
 
     def rollin(self,
                state: Dict[str, torch.Tensor],
