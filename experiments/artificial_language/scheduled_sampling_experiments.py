@@ -32,7 +32,8 @@ scheduled_sampling_ratios  = [
         ('linear', 1.0, 50), ('linear', 1.0, 100), ('linear', 1.0, 250), ('linear', 1.0, 500), ('linear', 1.0, 1000),  # Linearly increase ss ratio.
 ]
 
-num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
+# num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
+num_samples_and_runs = [(1000, 1), (10000,1), (100000,1)]
 
 # # Validation Experiments
 
