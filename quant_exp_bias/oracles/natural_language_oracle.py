@@ -18,7 +18,7 @@ class NaturalLanguageOracle(Oracle):
     def __init__(self, model_name="gpt2", 
                        parallelize=True,
                        num_threads=128, 
-                       cuda_device=-2,
+                       cuda_device=-1,
                        batch_size=10):
         super(Oracle, self).__init__()
         # self._parallelize = parallelize
