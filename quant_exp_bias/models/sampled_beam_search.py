@@ -37,11 +37,13 @@ class SampledBeamSearch:
                  end_index: int,
                  max_steps: int = 50,
                  beam_size: int = 10,
-                 per_node_beam_size: int = None) -> None:
+                 per_node_beam_size: int = None,
+                 temperature: float = 1) -> None:
         self._end_index = end_index
         self.global_max_steps = max_steps
         self.beam_size = beam_size
         self.per_node_beam_size = per_node_beam_size or beam_size
+        self.temperature = temperature
 
     def search(self,
                start_predictions: torch.Tensor,
@@ -101,14 +103,14 @@ class SampledBeamSearch:
 
         if beam_size is None:
             beam_size = self.beam_size
-        
+
         if per_node_beam_size is None:
             per_node_beam_size = self.per_node_beam_size
 
         if max_steps is None:
             max_steps = self.global_max_steps
 
-        # If max_step == 0, then just return with 
+        # If max_step == 0, then just return with
         assert max_steps > 0, "There should atlease be 1 step."
 
         batch_size = start_predictions.size()[0]
@@ -146,12 +148,16 @@ class SampledBeamSearch:
 
         # shape: (batch_size, beam_size), (batch_size, beam_size)
         if sampled:
-            start_predicted_classes = torch.multinomial(F.softmax(start_class_log_probabilities, dim=-1), beam_size)
+            # HACK: Add noise so that you can sample multiple predictions.
+            # Else, this leads error in case only one prediction is non zero. 
+            start_class_probabilities = F.softmax(start_class_log_probabilities/self.temperature, dim=-1) + \
+                                            10**-10 * start_class_log_probabilities.new_zeros(start_class_log_probabilities.shape).uniform_(0,1)
+            start_predicted_classes = torch.multinomial(start_class_probabilities, beam_size)
             start_top_log_probabilities = torch.gather(start_class_log_probabilities, 1, start_predicted_classes)
         else:
             start_top_log_probabilities, start_predicted_classes = \
                 start_class_log_probabilities.topk(beam_size)
-                    
+
         if truncate_at_end_all and beam_size == 1 and (start_predicted_classes == self._end_index).all():
             warnings.warn("Empty sequences predicted. You may want to increase the beam size or ensure "
                           "your step function is working properly.",
@@ -224,7 +230,11 @@ class SampledBeamSearch:
 
             # shape (both): (batch_size * beam_size, per_node_beam_size)
             if sampled:
-                predicted_classes = torch.multinomial(F.softmax(cleaned_log_probabilities, dim=-1), per_node_beam_size)
+                # HACK: Add noise so that you can sample multiple predictions.
+                # Else, this leads error in case only one prediction is non zero. 
+                cleaned_probabilities = F.softmax(cleaned_log_probabilities/self.temperature, dim=-1) + \
+                                            10**-10 * cleaned_log_probabilities.new_zeros(cleaned_log_probabilities.shape).uniform_(0,1)
+                predicted_classes = torch.multinomial(cleaned_probabilities, per_node_beam_size)
                 top_log_probabilities = torch.gather(cleaned_log_probabilities, 1, predicted_classes)
             else:
                 top_log_probabilities, predicted_classes = \
@@ -286,7 +296,7 @@ class SampledBeamSearch:
                         reshape(batch_size, beam_size, *last_dims).\
                         gather(1, expanded_backpointer).\
                         reshape(batch_size * beam_size, *last_dims)
-        
+
         if not torch.isfinite(last_log_probabilities).all():
             warnings.warn("Infinite log probabilities encountered. Some final sequences may not make sense. "
                           "This can happen when the beam size is larger than the number of valid (non-zero "
