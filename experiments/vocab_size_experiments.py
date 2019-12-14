@@ -30,7 +30,8 @@ vocabulary_sizes  = [6, 12, 24, 48]
 vocab_distributions = ['zipf', 'uniform']
 grammar_templates = ['grammar_templates/grammar_2.template', 'grammar_templates/grammar_1.template']
 
-num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
+# num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
+num_samples_and_runs = [(1000, 1), (10000,1), (100000,1)]
 
 # # Validation Experiments
 grammar_vocab_size_and_dist = [x for x in itertools.product(grammar_templates, vocabulary_sizes, vocab_distributions)]

@@ -31,7 +31,8 @@ model_sizes  = {
     'large': (300, 1200, 1),
     'xlarge': (300, 1200, 2)
     }
-num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
+# num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
+num_samples_and_runs = [(1000, 1), (10000,1), (100000,1)]
 
 def model_size_experiments(model_sizes,
                             num_samples_and_runs, 

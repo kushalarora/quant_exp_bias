@@ -24,7 +24,8 @@ import numpy as np
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
 main_args, serialization_dir, param_path, experiment_id = initialize_experiments('validation_experiments')
-num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
+# num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
+num_samples_and_runs = [(1000, 1), (10000,1), (100000,1)]
 
 
 # # Dataset Experiments

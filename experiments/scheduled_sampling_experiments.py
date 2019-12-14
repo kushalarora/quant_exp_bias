@@ -76,7 +76,7 @@ def scheduled_sampling_experiments(scheduled_sampling_ratios,
                             'final_ss_ratio': run_metrics['validation_ss_ratio'],
                             'best_val_ss_ratio': run_metrics['best_validation_ss_ratio']
                         }
-                wandb.log(result)
+                    wandb.log(result)
 
 scheduled_sampling_experiments(scheduled_sampling_ratios, 
                                 num_samples_and_runs,
