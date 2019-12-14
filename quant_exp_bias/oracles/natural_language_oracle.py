@@ -26,17 +26,18 @@ class NaturalLanguageOracle(Oracle):
         self._num_threads = num_threads
         # self._pool = Pool(self._num_threads)
 
-        # Load pre-trained model tokenizer (vocabulary)
-        self.tokenizer = GPT2Tokenizer.from_pretrained(model_name)
-
-        # Load pre-trained model (weights)
-        self.model = GPT2LMHeadModel.from_pretrained(model_name).to(torch.cuda.current_device())
-
-        self.device = None
+        self.device = "cpu"
         if cuda_device > 0:
             self.device = "cuda:{cuda_device}"
         elif cuda_device == -2:
             self.device = torch.cuda.current_device() 
+
+        # Load pre-trained model tokenizer (vocabulary)
+        self.tokenizer = GPT2Tokenizer.from_pretrained(model_name)
+
+        # Load pre-trained model (weights)
+        self.model = GPT2LMHeadModel.from_pretrained(model_name).to(self.device)
+
         self.batch_size = batch_size
         self.model.eval()
 
@@ -58,8 +59,8 @@ class NaturalLanguageOracle(Oracle):
 
             max_len = max([len(sequence) for sequence in batch])
             ids = [self.tokenizer.convert_tokens_to_ids(sequence) + [self.tokenizer.eos_token_id] * (max_len - len(sequence)) for sequence in batch]
-            tensor_input = torch.tensor(ids).to(torch.cuda.current_device())
-            attention_mask = (tensor_input != self.tokenizer.eos_token_id).float().to(torch.cuda.current_device())
+            tensor_input = torch.tensor(ids).to(self.device)
+            attention_mask = (tensor_input != self.tokenizer.eos_token_id).float().to(self.device)
 
             with torch.no_grad():
                 results =  self.model(tensor_input, labels=tensor_input, attention_mask=attention_mask)
