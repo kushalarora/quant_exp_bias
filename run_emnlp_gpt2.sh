@@ -12,7 +12,8 @@ source activate quant_exp
 
 export indir="results/natural_lang/emnlp_gpt2_$(date '+%Y_%m_%d_%H_%M')/"
 
-
+export TRAIN_FILE='data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered.2000000'
+export DEV_FILE='data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered.dev'
 set -eux
 
 python -u quant_exp_bias/run.py train training_configs/natural_lang/emnlp_news_gpt2.jsonnet -s ${indir}/train_output --include-package quant_exp_bias
