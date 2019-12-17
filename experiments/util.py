@@ -19,10 +19,22 @@ from quant_exp_bias.utils import get_args
 OverrideFuncType = Callable[[], Dict[str, Union[float, str, int]]]
 ExpBiasEpochsFuncType = Callable[[str], List[Tuple[int, str, str]]]
 
+def generate_grammar_file(serialization_dir:str,
+                            grammar_template: str='grammar_templates/grammar_2.template',
+                            vocabulary_size: int=6,
+                            vocabulary_distribution: str='uniform'):
+    grammar_string = ArtificialLanguageOracle.generate_grammar_string(grammar_template_file=grammar_template,
+                                                                        vocabulary_size=vocabulary_size, 
+                                                                        vocabulary_distribution=vocabulary_distribution)
+    os.makedirs(serialization_dir, exist_ok=True)
+    grammar_filename = os.path.join(serialization_dir, 'grammar.txt')
+    with open(grammar_filename, 'w') as f:
+        f.write(grammar_string)
+    os.environ["FSA_GRAMMAR_FILENAME"]  = grammar_filename
+    return grammar_filename
+
 def initialize_experiments(experiment_name: str, 
-                           grammar_template: str='grammar_templates/grammar_2.template',
-                           vocabulary_size: int=6,
-                           vocabulary_distribution: str='uniform'):
+                            is_natural_lang_exp: bool = False):
     # Ipython by default adds some arguments to sys.argv.
     #  We don't want those arguments, hence we pass [] here.
     #
@@ -37,17 +49,11 @@ def initialize_experiments(experiment_name: str,
     serialization_dir = os.path.join(main_args.output_dir, experiment_name, experiment_id)
     param_path = main_args.config
 
-    grammar_string = ArtificialLanguageOracle.generate_grammar_string(grammar_template_file=grammar_template,
-                                                                            vocabulary_size=vocabulary_size, 
-                                                                            vocabulary_distribution=vocabulary_distribution)
-    os.makedirs(serialization_dir, exist_ok=True)
-    grammar_filename = os.path.join(serialization_dir, 'grammar.txt')
-    with open(grammar_filename, 'w') as f:
-        f.write(grammar_string)
-    os.environ["FSA_GRAMMAR_FILENAME"]  = grammar_filename
-    os.environ['ARTIFICIAL_GRAMMAR_TRAIN'] = ""
-    os.environ['ARTIFICIAL_GRAMMAR_DEV'] = ""
+    if is_natural_lang_exp:
+        param_path = 'training_configs/natural_lang/emnlp_news_gpt2.jsonnet'
 
+    os.environ['TRAIN_FILE'] = ""
+    os.environ['DEV_FILE'] = ""
     wandb.init(project='quantifying_exposure_bias', 
                 name=experiment_name,
                 id=f'{experiment_name}-{experiment_id}', 
@@ -68,22 +74,31 @@ def one_exp_run(serialization_dir:str,
                 run:int, 
                 param_path:str,
                 overides_func:OverrideFuncType = default_overides_func,
-                exp_bias_epochs_func:ExpBiasEpochsFuncType = default_exp_bias_epochs_func):
+                exp_bias_epochs_func:ExpBiasEpochsFuncType = default_exp_bias_epochs_func,
+                sample_from_file=False,
+                dataset_filename=None):
     run_serialization_dir = os.path.join(serialization_dir, str(num_samples), str(run))
     overrides = overides_func()
+    sample_oracle_args=['sample-oracle', 
+                        param_path, 
+                        '-s', run_serialization_dir, 
+                        '-n', str(num_samples),
+                        '-o',  overrides]
+    
+    # We might want to sample from file, for example, in cases,
+    # where dataset is fixed. This is the case with natural language
+    # experiments.
+    if sample_from_file:
+        sample_oracle_args += ['-f', dataset_filename]
 
-    sample_oracle_args = get_args(args=['sample-oracle', 
-                                            param_path, 
-                                            '-s', run_serialization_dir, 
-                                            '-n', str(num_samples),
-                                            '-o',  overrides])
-    oracle_train_filename, oracle_dev_filename = sample_oracle_runner(sample_oracle_args, 
+    sample_oracle_args = get_args(args=sample_oracle_args)
+    oracle_train_filename, oracle_dev_filename = sample_oracle_runner(sample_oracle_args,
                                                                         run_serialization_dir)
 
-    os.environ['ARTIFICIAL_GRAMMAR_TRAIN'] = oracle_train_filename
-    os.environ['ARTIFICIAL_GRAMMAR_DEV'] = oracle_dev_filename
+    os.environ['TRAIN_FILE'] = oracle_train_filename
+    os.environ['DEV_FILE'] = oracle_dev_filename
 
-    train_args = get_args(args=['train' , 
+    train_args = get_args(args=['train', 
                                     param_path, 
                                     '-s', run_serialization_dir, 
                                     '-o',  overrides])
@@ -113,7 +128,7 @@ def one_exp_run(serialization_dir:str,
                                                                                 qeb_output_dir,
                                                                                 cuda_device=cuda_device,
                                                                                 weights_file=weights_file);
-        
+
         metrics['exp_biases'] = exp_biases
         metrics['exp_bias_mean'] = exp_bias_mean
         metrics['exp_bias_std'] = exp_bias_std

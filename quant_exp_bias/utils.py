@@ -69,7 +69,7 @@ def get_args(args: argparse.Namespace = None):
             "print-results": PrintResults(),
             "sample-oracle": SampleOracle(),
             "quantify-exposure-bias": QuantifyExposureBias()
-           
+            
     }
 
     for name, subcommand in subcommands.items():
@@ -87,9 +87,12 @@ def sample_oracle_runner(args: argparse.Namespace,
     serialization_dir = os.path.join(serialization_dir, 'data')
     params = Params.from_file(parameter_path, overrides)
     num_samples = num_samples or args.num_samples
+    dataset_filename = args.dataset_filename
     oracle_filename =  sample_oracle(params, 
                                      serialization_dir,
-                                     num_samples)
+                                     num_samples,
+                                     dataset_filename)
+
     oracle_train_filename = os.path.join(serialization_dir, 'oracle_samples-train.txt')
     oracle_dev_filename = os.path.join(serialization_dir, 'oracle_samples-dev.txt')
 
@@ -122,9 +125,9 @@ def train_runner(args: argparse.Namespace,
     # language use case, the pool workers hog memory and if not cleaned, 
     # the redundant pool workers retain the memory leading to memory leak
     # resulting in oom errors.
-    if model._decoder is not None and \
-            model._decoder._oracle is not None and \
-            model._decoder._oracle._pool is not None:
+    if getattr(model, '_decoder', None) is not None and \
+            getattr(model._decoder, '_oracle', None) is not None and \
+            getattr(model._decoder._oracle, '_pool', None) is not None:
                 model._decoder._oracle._pool.terminate()
                 model._decoder._oracle._pool.join()
                 time.sleep(2)

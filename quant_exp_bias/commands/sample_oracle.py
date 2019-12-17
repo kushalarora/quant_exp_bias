@@ -29,6 +29,7 @@ each training run.
 import argparse
 import logging
 import os
+import random
 
 from allennlp.commands.subcommand import Subcommand
 from allennlp.common.checks import ConfigurationError
@@ -64,6 +65,11 @@ class SampleOracle(Subcommand):
                                type=int,
                                default=10000,
                                help='Number of samples to draw from oracle for training.')
+        
+        subparser.add_argument('-f', '--dataset-filename',
+                                type=str,
+                                default=None,
+                                help='File from which the dataset should be sampled.')
 
         subparser.set_defaults(func=sample_oracle_from_args)
 
@@ -78,37 +84,24 @@ def sample_oracle_from_args(args: argparse.Namespace):
     overrides = args.overrides
     serialization_dir = args.serialization_dir
     num_samples = args.num_samples
+    dataset_filename = args.dataset_filename
 
     params = Params.from_file(parameter_path, overrides)
 
-    sample_oracle(params, serialization_dir, num_samples)
+    sample_oracle(params, serialization_dir, num_samples, dataset_filename)
 
 
 def sample_oracle(params: Params, 
                   serialization_dir: str, 
-                  num_samples: int) -> str:
-                  
+                  num_samples: int, 
+                  dataset_filename: str) -> str:
+
     prepare_environment(params)
-
-    model_oracle_params = params.get('model', {})
-    assert model_oracle_params is not None, \
-         "We should have specified model in configuration."
-    
-    oracle_params = model_oracle_params.get('oracle', {})
-
-    # This is to handle composed LM.
-    if not oracle_params:
-            decoder_params = model_oracle_params.get('decoder', {})
-            if decoder_params:
-                oracle_params = decoder_params.get('oracle', {})
-
-    assert oracle_params is not None, \
-        "Oracle should be specified in configuration."
 
     logger.info(f"Num Samples: {num_samples}")
     os.makedirs(serialization_dir, exist_ok=True)
     oracle_filename = os.path.join(serialization_dir, "oracle_samples.txt")
-  
+
     if os.path.isfile(oracle_filename):
        import time
        epoch_time = int(time.time())
@@ -116,11 +109,46 @@ def sample_oracle(params: Params,
        logger.warn(f"Oracle Sample file already exists at {oracle_filename}. Moving it to {move_path}")
        os.rename(oracle_filename, move_path)
 
-    oracle = Oracle.from_params(oracle_params)
+    if dataset_filename is not None:
+        # TODO (Kushal): Covert this to a generator.
+        filesize = 0
+        with open(dataset_filename) as dataset_file:
+            for line in dataset_file:
+                if len(line.strip()) > 0:
+                    filesize += 1
+
+            sampling_prob = float(num_samples + 100)/float(filesize)
+
+            oracle_sample_iterator = []
+            sample_count = 0
+            dataset_file.seek(0)
+            for line in dataset_file:
+                if random.random() < sampling_prob and \
+                    sample_count < num_samples:
+                    oracle_sample_iterator.append(line.strip())
+                    sample_count += 1
+    else:
+        model_oracle_params = params.get('model', {})
+        assert model_oracle_params is not None, \
+            "We should have specified model in configuration."
+
+        oracle_params = model_oracle_params.get('oracle', {})
+
+        # This is to handle composed LM.
+        if not oracle_params:
+                decoder_params = model_oracle_params.get('decoder', {})
+                if decoder_params:
+                    oracle_params = decoder_params.get('oracle', {})
+
+        assert oracle_params is not None, \
+            "Oracle should be specified in configuration."
+
+        oracle = Oracle.from_params(oracle_params)
+        oracle_sample_iterator = oracle.sample_training_set(num_samples)
 
     logger.info(f"writing the oracle samples to {oracle_filename}.")
     with open(oracle_filename, 'w') as oracle_file:
-        for sample in oracle.sample_training_set(num_samples):
+        for sample in oracle_sample_iterator:
             print(sample, file=oracle_file)
 
     logger.info("done creating oracle samples")
