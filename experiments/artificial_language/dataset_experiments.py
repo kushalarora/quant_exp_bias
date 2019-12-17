@@ -17,13 +17,15 @@ from allennlp.common.util import import_submodules
 import_submodules("quant_exp_bias")
 from quant_exp_bias.utils import (get_args, quantify_exposure_bias_runner, 
                   sample_oracle_runner, train_runner)
-from experiments.util import initialize_experiments, one_exp_run
+from experiments.util import initialize_experiments, generate_grammar_file, one_exp_run
 
 import json
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
-main_args, serialization_dir, param_path, experiment_id = initialize_experiments('dataset_experiments')
+main_args, serialization_dir, param_path, experiment_id = initialize_experiments('artificial_lang/dataset_experiments')
+generate_grammar_file(serialization_dir)
+
 dataset_experiments_params = [(100, 8), (1000,6) , (10000, 4), (100000, 2), (1000000, 1)]
 
 # # Validation Experiments

@@ -17,13 +17,15 @@ from allennlp.common.util import import_submodules
 import_submodules("quant_exp_bias")
 from quant_exp_bias.utils import (get_args, quantify_exposure_bias_runner, 
                   sample_oracle_runner, train_runner)
-from experiments.util import initialize_experiments, one_exp_run
+from experiments.util import initialize_experiments, generate_grammar_file, one_exp_run
 
 import json
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
-main_args, serialization_dir, param_path, experiment_id = initialize_experiments('scheduled_sampling_experiments')
+main_args, serialization_dir, param_path, experiment_id = initialize_experiments('artificial_lang/scheduled_sampling_experiments')
+generate_grammar_file(serialization_dir)
+
 scheduled_sampling_ratios  = [
         ('uniform', 0.0, -1), ('uniform', 0.1, -1), ('uniform', 0.25, -1), ('uniform', 0.5, -1), ('uniform', 1.0, -1),  # Fixed SS ratio
         ('quantized', 1.0, 50), ('quantized', 1.0, 100), ('quantized', 1.0, 250), ('quantized', 1.0, 500), ('quantized', 1.0, 1000),  # Linearly increase ss ratio.
