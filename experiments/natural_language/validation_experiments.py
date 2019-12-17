@@ -21,20 +21,29 @@ import glob
 import json
 import numpy as np
 
+import argparse
+parser = argparse.ArgumentParser(description='PyTorch Wikitext-2 RNN/LSTM Language Model')
+parser.add_argument('--num_samples', type=int, default=10000,
+                    help='Number of dataset samples to run this iteration for.')
+parser.add_argument('--num_runs', type=int, default=1,
+                    help='Number of runs for the given dataset size.')
+parser.add_argument('--all', action='store_true', help='Run All configurations mentioned below..')
+args = parser.parse_args()
+
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
 main_args, serialization_dir, param_path, experiment_id = initialize_experiments('natural_lang/validation_experiments',
                                                                                  is_natural_lang_exp=True)
-# num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
-num_samples_and_runs = [(1000, 1), (10000,1), (100000,1)]
-
+num_samples_and_runs = [(50000, 6), (500000, 4), (2000000, 2)]
 
 # # Dataset Experiments
 
-def validation_experiments(num_samples_and_runs, 
-                            main_args, 
-                            serialization_dir, 
-                            param_path):
+def validation_experiments(main_args,
+                            serialization_dir,
+                            param_path,
+                            num_samples,
+                            num_runs,
+                           ):
 
     overrides = json.dumps({'trainer': {'num_epochs': 50, 'patience': None}})
 
@@ -44,29 +53,31 @@ def validation_experiments(num_samples_and_runs,
             metrics_filename = f'metrics_epoch_{epoch}.json'
             yield (epoch, qeb_suffix, metrics_filename)
 
+    for run in range(num_runs):
+        run_metrics_list = one_exp_run(serialization_dir=serialization_dir, 
+                                        num_samples=num_samples,
+                                        run=run, 
+                                        param_path=param_path,
+                                        overides_func=lambda:overrides,
+                                        exp_bias_epochs_func=validation_exp_bias_epochs_func,
+                                        sample_from_file=True,
+                                        dataset_filename='data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered')
+        for run_metrics in run_metrics_list:
+            epoch = run_metrics['epoch']
+
+            for exp_bias_idx, exp_bias in enumerate(run_metrics['exp_biases']):
+                results = {
+                            'exp_bias': exp_bias, 
+                            'exp_bias_idx': exp_bias_idx,
+                            'val_ppl': run_metrics['validation_perplexity'],
+                            'epoch': epoch,
+                            'num_run': run,
+                            'num_samples': num_samples
+                        }
+
+                wandb.log(results)
+if args.all:
     for num_samples, num_runs in num_samples_and_runs:
-        for run in range(num_runs):
-            run_metrics_list = one_exp_run(serialization_dir=serialization_dir, 
-                                            num_samples=num_samples,
-                                            run=run, 
-                                            param_path=param_path,
-                                            overides_func=lambda:overrides,
-                                            exp_bias_epochs_func=validation_exp_bias_epochs_func,
-                                            sample_from_file=True,
-                                            dataset_filename='data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered')
-            for run_metrics in run_metrics_list:
-                epoch = run_metrics['epoch']
-
-                for exp_bias_idx, exp_bias in enumerate(run_metrics['exp_biases']):
-                    results = {
-                                'exp_bias': exp_bias, 
-                                'exp_bias_idx': exp_bias_idx,
-                                'val_ppl': run_metrics['validation_perplexity'],
-                                'epoch': epoch,
-                                'num_run': run,
-                                'num_samples': num_samples
-                            }
-
-                    wandb.log(results)
-
-validation_experiments(num_samples_and_runs, main_args, serialization_dir, param_path)
+        validation_experiments(main_args, serialization_dir, param_path, num_samples, num_runs)
+else:
+    validation_experiments(main_args, serialization_dir, param_path, args.num_samples, args.num_runs)
