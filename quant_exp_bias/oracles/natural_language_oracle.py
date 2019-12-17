@@ -15,9 +15,9 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 @Oracle.register('gpt2_oracle')
 class NaturalLanguageOracle(Oracle):
 
-    def __init__(self, model_name="gpt2", 
+    def __init__(self, model_name="gpt2",
                        parallelize=True,
-                       num_threads=128, 
+                       num_threads=128,
                        cuda_device=-1,
                        batch_size=10):
         super(Oracle, self).__init__()
@@ -30,7 +30,7 @@ class NaturalLanguageOracle(Oracle):
         if cuda_device > 0:
             self.device = "cuda:{cuda_device}"
         elif cuda_device == -2:
-            self.device = torch.cuda.current_device() 
+            self.device = torch.cuda.current_device()
 
         # Load pre-trained model tokenizer (vocabulary)
         self.tokenizer = GPT2Tokenizer.from_pretrained(model_name)
@@ -70,7 +70,7 @@ class NaturalLanguageOracle(Oracle):
                 shift_logits = logits[..., :-1, :].contiguous()
                 shift_labels = labels[..., 1:].contiguous()
 
-                loss_batch_seq = F.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), 
+                loss_batch_seq = F.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)),
                                                     shift_labels.view(-1),
                                                     ignore_index = -1, reduction='none').view(bsize, -1)
 
@@ -79,12 +79,7 @@ class NaturalLanguageOracle(Oracle):
 
                 loss_batch = loss_batch_seq.sum(dim=-1)/seq_sizes
 
-                for j in range(self.batch_size):
+                for j in range(bsize):
                     probs.append(math.exp(-1 * loss_batch[j].item()))
 
-        # for i, sequence in enumerate(sequences):
-        #     tensor_input = torch.tensor([self.tokenizer.convert_tokens_to_ids(sequence)])
-        #     with torch.no_grad():
-        #         loss = -1 * self.model(tensor_input, labels=tensor_input)[0]
-        #     probs.append(math.exp(loss.item()))  # perplexity
         return probs
