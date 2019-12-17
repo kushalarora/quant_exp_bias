@@ -10,8 +10,8 @@
       "start_tokens": ["<S>"],
       "end_tokens": ["</S>"]
     },
-    "train_data_path": std.extVar("ARTIFICIAL_GRAMMAR_TRAIN"),
-    "validation_data_path": std.extVar("ARTIFICIAL_GRAMMAR_DEV"), 
+    "train_data_path": std.extVar("TRAIN_FILE"),
+    "validation_data_path": std.extVar("DEV_FILE"),
     "model": {
       "type": "quant_exp_composed_lm",
       "use_in_seq2seq_mode": false,
