@@ -4,12 +4,12 @@ import sys
 import wandb
 
 from datetime import datetime
-from typing import Dict, List, Callable, Tuple, Union
+from typing import Dict, List, Callable, Tuple, Union, Any
 
 from allennlp.common import Params
 from allennlp.common.util import import_submodules
 import_submodules("quant_exp_bias")
-from quant_exp_bias.utils import (get_args, quantify_exposure_bias_runner, 
+from quant_exp_bias.utils import (get_args, quantify_exposure_bias_runner,
                   sample_oracle_runner, train_runner)
 
 from quant_exp_bias.oracles.artificial_grammar_oracle import ArtificialLanguageOracle
@@ -24,7 +24,7 @@ def generate_grammar_file(serialization_dir:str,
                             vocabulary_size: int=6,
                             vocabulary_distribution: str='uniform'):
     grammar_string = ArtificialLanguageOracle.generate_grammar_string(grammar_template_file=grammar_template,
-                                                                        vocabulary_size=vocabulary_size, 
+                                                                        vocabulary_size=vocabulary_size,
                                                                         vocabulary_distribution=vocabulary_distribution)
     os.makedirs(serialization_dir, exist_ok=True)
     grammar_filename = os.path.join(serialization_dir, 'grammar.txt')
@@ -76,7 +76,9 @@ def one_exp_run(serialization_dir:str,
                 overides_func:OverrideFuncType = default_overides_func,
                 exp_bias_epochs_func:ExpBiasEpochsFuncType = default_exp_bias_epochs_func,
                 sample_from_file=False,
-                dataset_filename=None):
+                dataset_filename=None,
+                exp_bias_inference_funcs:List[Tuple[str, Any, OverrideFuncType]] = [],
+               ):
     run_serialization_dir = os.path.join(serialization_dir, str(num_samples), str(run))
     overrides = overides_func()
     sample_oracle_args=['sample-oracle', 
@@ -84,7 +86,7 @@ def one_exp_run(serialization_dir:str,
                         '-s', run_serialization_dir, 
                         '-n', str(num_samples),
                         '-o',  overrides]
-    
+
     # We might want to sample from file, for example, in cases,
     # where dataset is fixed. This is the case with natural language
     # experiments.
@@ -104,6 +106,7 @@ def one_exp_run(serialization_dir:str,
                                     '-o',  overrides])
     trainer_params = Params.from_file(train_args.param_path, train_args.overrides)
     cuda_device = trainer_params['trainer']['cuda_device']
+
     train_model_serialization_dir = train_runner(train_args, 
                                                 run_serialization_dir);
 
@@ -118,19 +121,43 @@ def one_exp_run(serialization_dir:str,
         if epoch != -1:
             weights_file = os.path.join(train_model_serialization_dir, f'model_state_epoch_{epoch}.th')
 
-        qeb_args = get_args(args=['quantify-exposure-bias', 
-                                    archive_file, 
-                                    '--output-dir', qeb_output_dir, 
+        qeb_args = get_args(args=['quantify-exposure-bias',
+                                    archive_file,
+                                    '--output-dir', qeb_output_dir,
                                     '--weights-file', weights_file,
                                     '-o',  overrides])
-        exp_biases, exp_bias_mean, exp_bias_std = quantify_exposure_bias_runner(qeb_args, 
+        exp_biases, exp_bias_mean, exp_bias_std = quantify_exposure_bias_runner(qeb_args,
                                                                                 archive_file,
                                                                                 qeb_output_dir,
                                                                                 cuda_device=cuda_device,
-                                                                                weights_file=weights_file);
+                                                                                weights_file=weights_file,
+                                                                               )
 
         metrics['exp_biases'] = exp_biases
         metrics['exp_bias_mean'] = exp_bias_mean
         metrics['exp_bias_std'] = exp_bias_std
         metric_list.append(metrics)
+
+    for key, value, qeb_overides in exp_bias_inference_funcs():
+        metrics = {}
+
+        qeb_suffix = f"{key}_{value}"
+        qeb_output_dir = os.path.join(run_serialization_dir, 'exp_bias', qeb_suffix)
+
+        qeb_args = get_args(args=['quantify-exposure-bias',
+                                    archive_file,
+                                    '--output-dir', qeb_output_dir,
+                                    '-o', qeb_overides])
+
+        exp_biases, exp_bias_mean, exp_bias_std = quantify_exposure_bias_runner(qeb_args,
+                                                                                archive_file,
+                                                                                qeb_output_dir,
+                                                                                cuda_device=cuda_device);
+
+        metrics['exp_biases'] = exp_biases
+        metrics['exp_bias_mean'] = exp_bias_mean
+        metrics['exp_bias_std'] = exp_bias_std
+        metrics[key] = value
+        metric_list.append(metrics)
+
     return metric_list
