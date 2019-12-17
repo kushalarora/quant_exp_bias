@@ -15,8 +15,10 @@
         "do_lowercase": false,
       },
     },
-    "train_data_path": "data/emnlp_news/train.txt",
-    "validation_data_path": "data/emnlp_news/valid.txt",
+    // "train_data_path": "data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered.2000000",
+    // "validation_data_path": "data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered.dev",
+    "train_data_path": std.extVar("TRAIN_FILE"),
+    "validation_data_path": std.extVar("DEV_FILE"),
     "model": {
       "type": "quant_exp_composed_lm",
       "use_in_seq2seq_mode": false,
@@ -26,15 +28,15 @@
         "generation_batch_size": 32, 
         "decoder_net": {
           "type": "quant_exp_bias_lstm_cell",
-          "decoding_dim": 128, 
-          "target_embedding_dim": 128,
+          "decoding_dim": 1200, 
+          "target_embedding_dim": 400,
           # This doesn't seem to be working as of
           # now.
-          "num_decoder_layers": 2,
+          "num_decoder_layers": 1,
         },
         "target_embedder": {
           "vocab_namespace": "target_tokens",
-          "embedding_dim": 128,
+          "embedding_dim": 400,
         },
         "use_in_seq2seq_mode": false,
         "target_namespace": "target_tokens",
@@ -63,7 +65,7 @@
       "max_instances_in_memory": 50000
   },
   "trainer": {
-    "num_epochs": 30,
+    "num_epochs": 40,
     "validation_metric": "-perplexity",
     "cuda_device" : 0,
     "optimizer": {
