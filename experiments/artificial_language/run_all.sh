@@ -1,5 +1,7 @@
 !#/bin/sh
 
+set -eux
+
 # Dataset Experiments
 sbatch -J al_dse -t 1-00:00:00 ./launcher_basic.sh python -u experiments/artificial_language/dataset_experiments.py
 
