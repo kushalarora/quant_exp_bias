@@ -794,7 +794,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
 
             if target_prefixes is not None:
                 prefixes_length = target_prefixes.size(1)
-                step_targets = torch.cat([step_targets, targets], dim=-1)
+                step_targets = torch.cat([target_prefixes, step_targets], dim=-1)
 
         output_dict = {"predictions": step_predictions,
                        "logits": logits,
