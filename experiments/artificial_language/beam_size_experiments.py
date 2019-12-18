@@ -28,8 +28,6 @@ generate_grammar_file(serialization_dir, vocabulary_size=24)
 
 beam_sizes = [2,4,6]
 num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
-# num_samples_and_runs = [(1000, 1), (10000,1), (100000,1)]
-
 def beam_size_experiments(beam_sizes,
                             num_samples_and_runs,
                             main_args,

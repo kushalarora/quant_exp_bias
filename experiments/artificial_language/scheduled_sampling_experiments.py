@@ -28,19 +28,18 @@ generate_grammar_file(serialization_dir)
 
 scheduled_sampling_ratios  = [
         ('uniform', 0.0, -1), ('uniform', 0.1, -1), ('uniform', 0.25, -1), ('uniform', 0.5, -1), ('uniform', 1.0, -1),  # Fixed SS ratio
-        ('quantized', 1.0, 50), ('quantized', 1.0, 100), ('quantized', 1.0, 250), ('quantized', 1.0, 500), ('quantized', 1.0, 1000),  # Linearly increase ss ratio.
+        # ('quantized', 1.0, 50), ('quantized', 1.0, 100), ('quantized', 1.0, 250), ('quantized', 1.0, 500), ('quantized', 1.0, 1000),  # Linearly increase ss ratio.
         ('linear', 1.0, 50), ('linear', 1.0, 100), ('linear', 1.0, 250), ('linear', 1.0, 500), ('linear', 1.0, 1000),  # Linearly increase ss ratio.
 ]
 
 num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
 
-
 # # Validation Experiments
 
-def scheduled_sampling_experiments(scheduled_sampling_ratios, 
-                                    num_samples_and_runs, 
-                                    main_args, 
-                                    serialization_dir, 
+def scheduled_sampling_experiments(scheduled_sampling_ratios,
+                                    num_samples_and_runs,
+                                    main_args,
+                                    serialization_dir,
                                     param_path):
 
     orig_serialization_dir = serialization_dir
@@ -48,25 +47,25 @@ def scheduled_sampling_experiments(scheduled_sampling_ratios,
         serialization_dir = os.path.join(orig_serialization_dir, f'{ss_type}_{ss_ratio}_{ss_k}')
         overrides = json.dumps({'model': {
                                     'decoder': {
-                                        'scheduled_sampling_ratio': ss_ratio, 
+                                        'scheduled_sampling_ratio': ss_ratio,
                                         'scheduled_sampling_k': ss_k,
                                         'scheduled_sampling_type': ss_type},
                                     }
                                 })
         for num_samples, num_runs in num_samples_and_runs:
             for run in range(num_runs):
-                run_metrics = one_exp_run(serialization_dir=serialization_dir, 
+                run_metrics = one_exp_run(serialization_dir=serialization_dir,
                                             num_samples=num_samples,
-                                            run=run, 
-                                            param_path=param_path, 
+                                            run=run,
+                                            param_path=param_path,
                                             overides_func=lambda:overrides)
-            
+
                 assert len(run_metrics) == 1, \
                     'For this experiment, there should only be one final metric object for a run.'
                 run_metrics = run_metrics[0]
                 for exp_bias_idx, exp_bias in enumerate(run_metrics['exp_biases']):
                     result= {
-                            'exp_bias': exp_bias, 
+                            'exp_bias': exp_bias,
                             'exp_bias_idx': exp_bias_idx,
                             'scheduled_sampling_ratio': ss_ratio,
                             'scheduled_sampling_k': ss_k,
