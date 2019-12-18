@@ -221,7 +221,9 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             What to do is decided by rolling mode. Options are
                 - teacher_forcing,
                 - learned,
-                - scheduled-sampling.
+                - mixed,
+                - reference_tf,
+                - reference_l,
 
         Arguments:
             timestep {int} -- Current timestep decides which target token to use.
