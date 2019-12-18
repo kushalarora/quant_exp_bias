@@ -45,7 +45,7 @@ def validation_experiments(main_args,
                             num_runs,
                            ):
 
-    overrides = json.dumps({'trainer': {'num_epochs': 50, 'patience': None}})
+    overrides = json.dumps({'trainer': {'num_epochs': 20, 'patience': None}})
 
     def validation_exp_bias_epochs_func(train_model_serialization_dir):
         for epoch in range(len(glob.glob(os.path.join(train_model_serialization_dir + '/model_state_epoch_*.th')))):
