@@ -35,7 +35,7 @@ def beam_size_experiments(beam_sizes,
                             main_args,
                             serialization_dir,
                             param_path):
-    
+
     # Setup variables needed later.
     orig_serialization_dir = serialization_dir
     def qeb_beam_size_overrides_func():
@@ -58,7 +58,7 @@ def beam_size_experiments(beam_sizes,
                                             exp_bias_inference_funcs=qeb_beam_size_overrides_func,)
 
             for run_metrics in run_metrics_list:
-                beam_size = run_metrics['beam_size']
+                beam_size = run_metrics.get('beam_size', 1)
 
                 for exp_bias_idx, exp_bias in enumerate(run_metrics['exp_biases']):
                     result = {

@@ -36,14 +36,14 @@ args = parser.parse_args()
 main_args, serialization_dir, param_path, experiment_id = initialize_experiments('natural_lang/model_size_experiments',
                                                                                  is_natural_lang_exp=True)
 model_sizes  = {
-    # 'xsmall' : (100, 100, 1),
-    # 'small': (300, 300, 1),
-    # 'medium': (1200, 400, 1),
-    # 'large': (1200, 400, 2),
+    'xsmall' : (100, 100, 1),
+    'small': (300, 300, 1),
+    'medium': (1200, 400, 1),
+    'large': (1200, 400, 2),
     'xlarge': (1200, 400, 4)
     }
 # num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
-num_samples_and_runs = [(1000, 1), (10000,1), (100000,1)]
+num_samples_and_runs = [(50000, 4), (500000,2), (2000000,2)]
 
 def model_size_experiments(model_sizes,
                             main_args,

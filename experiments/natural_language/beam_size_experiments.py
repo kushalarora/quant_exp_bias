@@ -35,7 +35,7 @@ args = parser.parse_args()
 main_args, serialization_dir, param_path, experiment_id = initialize_experiments('natural_lang/beam_size_experiments',
                                                                                  is_natural_lang_exp=True)
 
-beam_sizes = [4] #[1,2,4,6]
+beam_sizes =[2,4,6]
 num_samples_and_runs = [(50000, 6), (500000,4), (2000000,2)]
 
 def beam_size_experiments(beam_sizes,
@@ -70,7 +70,7 @@ def beam_size_experiments(beam_sizes,
                                        )
 
         for run_metrics in run_metrics_list:
-            beam_size = run_metrics['beam_size']
+            beam_size = run_metrics.get('beam_size', 1)
 
             for exp_bias_idx, exp_bias in enumerate(run_metrics['exp_biases']):
                 result = {

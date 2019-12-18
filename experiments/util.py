@@ -26,7 +26,6 @@ def generate_grammar_file(serialization_dir:str,
     grammar_string = ArtificialLanguageOracle.generate_grammar_string(grammar_template_file=grammar_template,
                                                                         vocabulary_size=vocabulary_size,
                                                                         vocabulary_distribution=vocabulary_distribution)
-    os.makedirs(serialization_dir, exist_ok=True)
     grammar_filename = os.path.join(serialization_dir, 'grammar.txt')
     with open(grammar_filename, 'w') as f:
         f.write(grammar_string)
@@ -51,6 +50,8 @@ def initialize_experiments(experiment_name: str,
 
     if is_natural_lang_exp:
         param_path = 'training_configs/natural_lang/emnlp_news_gpt2.jsonnet'
+
+    os.makedirs(serialization_dir, exist_ok=True)
 
     os.environ['TRAIN_FILE'] = ""
     os.environ['DEV_FILE'] = ""
@@ -77,7 +78,7 @@ def one_exp_run(serialization_dir:str,
                 exp_bias_epochs_func:ExpBiasEpochsFuncType = default_exp_bias_epochs_func,
                 sample_from_file=False,
                 dataset_filename=None,
-                exp_bias_inference_funcs:List[Tuple[str, Any, OverrideFuncType]] = [],
+                exp_bias_inference_funcs:List[Tuple[str, Any, OverrideFuncType]] = lambda:[],
                ):
     run_serialization_dir = os.path.join(serialization_dir, str(num_samples), str(run))
     overrides = overides_func()
