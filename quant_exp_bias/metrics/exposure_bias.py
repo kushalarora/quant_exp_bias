@@ -7,7 +7,7 @@ from quant_exp_bias.oracles.oracle_base import Oracle
 
 import logging
 import torch
-import numpy 
+import numpy
 import math
 from functools import reduce
 
@@ -21,14 +21,14 @@ class ExposureBias(Metric):
     the metric for you, for instance, you can use this to report the average result using our
     ``Metric`` API.
     """
-    def __init__(self, 
+    def __init__(self,
                  oracle: Oracle) -> None:
         self._total_value = 0.0
         self._count = 0
         self._oracle = oracle
 
     @overrides
-    def __call__(self,                  
+    def __call__(self,
                  predictions_losses: torch.FloatTensor,
                  predictions: List[str]):
         """
@@ -40,7 +40,7 @@ class ExposureBias(Metric):
         filtered_predictions = []
         filtered_predictions_losses = []
 
-        # If it is an empty sequence or 1 word sequence, 
+        # If it is an empty sequence or 1 word sequence,
         # ignore it.
         for i, prediction in enumerate(predictions):
             if len(prediction) > 1:
@@ -65,15 +65,18 @@ class ExposureBias(Metric):
             if oracle_probs[i] > 0:
                 value = math.log(model_probs[i]/(oracle_probs[i] + 1e-45))
                 if  numpy.isneginf(value) or numpy.isposinf(value):
-                    # with a warning. 
+                    # with a warning.
                     logging.warn(f'{value}=log({model_probs[i]}/{oracle_probs[i]}) for {predictions[i]}.')
                     continue
             else:
                 logging.warn(f"Failed to parse prediction: {predictions[i]}. Model Prob: {model_probs[i]}")
                 continue
-                
+
             self._count += 1
             self._total_value += value
+
+        return predictions, model_probs, oracle_probs
+
     @overrides
     def get_metric(self, reset: bool = False):
         """

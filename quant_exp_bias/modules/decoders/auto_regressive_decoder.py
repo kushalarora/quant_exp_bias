@@ -564,9 +564,12 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                                         vocab_namespace=self._target_namespace,
                                                         truncate=True)
 
-                self._exposure_bias(prediction_loss.data.cpu(), predicted_tokens)
+                predicted_tokens, model_probs, oracle_probs = self._exposure_bias(prediction_loss.data.cpu(),
+                                                                                    predicted_tokens)
 
                 output_dict['predicted_tokens'] = predicted_tokens
+                output_dict['model_probs'] =model_probs
+                output_dict['oracle_probs'] = oracle_probs
                 output_dict['prediction_loss'] = prediction_loss.data.cpu()
                 output_dict['predicted_sequences'] = self._detokenizer(predicted_tokens)
         return output_dict

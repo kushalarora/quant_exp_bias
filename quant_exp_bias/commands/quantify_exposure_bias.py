@@ -56,6 +56,7 @@ import json
 import os
 import torch
 import numpy as np
+import math
 
 from allennlp.commands.subcommand import Subcommand
 from allennlp.common.util import prepare_environment
@@ -174,7 +175,7 @@ def quantify_exposure_bias(archive_file: str,
             # sample sentence length
             input_dict['generation_batch_size'] = num_samples_per_length
             output_dict = model(**input_dict)
-            
+
             metric_trial = model.get_metrics(reset=True, get_exposure_bias=True)
 
             for key, metric in metric_trial.items():
@@ -182,10 +183,13 @@ def quantify_exposure_bias(archive_file: str,
 
             exp_biases.append(metric_trial['exposure_bias'])
 
-        if output_dir_trail:                
+        if output_dir_trail:
             with open(os.path.join(output_dir_trail, 'generated.txt'), "w") as file:
-                for seq in output_dict['predicted_sequences']:
-                    print(seq, file=file)
+                for seq, model_prob, oracle_prob in zip(output_dict['predicted_sequences'],
+                                                        output_dict['model_probs'],
+                                                        output_dict['oracle_probs']):
+                    log_val = math.log(model_prob/(oracle_prob + 1e-45))
+                    print(f'{seq}\tlog({model_prob:.4f}|{oracle_prob:.4f})={log_val:.4f}', file=file)
 
     metrics = {
         'exposure_bias_mean': np.mean(exp_biases),
@@ -194,7 +198,7 @@ def quantify_exposure_bias(archive_file: str,
 
     with open(os.path.join(output_dir, 'metrics.json'), "w") as file:
         json.dump(metrics, file, indent=4)
-    
+
     logger.info("Exposure Bias Average:")
     logger.info("\t mean: %4.2f", metrics['exposure_bias_mean'])
     logger.info("\t std:  %4.2f", metrics['exposure_bias_std'])
