@@ -34,7 +34,9 @@ args = parser.parse_args()
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
 main_args, serialization_dir, param_path, experiment_id = initialize_experiments('natural_lang/scheduled_sampling_experiments',
-                                                                                 is_natural_lang_exp=True)
+                                                                                 param_path = 'training_configs/natural_lang/emnlp_news_gpt2.jsonnet',
+                                                                                )
+
 scheduled_sampling_ratios  = [
         ('uniform', 0.0, -1), ('uniform', 0.1, -1), ('uniform', 0.25, -1), ('uniform', 0.5, -1), ('uniform', 1.0, -1),  # Fixed SS ratio
         ('quantized', 1.0, 50), ('quantized', 1.0, 100), ('quantized', 1.0, 250), ('quantized', 1.0, 500), ('quantized', 1.0, 1000),  # Linearly increase ss ratio.

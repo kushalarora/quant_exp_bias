@@ -33,7 +33,8 @@ args = parser.parse_args()
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
 main_args, serialization_dir, param_path, experiment_id = initialize_experiments('natural_lang/beam_size_experiments',
-                                                                                 is_natural_lang_exp=True)
+                                                                                 param_path = 'training_configs/natural_lang/emnlp_news_gpt2.jsonnet',
+                                                                                )
 
 beam_sizes =[2,4,6]
 num_samples_and_runs = [(50000, 6), (500000,4), (2000000,2)]

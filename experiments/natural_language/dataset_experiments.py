@@ -33,7 +33,9 @@ args = parser.parse_args()
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
 main_args, serialization_dir, param_path, experiment_id = initialize_experiments('natural_lang/dataset_experiments',
-                                                                                 is_natural_lang_exp=True)
+                                                                                 param_path = 'training_configs/natural_lang/emnlp_news_gpt2.jsonnet',
+                                                                                )
+
 dataset_experiments_params = [(10000, 8), (50000, 6) , (500000, 4), (2000000, 2), (5000000, 1)]
 
 def dataset_experiments(main_args,

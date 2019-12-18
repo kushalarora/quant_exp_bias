@@ -33,7 +33,7 @@ def generate_grammar_file(serialization_dir:str,
     return grammar_filename
 
 def initialize_experiments(experiment_name: str, 
-                            is_natural_lang_exp: bool = False):
+                            param_path: str = None):
     # Ipython by default adds some arguments to sys.argv.
     #  We don't want those arguments, hence we pass [] here.
     #
@@ -46,10 +46,7 @@ def initialize_experiments(experiment_name: str,
 
     experiment_id = datetime.now().strftime("%m_%d_%Y_%H_%M_%S")
     serialization_dir = os.path.join(main_args.output_dir, experiment_name, experiment_id)
-    param_path = main_args.config
-
-    if is_natural_lang_exp:
-        param_path = 'training_configs/natural_lang/emnlp_news_gpt2.jsonnet'
+    param_path = param_path or main_args.config
 
     os.makedirs(serialization_dir, exist_ok=True)
 
