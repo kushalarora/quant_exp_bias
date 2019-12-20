@@ -55,7 +55,6 @@ def initialize_experiments(experiment_name: str,
     wandb.init(project='quantifying_exposure_bias', 
                 name=experiment_name,
                 id=f'{experiment_name}-{experiment_id}', 
-                dir=serialization_dir,
                 sync_tensorboard=False)
 
     return main_args, serialization_dir, param_path, experiment_id
