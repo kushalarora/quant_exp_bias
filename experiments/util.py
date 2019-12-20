@@ -137,7 +137,7 @@ def one_exp_run(serialization_dir:str,
         metric_list.append(metrics)
 
     for key, value, qeb_overides in exp_bias_inference_funcs():
-        metrics = {}
+        metrics = json.load(open(os.path.join(train_model_serialization_dir, metric_filename)))
 
         qeb_suffix = f"{key}_{value}"
         qeb_output_dir = os.path.join(run_serialization_dir, 'exp_bias', qeb_suffix)
