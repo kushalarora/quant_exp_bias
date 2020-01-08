@@ -42,7 +42,6 @@
           "type": "artificial_lang_oracle",
           "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME"),
           "parallelize": true,
-          "max_len": 30,
         },
         "rollout_cost_function": {
           "type": "noisy_oracle",
@@ -57,23 +56,29 @@
     "iterator": {
       "type": "bucket",
       "sorting_keys": [["target_tokens", "num_tokens"]],
-      "batch_size": 64,
+      "batch_size": 128,
       // This is needed stupidly for bucket iterator to work.
       "max_instances_in_memory": 50000
     },
     "trainer": {
       "num_epochs": 50,
       "cuda_device" : 0,
-      // "validation_metric": "-perplexity",
+      "validation_metric": "-perplexity",
       "optimizer": {
         "type": "adam",
-        "lr": 0.001
+        "lr": 0.01
       },
-    "learning_rate_scheduler": {
+      "learning_rate_scheduler": {
       "type": "exponential",
       "gamma": 0.99
-    },
-      /*"patience": 10,*/
+      },
+      // "learning_rate_scheduler": {
+      //     "type": "reduce_on_plateau",
+      //     "factor": 0.5,
+      //     "mode": "min",
+      //     "patience": 2
+      // },
+      "patience": 10,
       "should_log_learning_rate": true,
       "log_batch_size_period": 50,
       "num_serialized_models_to_keep": -1

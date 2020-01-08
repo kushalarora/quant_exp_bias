@@ -36,11 +36,11 @@ main_args, serialization_dir, param_path, experiment_id = initialize_experiments
                                                                                  param_path='training_configs/artificial_grammar/artificial_grammar_searnn.jsonnet')
 generate_grammar_file(serialization_dir)
 
-rollin_configs = ['learned', 'mixed', 'teacher_forcing', 'reference_tf', 'reference_l']
+rollin_configs = ['learned', 'mixed', 'teacher_forcing']
 rollout_configs = ['learned', 'mixed', 'reference']
 rollin_rollout_configs = [x for x in itertools.product(rollin_configs, rollout_configs)]
 
-num_samples_and_runs = [(1000, 6), (10000,4), (100000,2)]
+num_samples_and_runs = [(1000, 4), (10000,2), (100000,2)]
 
 def searnn_experiments(rollin_rollout_configs,
                             num_samples_and_runs,

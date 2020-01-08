@@ -96,10 +96,14 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
 
         self._temperature = temperature
 
+        self._rollout_mask = torch.tensor([self._padding_index, self._oov_index,
+                                self._start_index, self._end_index],
+                                device=torch.cuda.current_device())
+
     @overrides
     def _forward_loop(self,
                       state: Dict[str, torch.Tensor],
-                      start_predictions: torch.LongTensor, 
+                      start_predictions: torch.LongTensor,
                       num_decoding_steps,
                       target_tokens: Dict[str, torch.LongTensor] = None,
                      ) -> Dict[str, torch.Tensor]:
@@ -131,7 +135,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         # If num_tokens_to_rollout is not specified (default value: -1), consider all tokens for next step.
         num_tokens_to_rollout = self._num_tokens_to_rollout \
                                     if self._num_tokens_to_rollout > 0 else \
-                                        num_classes
+                                        num_classes - self._rollout_mask.size(0) # We do not want to rollout pad, oov, eos and sos tokens.
 
         def rollout_mixing_func():
             return torch.bernoulli(torch.ones(batch_size) * self._rollout_mixing_prob) \
@@ -156,17 +160,17 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                                 .unsqueeze(1) \
                                 .expand(batch_size, num_tokens_to_rollout, source_length, hidden_size) \
                                 .reshape(batch_size * num_tokens_to_rollout, source_length, hidden_size)
-            
+
             state['encoder_outputs'] = encoder_outputs
-            
+
         rollout_logits = []
         rollout_predictions = []
         next_tokens_list = []
-        
+
         # For SEARNN, we will have one extra step as we look at
-        # rollout happening given certain actions were taken. 
+        # rollout happening given certain actions were taken.
         # So, we extend targets by 1 to get cost for last action
-        # Which should ideally be a padding or end token. 
+        # Which should ideally be a padding or end token.
         targets_plus_1 = None
         if target_tokens is not None:
             # targets Shape: (batch_size, num_decoding_steps + 1)
@@ -178,8 +182,13 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         for step in range(1, num_decoding_steps + 1):
             rollout_steps = num_decoding_steps + 1 - step
 
-            _, searnn_next_step_tokens = torch.topk(rollin_logits[:, step - 1, :], 
-                                                    num_tokens_to_rollout, 
+            masked_step_logits = rollin_logits[:, step - 1, :] \
+                                    .scatter(dim=1,
+                                             index=self._rollout_mask.expand(rollin_logits.size(0), -1),
+                                             value=-1e30)
+
+            _, searnn_next_step_tokens = torch.topk(masked_step_logits,
+                                                    num_tokens_to_rollout,
                                                     dim=-1)
 
             searnn_next_step_tokens, _ = torch.sort(searnn_next_step_tokens)
@@ -204,7 +213,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
 
                 targets_step_onwards_expanded = targets_expanded[:, step:]
                 target_tokens_truncated = {'tokens': targets_step_onwards_expanded}
-                
+
                 # This is needed to compute the cost which are based on target
                 # such as BLEU score or hamming loss.
                 target_prefixes = targets_expanded[:, :step]
@@ -280,7 +289,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         # here is that sequence lengths keep shrinking.
 
         # This code computes mask from predicted tokens by observing
-        # first time eos token is produces. Everything after that is
+        # first time eos token is produced. Everything after that is
         # masked out.
         target_mask = util.get_text_field_mask(target_tokens)
         mask = predictions.new_ones(predictions.shape)

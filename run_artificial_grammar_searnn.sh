@@ -1,13 +1,13 @@
 set -eux
 
-export NUM_SAMPLES=10000
-export rollin_mode=${rollin_mode:='learned'}
+export NUM_SAMPLES=2000
+export rollin_mode=${rollin_mode:='teacher_forcing'}
 export rollout_mode=${rollout_mode:='reference'}
 
 export CONFIG_FILE=training_configs/artificial_grammar/artificial_grammar_searnn.jsonnet
 export indir="searnn_${rollin_mode}_${rollout_mode}/$(date '+%Y_%m_%d_%H_%M')/"
-#export FSA_GRAMMAR_FILENAME='grammar_templates/zipf_grammar_2_6.txt'
- export FSA_GRAMMAR_FILENAME='grammar_templates/default_grammar.txt'
+export FSA_GRAMMAR_FILENAME='grammar_templates/uniform_grammar_2_6.txt'
+ #export FSA_GRAMMAR_FILENAME='grammar_templates/default_grammar.txt'
 export TRAIN_FILE="results/artificial_grammar/${indir}/oracle_samples_train.txt"
 export DEV_FILE="results/artificial_grammar/${indir}/oracle_samples_dev.txt"
 
