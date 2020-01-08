@@ -227,12 +227,12 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
 
             # decoder_hidden: (batch_size * num_tokens_to_rollout, 1, hidden_state_size)
             state['decoder_hiddens'] = decoder_hidden_step_expanded.reshape(-1, 1,  hidden_size)
-            
+
             # decoder_context: (batch_size *  num_tokens_to_rollout, 1, hidden_state_size)
             state['decoder_contexts'] = decoder_context_step_expanded.reshape(-1, 1, hidden_size)
 
-            if self._rollin_mode == 'reference_tf' or \
-                self._rollin_mode == 'reference_l':
+            if self._rollin_mode == 'teacher_forcing' or \
+                self._rollin_mode == 'mixed':
                 prediction_prefixes = targets[:, :step] \
                                         .unsqueeze(1) \
                                         .expand(batch_size, num_tokens_to_rollout, step) \
@@ -247,7 +247,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                                             if step > 0 else None
 
             self._decoder_net._accumulate_hidden_states = False
-            
+
             rollout_output_dict = self.rollout(state, 
                                                 rollin_start_predictions, 
                                                 rollout_steps=rollout_steps,
@@ -257,29 +257,29 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                                                 target_prefixes=target_prefixes, 
                                                 truncate_at_end_all=False,
                                                 rollout_mixing_func=rollout_mixing_func)
-            
+
             rollout_output_dict['predictions'] = rollout_output_dict['predictions']\
                                                     .reshape(batch_size, num_tokens_to_rollout, -1)
 
             rollout_predictions.append(rollout_output_dict['predictions'].unsqueeze(1))
             rollout_output_dict['loss_batch'] =  rollout_output_dict['loss_batch'] \
                                                     .reshape(batch_size, 1, num_tokens_to_rollout)
-                                                    
+
             rollout_logits.append(rollout_output_dict['loss_batch'])
         rollout_output_dict['loss_batch'] = torch.cat(rollout_logits, dim=1)
         rollout_output_dict['predictions'] = torch.cat(rollout_predictions, dim=1)
         rollout_output_dict['next_tokens'] = torch.stack(next_tokens_list, dim=1)
         return rollin_output_dict, rollout_output_dict
 
-    # This code is dead for now. 
+    # This code is dead for now.
     # Leaving it here in case we need it.
     def _get_mask(self, predictions, target_tokens, loss_batch):
-        # SEARNN with KL might not produce the sequences that 
+        # SEARNN with KL might not produce the sequences that
         # match target sequence on length. This is especially true
         # with LM done with learned rollins. The pattern observed
         # here is that sequence lengths keep shrinking.
-        
-        # This code computes mask from predicted tokens by observing 
+
+        # This code computes mask from predicted tokens by observing
         # first time eos token is produces. Everything after that is
         # masked out.
         target_mask = util.get_text_field_mask(target_tokens)

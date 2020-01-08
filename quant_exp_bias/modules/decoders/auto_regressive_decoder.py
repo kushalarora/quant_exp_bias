@@ -222,8 +222,6 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 - teacher_forcing,
                 - learned,
                 - mixed,
-                - reference_tf,
-                - reference_l,
 
         Arguments:
             timestep {int} -- Current timestep decides which target token to use.
@@ -243,14 +241,12 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         if (timestep == 0 or
            # If no targets, no way to do teacher_forcing, so use your own predictions.
            target_tokens is None  or
-           rollin_mode == 'learned' or
-           rollin_mode == 'reference_l'):
+           rollin_mode == 'learned'):
             # shape: (batch_size,)
             return last_predictions
 
         targets = target_tokens['tokens']
-        if rollin_mode == 'teacher_forcing' or \
-           rollin_mode == 'reference_tf':
+        if rollin_mode == 'teacher_forcing':
             # shape: (batch_size,)
             input_choices = targets[:, timestep]
         elif rollin_mode == 'mixed':
