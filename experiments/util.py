@@ -149,7 +149,8 @@ def one_exp_run(serialization_dir:str,
         exp_biases, exp_bias_mean, exp_bias_std = quantify_exposure_bias_runner(qeb_args,
                                                                                 archive_file,
                                                                                 qeb_output_dir,
-                                                                                cuda_device=cuda_device);
+                                                                                cuda_device=cuda_device,
+                                                                                num_length_samples=40);
 
         metrics['exp_biases'] = exp_biases
         metrics['exp_bias_mean'] = exp_bias_mean

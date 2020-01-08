@@ -54,6 +54,7 @@ def beam_size_experiments(beam_sizes,
             overrides = json.dumps({'model':{
                                         'decoder': {
                                             'beam_size': beam_size,
+                                            'generation_batch_size': 30,
                                          },
                                     },
                                     'iterator':{

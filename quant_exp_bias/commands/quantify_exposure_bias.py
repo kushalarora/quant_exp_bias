@@ -146,24 +146,26 @@ def quantify_exposure_bias(archive_file: str,
     # Disable some of the more verbose logging statements
     logging.getLogger('allennlp.common.params').disabled = True
     logging.getLogger('allennlp.nn.initializers').disabled = True
-    
-    logger.info(f'Num Trials: {num_trials}')
-    logger.info(f'Num Length Samples: {num_length_samples}')
-    logger.info(f'Num Samples Per Length: {num_samples_per_length}')
 
     # Load from archive
     archive = load_archive(archive_file, cuda_device, overrides, weights_file)
     config = archive.config
     prepare_environment(config)
+    config = dict(config)
     model = archive.model
     model.eval()
 
     output_dir_trail = None
     exp_biases = []
     input_dict = { "compute_exposure_bias": True }
+    input_dict['generation_batch_size'] = config['model']['decoder'].get('generation_batch_size', num_samples_per_length)
+
+    logger.info(f'Num Trials: {num_trials}')
+    logger.info(f'Num Length Samples: {num_length_samples}')
+    logger.info(f'Num Samples Per Length: {input_dict["generation_batch_size"]}')
+
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
-
 
     logger.info("Metrics:")
     for trail_num in range(1, num_trials + 1):
@@ -173,7 +175,6 @@ def quantify_exposure_bias(archive_file: str,
 
         for _ in range(num_length_samples):
             # sample sentence length
-            input_dict['generation_batch_size'] = num_samples_per_length
             output_dict = model(**input_dict)
 
             metric_trial = model.get_metrics(reset=True, get_exposure_bias=True)
