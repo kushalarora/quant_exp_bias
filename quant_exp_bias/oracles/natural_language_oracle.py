@@ -19,7 +19,7 @@ class NaturalLanguageOracle(Oracle):
                        parallelize=True,
                        num_threads=128,
                        cuda_device=-1,
-                       batch_size=10):
+                       batch_size=None):
         super(Oracle, self).__init__()
         # self._parallelize = parallelize
 
@@ -52,10 +52,11 @@ class NaturalLanguageOracle(Oracle):
         # by batching the inputs.
         seq_batch_size = len(sequences)
         probs = []
+        batch_size = self.batch_size or seq_batch_size
 
-        for i in range(0, seq_batch_size, self.batch_size):
-            batch = sequences[i:i + self.batch_size] if i + self.batch_size < seq_batch_size else sequences[i:seq_batch_size]
-            bsize = self.batch_size if i + self.batch_size < len(sequences) else seq_batch_size - i
+        for i in range(0, seq_batch_size, batch_size):
+            batch = sequences[i:i + batch_size] if i + batch_size < seq_batch_size else sequences[i:seq_batch_size]
+            bsize = self.batch_size if i + batch_size < len(sequences) else seq_batch_size - i
 
             max_len = max([len(sequence) for sequence in batch])
             ids = [self.tokenizer.convert_tokens_to_ids(sequence) + [self.tokenizer.eos_token_id] * (max_len - len(sequence)) for sequence in batch]
