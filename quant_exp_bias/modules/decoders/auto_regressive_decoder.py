@@ -23,7 +23,7 @@ from quant_exp_bias.oracles.oracle_base import Oracle
 from quant_exp_bias.modules.decoders.seq_decoder import SeqDecoder
 from quant_exp_bias.modules.decoders.decoder_net import DecoderNet
 from quant_exp_bias.modules.cost_functions.cost_function import CostFunction
-from quant_exp_bias.modules.detokenizers.detokenizer import DeTokenizer
+from quant_exp_bias.modules.detokenizers.detokenizer import DeTokenizer, default_tokenizer
 
 from quant_exp_bias.metrics.hamming_loss import HammingLoss
 
@@ -35,12 +35,6 @@ RollinPolicyType = Callable[[int, torch.LongTensor, Optional[torch.LongTensor]],
 RolloutPolicyType = Callable[[torch.LongTensor, torch.LongTensor, Optional[torch.LongTensor]], torch.LongTensor]
 RolloutMixingProbFuncType = Callable[[], torch.Tensor]
 DeTokenizerType = Callable[[List[List[str]]], List[str]]
-
-def default_tokenizer(token_list_list: List[List[str]]):
-    str_list = []
-    for token_list in token_list_list:
-        str_list.append(' '.join(token_list))
-    return str_list
 
 @SeqDecoder.register("quant_exp_auto_regressive_seq_decoder")
 class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
