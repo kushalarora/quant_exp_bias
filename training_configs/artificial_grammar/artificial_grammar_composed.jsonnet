@@ -18,10 +18,9 @@
       "decoder": {
         "type": "quant_exp_auto_regressive_seq_decoder",
         "max_decoding_steps": 50,
-        "generation_batch_size": 32, 
         "decoder_net": {
           "type": "quant_exp_bias_lstm_cell",
-          "decoding_dim": 300, 
+          "decoding_dim": 300,
           "target_embedding_dim": 300,
         },
         "target_embedder": {

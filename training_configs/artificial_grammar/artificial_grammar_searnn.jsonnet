@@ -18,7 +18,7 @@
       "decoder": {
         "type": "quant_exp_searnn_decoder",
         "max_decoding_steps": 30,
-        "generation_batch_size": 32,
+        //"max_len": 50,
         "rollin_mode":  std.extVar("rollin_mode"),
         "rollout_mode": std.extVar("rollout_mode"),
         "decoder_net": {
@@ -38,10 +38,13 @@
         "sample_output": true,
         "start_token": "<S>",
         "end_token": "</S>",
+        // "mask_pad_and_oov": true,
         "oracle": {
           "type": "artificial_lang_oracle",
           "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME"),
           "parallelize": true,
+          "max_len": 30,
+          //"max_len": 50,
         },
         "rollout_cost_function": {
           "type": "noisy_oracle",
@@ -57,6 +60,7 @@
       "type": "bucket",
       "sorting_keys": [["target_tokens", "num_tokens"]],
       "batch_size": 128,
+
       // This is needed stupidly for bucket iterator to work.
       "max_instances_in_memory": 50000
     },
@@ -69,8 +73,8 @@
         "lr": 0.01
       },
       "learning_rate_scheduler": {
-      "type": "exponential",
-      "gamma": 0.99
+        "type": "exponential",
+        "gamma": 0.99
       },
       // "learning_rate_scheduler": {
       //     "type": "reduce_on_plateau",
