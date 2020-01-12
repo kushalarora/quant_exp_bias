@@ -19,17 +19,18 @@ from quant_exp_bias.modules.decoders.auto_regressive_decoder import QuantExpAuto
 from quant_exp_bias.modules.decoders.seq_decoder import SeqDecoder
 from quant_exp_bias.modules.cost_functions.cost_function import CostFunction
 from quant_exp_bias.modules.cost_functions.noise_oracle_likelihood_cost_function import NoiseOracleCostFunction
+from quant_exp_bias.modules.detokenizers.detokenizer import DeTokenizer, default_tokenizer
 
 @SeqDecoder.register("quant_exp_reinforce_decoder")
 class QuantExpReinforceDecoder(QuantExpAutoRegressiveSeqDecoder):
 
-    def __init__(self, 
+    def __init__(self,
                  vocab: Vocabulary,
                  max_decoding_steps: int,
-                 generation_batch_size: int,
                  decoder_net: DecoderNet,
                  target_embedder: Embedding,
                  use_in_seq2seq_mode: bool = False,
+                 generation_batch_size: int = 32,
                  target_namespace: str = "tokens",
                  beam_size: int = None,
                  scheduled_sampling_ratio: float = 0.,
@@ -40,17 +41,17 @@ class QuantExpReinforceDecoder(QuantExpAutoRegressiveSeqDecoder):
                  use_bleu: bool = False,
                  use_hamming: bool = False,
                  dropout: float = None,
-                 sample_output: bool = False, 
+                 sample_output: bool = False,
                  start_token: str =START_SYMBOL,
                  end_token: str = END_SYMBOL,
                  num_decoder_layers: int = 1,
                  mask_pad_and_oov: bool = True,
                  tie_output_embedding: bool = False,
                  label_smoothing_ratio: Optional[float] = None,
-                 
+
                  oracle: Oracle = None,
                  rollout_cost_function: CostFunction = None,
-                 rollin_steps: int = 50, 
+                 rollin_steps: int = 50,
                  rollin_rollout_combination_mode='rl',
                  rollout_mixing_prob: float = 0.5,
                  num_tokens_to_rollout:int = -1,
@@ -72,7 +73,7 @@ class QuantExpReinforceDecoder(QuantExpAutoRegressiveSeqDecoder):
                          rollout_mode=rollout_mode,
                          use_bleu=use_bleu,
                          dropout=dropout,
-                         sample_output=sample_output, 
+                         sample_output=sample_output,
                          start_token=start_token,
                          end_token=end_token,
                          num_decoder_layers=num_decoder_layers,
@@ -83,6 +84,7 @@ class QuantExpReinforceDecoder(QuantExpAutoRegressiveSeqDecoder):
                          rollout_cost_function=rollout_cost_function,
                          rollin_rollout_combination_mode=rollin_rollout_combination_mode,
                          rollout_mixing_prob=rollout_mixing_prob,
+                         detokenizer: DeTokenizer = default_tokenizer,
                         )
 
         self._rollin_steps = rollin_steps
