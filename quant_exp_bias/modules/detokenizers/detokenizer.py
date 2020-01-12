@@ -21,3 +21,11 @@ class DeTokenizer(Registrable):
         detokenized_str : ``str``
         """
         raise NotImplementedError
+
+
+
+def default_tokenizer(token_list_list: List[List[str]]):
+    str_list = []
+    for token_list in token_list_list:
+        str_list.append(' '.join(token_list))
+    return str_list
