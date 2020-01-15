@@ -51,7 +51,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                  rollout_cost_function: CostFunction = None,
                  rollin_steps: int = 50,
                  rollin_rollout_combination_mode='kl',
-                 rollout_mixing_prob: float = 0.8,
+                 rollout_mixing_prob: float = 0.5,
                  num_tokens_to_rollout:int = -1,
                  detokenizer: DeTokenizer = default_tokenizer,
                  temperature: int = 1,
@@ -100,7 +100,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
 
         self._temperature = temperature
 
-        self._rollout_mask = torch.tensor([self._padding_index, self._start_index, self._end_index],
+        self._rollout_mask = torch.tensor([self._padding_index, self._start_index],
                                 device=torch.cuda.current_device())
 
         self._num_random_to_add = num_random_to_add
@@ -187,16 +187,20 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         for step in range(1, num_decoding_steps + 1):
             rollout_steps = num_decoding_steps + 1 - step
 
+            # Do not select masked tokens and always select target token and end of sentence token.
+            # This will set masked tokens values to be really low and
+            # selected tokens value to be really high.
+            # So that topk or sampling doesn't return masked values and always returns selected values.
+
             masked_step_logits = rollin_logits[:, step - 1, :] \
-                                    # Do not select masked tokens. 
-                                    # This will set their values to be really low
-                                    # So that topk or sampling doesn't return those values.
                                     .scatter(dim=1,
                                              index=self._rollout_mask.expand(rollin_logits.size(0), -1),
                                              value=-1e2) \
-                                    # Always select target token. 
                                     .scatter_(dim=1,
                                               index=targets[:, step].unsqueeze(1),
+                                              value=1e3) \
+                                    .scatter_(dim=1,
+                                              index=self._rollout_mask.new_zeros((rollin_logits.size(0), 1)).fill_(self._end_index),
                                               value=1e3)
 
             if self._num_random_to_add > 0:
@@ -346,6 +350,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
 
             x = F.log_softmax(scattered_logits, dim=-1)
             y = F.softmax(-1 * self._temperature * loss_batch, dim=-1)
+
             kl_losses = self._combiner_loss(x, y).sum(dim=-1)
             kl_loss_batch = (kl_losses * target_mask).sum(dim=non_batch_dims)
 
