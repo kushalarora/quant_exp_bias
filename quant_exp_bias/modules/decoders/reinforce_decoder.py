@@ -57,6 +57,7 @@ class QuantExpReinforceDecoder(QuantExpAutoRegressiveSeqDecoder):
                  num_tokens_to_rollout:int = -1,
                  num_mle_iters: int = 1000,
                  rollin_rollout_mixing_coeff:float = 0.5,
+                 detokenizer: DeTokenizer = default_tokenizer,
                 ) -> None:
         super().__init__(vocab=vocab,
                          max_decoding_steps=max_decoding_steps,
@@ -84,7 +85,6 @@ class QuantExpReinforceDecoder(QuantExpAutoRegressiveSeqDecoder):
                          rollout_cost_function=rollout_cost_function,
                          rollin_rollout_combination_mode=rollin_rollout_combination_mode,
                          rollout_mixing_prob=rollout_mixing_prob,
-                         detokenizer: DeTokenizer = default_tokenizer,
                         )
 
         self._rollin_steps = rollin_steps
