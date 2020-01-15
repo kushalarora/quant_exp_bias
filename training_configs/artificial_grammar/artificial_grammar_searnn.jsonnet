@@ -17,8 +17,9 @@
       "use_in_seq2seq_mode": false,
       "decoder": {
         "type": "quant_exp_searnn_decoder",
-        "max_decoding_steps": 30,
-        //"max_len": 50,
+        "max_decoding_steps": 50,
+        //"max_decoding_steps": 30,
+
         "rollin_mode":  std.extVar("rollin_mode"),
         "rollout_mode": std.extVar("rollout_mode"),
         "decoder_net": {
@@ -38,13 +39,13 @@
         "sample_output": true,
         "start_token": "<S>",
         "end_token": "</S>",
-        // "mask_pad_and_oov": true,
+        "mask_pad_and_oov": true,
         "oracle": {
           "type": "artificial_lang_oracle",
           "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME"),
           "parallelize": true,
-          "max_len": 30,
-          //"max_len": 50,
+          //"max_len": 30,
+          "max_len": 50,
         },
         "rollout_cost_function": {
           "type": "noisy_oracle",
@@ -59,7 +60,7 @@
     "iterator": {
       "type": "bucket",
       "sorting_keys": [["target_tokens", "num_tokens"]],
-      "batch_size": 128,
+      "batch_size": 64,
 
       // This is needed stupidly for bucket iterator to work.
       "max_instances_in_memory": 50000
@@ -67,21 +68,21 @@
     "trainer": {
       "num_epochs": 50,
       "cuda_device" : 0,
-      "validation_metric": "-perplexity",
+      // "validation_metric": "-perplexity",
       "optimizer": {
         "type": "adam",
         "lr": 0.01
       },
-      "learning_rate_scheduler": {
-        "type": "exponential",
-        "gamma": 0.99
-      },
       // "learning_rate_scheduler": {
-      //     "type": "reduce_on_plateau",
-      //     "factor": 0.5,
-      //     "mode": "min",
-      //     "patience": 2
+      //   "type": "exponential",
+      //   "gamma": 0.99
       // },
+      "learning_rate_scheduler": {
+          "type": "reduce_on_plateau",
+          "factor": 0.5,
+          "mode": "min",
+          "patience": 2
+      },
       "patience": 10,
       "should_log_learning_rate": true,
       "log_batch_size_period": 50,
