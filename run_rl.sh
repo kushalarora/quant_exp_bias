@@ -19,4 +19,4 @@ tail -n $((${NUM_SAMPLES} / 10)) results/artificial_grammar/${indir}/oracle_samp
 
 
 python quant_exp_bias/run.py train  ${CONFIG_FILE} -s results/artificial_grammar/${indir}/"train_output" --include-package quant_exp_bias
-python quant_exp_bias/run.py quantify-exposure-bias results/artificial_grammar/${indir}/"train_output/model.tar.gz" --include-package quant_exp_bias --cuda-device 0 --output-dir results/artificial_grammar/${indir}/exp_bias/ --num-trials 20 
+python quant_exp_bias/run.py quantify-exposure-bias results/artificial_grammar/${indir}/"train_output/model.tar.gz" results/artificial_grammar/${indir}/oracle_samples_dev.txt --include-package quant_exp_bias --cuda-device 0 --output-dir results/artificial_grammar/${indir}/exp_bias/ --num-trials 20 

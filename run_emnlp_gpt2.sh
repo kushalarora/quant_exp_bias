@@ -17,4 +17,4 @@ export DEV_FILE='data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered.dev'
 set -eux
 
 python -u quant_exp_bias/run.py train training_configs/natural_lang/emnlp_news_gpt2.jsonnet -s ${indir}/train_output --include-package quant_exp_bias
-python quant_exp_bias/run.py  quantify-exposure-bias ${indir}/train_output/model.tar.gz   --include-package quant_exp_bias --cuda-device 0 --output-dir ${indir}/exp_bias/  --num-trials 20
+python quant_exp_bias/run.py  quantify-exposure-bias ${indir}/train_output/model.tar.gz data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered.dev --include-package quant_exp_bias --cuda-device 0 --output-dir ${indir}/exp_bias/  --num-trials 20
