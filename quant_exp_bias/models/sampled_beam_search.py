@@ -150,8 +150,8 @@ class SampledBeamSearch:
         if sampled:
             # HACK: Add noise so that you can sample multiple predictions.
             # Else, this leads error in case only one prediction is non zero. 
-            start_class_probabilities = F.softmax(start_class_log_probabilities/self.temperature, dim=-1) + \
-                                            10**-10 * start_class_log_probabilities.new_zeros(start_class_log_probabilities.shape).uniform_(0,1)
+            start_class_probabilities = torch.exp(start_class_log_probabilities/self.temperature) + \
+                                            10**-20 * start_class_log_probabilities.new_zeros(start_class_log_probabilities.shape).uniform_(0,1)
             start_predicted_classes = torch.multinomial(start_class_probabilities, beam_size)
             start_top_log_probabilities = torch.gather(start_class_log_probabilities, 1, start_predicted_classes)
         else:
@@ -232,8 +232,8 @@ class SampledBeamSearch:
             if sampled:
                 # HACK: Add noise so that you can sample multiple predictions.
                 # Else, this leads error in case only one prediction is non zero. 
-                cleaned_probabilities = F.softmax(cleaned_log_probabilities/self.temperature, dim=-1) + \
-                                            10**-10 * cleaned_log_probabilities.new_zeros(cleaned_log_probabilities.shape).uniform_(0,1)
+                cleaned_probabilities = torch.exp(cleaned_log_probabilities/self.temperature) + \
+                                            10**-20 * cleaned_log_probabilities.new_zeros(cleaned_log_probabilities.shape).uniform_(0,1)
                 predicted_classes = torch.multinomial(cleaned_probabilities, per_node_beam_size)
                 top_log_probabilities = torch.gather(cleaned_log_probabilities, 1, predicted_classes)
             else:
