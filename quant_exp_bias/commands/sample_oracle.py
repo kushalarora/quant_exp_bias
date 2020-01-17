@@ -110,7 +110,7 @@ def sample_oracle(params: Params,
        os.rename(oracle_filename, move_path)
 
     if dataset_filename is not None:
-        # TODO (Kushal): Covert this to a generator.
+        # TODO (Kushal): Convert this to a generator.
         filesize = 0
         with open(dataset_filename) as dataset_file:
             for line in dataset_file:
