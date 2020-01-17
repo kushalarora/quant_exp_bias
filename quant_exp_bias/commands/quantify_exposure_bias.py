@@ -49,7 +49,7 @@ and report any metrics calculated by the model.
       --include-package INCLUDE_PACKAGE
                             additional packages to include
 """
-from typing import Dict, Any
+from typing import Dict, Any, List
 import argparse
 import logging
 import json
@@ -57,16 +57,23 @@ import os
 import torch
 import numpy as np
 import math
+import random
 
 from allennlp.commands.subcommand import Subcommand
 from allennlp.common.util import prepare_environment
 from allennlp.common.checks import ConfigurationError, check_for_gpu
+from allennlp.common.tqdm import Tqdm
+from allennlp.common import Params
 
+from allennlp.data.dataset_readers.dataset_reader import DatasetReader
+from allennlp.data.instance import Instance
+
+from allennlp.data.iterators import DataIterator
 
 from allennlp.models.archival import load_archive
 from allennlp.models.model import Model
 from allennlp.training.util import evaluate
-from allennlp.common import Params
+from allennlp.nn import util as nn_util
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -81,6 +88,10 @@ class QuantifyExposureBias(Subcommand):
         subparser.add_argument('archive_file', 
                                type=str, 
                                help='path to an archived trained model')
+        
+        subparser.add_argument("input_file", 
+                               type=str, 
+                               help="Path to the test file used for samples from oracle part.")
 
         subparser.add_argument('--output-dir', 
                                required=True,
@@ -99,7 +110,7 @@ class QuantifyExposureBias(Subcommand):
 
         subparser.add_argument('--num-samples-per-length',
                                  type=int,
-                                 default=200,
+                                 default=1024,
                                  help='Number of samples to draw from $w_{1}^{n}~p$ for approximating expectation.')
 
         subparser.add_argument('--num-length-samples',
@@ -127,6 +138,7 @@ class QuantifyExposureBias(Subcommand):
 
 def quantify_exposure_bias_from_args(args: argparse.Namespace) -> Dict[str, Any]:
     return quantify_exposure_bias(archive_file=args.archive_file,
+                                 input_file=args.input_file,
                                  output_dir=args.output_dir,
                                  num_trials=args.num_trials,
                                  num_length_samples=args.num_length_samples,
@@ -136,6 +148,7 @@ def quantify_exposure_bias_from_args(args: argparse.Namespace) -> Dict[str, Any]
                                  weights_file=args.weights_file)
 
 def quantify_exposure_bias(archive_file: str,
+                           input_file: str,
                            output_dir: str,
                            num_trials: int = 5,
                            num_length_samples: int = 50,
@@ -154,6 +167,23 @@ def quantify_exposure_bias(archive_file: str,
     config = dict(config)
     model = archive.model
     model.eval()
+
+    # Try to use the validation dataset reader if there is one - otherwise fall back
+    # to the default dataset_reader used for both training and validation.
+    validation_dataset_reader_params = config.pop("validation_dataset_reader", None)
+    if validation_dataset_reader_params is not None:
+        dataset_reader = DatasetReader.from_params(validation_dataset_reader_params)
+    else:
+        dataset_reader = DatasetReader.from_params(config.pop("dataset_reader"))
+    
+    logger.info("Reading test data from %s", input_file)
+    instances = dataset_reader.read(input_file)
+    
+    iterator_params = config.pop("validation_iterator", None)
+    if iterator_params is None:
+        iterator_params = config.pop("iterator")
+    data_iterator = DataIterator.from_params(iterator_params)
+    data_iterator.index_with(model.vocab)
 
     output_dir_trail = None
     exp_biases = []
@@ -175,6 +205,12 @@ def quantify_exposure_bias(archive_file: str,
 
         for _ in range(num_length_samples):
             # sample sentence length
+            sampled_instances = _sample_instances(instances, input_dict['generation_batch_size'])
+
+            test_batch = data_iterator(sampled_instances, num_epochs=1, shuffle=False).__next__()
+            test_batch = nn_util.move_to_device(test_batch, cuda_device)
+            input_dict.update(test_batch)
+            
             output_dict = model(**input_dict)
 
             metric_trial = model.get_metrics(reset=True, get_exposure_bias=True)
@@ -201,7 +237,17 @@ def quantify_exposure_bias(archive_file: str,
         json.dump(metrics, file, indent=4)
 
     logger.info("Exposure Bias Average:")
-    logger.info("\t mean: %4.2f", metrics['exposure_bias_mean'])
-    logger.info("\t std:  %4.2f", metrics['exposure_bias_std'])
+    logger.info("\t mean: %5.3f", metrics['exposure_bias_mean'])
+    logger.info("\t std:  %5.3f", metrics['exposure_bias_std'])
     logger.info("Done!!")
     return exp_biases, metrics['exposure_bias_mean'], metrics['exposure_bias_std']
+
+
+def _sample_instances(instances:List[Instance], sample_size: int):
+    total_num_instances = len(instances)
+    sampled_instances = []
+
+    for instance in instances:
+        if random.random() < float(sample_size)/total_num_instances:
+            sampled_instances.append(instance)
+    return sampled_instances

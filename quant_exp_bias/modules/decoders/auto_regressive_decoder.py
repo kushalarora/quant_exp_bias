@@ -447,7 +447,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         # In case we have target_tokens, roll-in and roll-out
         # only till those many steps, otherwise we roll-out for
         # `self._max_decoding_steps`.
-        if target_tokens:
+        if (not compute_exposure_bias) and target_tokens:
             # shape: (batch_size, max_target_sequence_length)
             targets = target_tokens["tokens"]
 
@@ -466,7 +466,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                                         generation_batch_size)
 
         # This is training loop.
-        if target_tokens:
+        if (not compute_exposure_bias) and target_tokens:
             rollin_output_dict, rollout_output_dict = \
                     self._forward_loop(state,
                                         start_predictions,
@@ -492,19 +492,21 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                                 rollout_steps=num_decoding_steps,
                                                 rollout_mode='learned',
                                                 sampled=compute_exposure_bias,
+                                                # TODO (Kushal): Add a reason why truncate_at_end_all is False here.
                                                 truncate_at_end_all=False)
 
+            # shape: (batch_size, beam_size, max_sequence_length)
+            top_k_predictions = rollout_output_dict["predictions"]
+            # shape: (batch_size, max_predicted_sequence_length)
+            best_predictions = top_k_predictions[:, 0, :]
+
+            predicted_tokens = self._decode_tokens(best_predictions,
+                                                    vocab_namespace=self._target_namespace,
+                                                    truncate=True)
+            output_dict['predicted_tokens'] = predicted_tokens
+
             if target_tokens and self._rollout_cost_function:
-                # all beams.
-                top_k_predictions = rollout_output_dict["predictions"]
-                # shape: (batch_size, max_predicted_sequence_length)
-                best_predictions = top_k_predictions[:, 0, :]
-
                 if self._rollout_cost_function.takes_decoded_input():
-                    predicted_tokens = self._decode_tokens(best_predictions,
-                                                            vocab_namespace=self._target_namespace,
-                                                            truncate=True)
-
                     decoded_targets = self._decode_tokens(target_tokens['tokens'],
                                                           vocab_namespace=self._target_namespace,
                                                           truncate=True)
@@ -526,40 +528,27 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 self._rollout_cf_avg(float(loss.cpu()))
 
             if target_tokens and self._bleu:
-                # shape: (batch_size, beam_size, max_sequence_length)
-                top_k_predictions = rollout_output_dict["predictions"]
-                # shape: (batch_size, max_predicted_sequence_length)
-                best_predictions = top_k_predictions[:, 0, :]
-
                 self._bleu(best_predictions, target_tokens["tokens"])
 
-
             if target_tokens and self._hamming:
-                # shape: (batch_size, beam_size, max_sequence_length)
-                top_k_predictions = rollout_output_dict["predictions"]
-                # shape: (batch_size, max_predicted_sequence_length)
-                best_predictions = top_k_predictions[:, 0, :]
-
                 target_mask = util.get_text_field_mask(target_tokens)
-
                 self._hamming(best_predictions, target_tokens["tokens"], target_mask)
 
-            if compute_exposure_bias and self._exposure_bias:
-                # shape: (batch_size, beam_size, max_sequence_length)
-                top_k_predictions = rollout_output_dict["predictions"]
+            if compute_exposure_bias and target_tokens and self._exposure_bias:
                 top_k_log_probabilities = rollout_output_dict["class_log_probabilities"]
-                # shape: (batch_size, max_predicted_sequence_length)
-                best_predictions = top_k_predictions[:, 0, :]
-
                 prediction_loss = top_k_log_probabilities[:,0]
-                predicted_tokens = self._decode_tokens(best_predictions,
-                                                        vocab_namespace=self._target_namespace,
-                                                        truncate=True)
 
-                predicted_tokens, model_probs, oracle_probs = self._exposure_bias(prediction_loss.data.cpu(),
-                                                                                    predicted_tokens)
+                oracle_sampled_predicted_tokens = self._decode_tokens(target_tokens['tokens'],
+                                    vocab_namespace=self._target_namespace,
+                                    truncate=True)
+                oracle_samples_predicted_losses = self.compute_sentence_probs(target_tokens)
 
-                output_dict['predicted_tokens'] = predicted_tokens
+                predicted_tokens, model_probs, oracle_probs = self._exposure_bias(model_sampled_losses=prediction_loss.data.cpu(),
+                                                                                  model_sampled_predictions=predicted_tokens,
+                                                                                  use_js=True,
+                                                                                  oracle_sampled_losses=oracle_samples_predicted_losses.data.cpu(),
+                                                                                  oracle_sampled_predictions=oracle_sampled_predicted_tokens)
+
                 output_dict['model_probs'] =model_probs
                 output_dict['oracle_probs'] = oracle_probs
                 output_dict['prediction_loss'] = prediction_loss.data.cpu()
@@ -822,6 +811,39 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
 
             output_dict["loss_batch"] = loss_batch
         return output_dict
+
+    def compute_sentence_probs(self, 
+                               sequences_dict: Dict[str, torch.LongTensor],
+                              ) -> torch.FloatTensor:
+        """ Given a batch of tokens, compute the probability of sequences
+            given the trained model. 
+        
+        Arguments:
+            sequences_dict {Dict[str, torch.LongTensor]} -- The sequences that needs to be scored.
+        
+        Returns:
+            probabilities {torch.FloatTensor} -- Probabilities of the sequence.
+        """
+        state = {}
+        sequences = sequences_dict['tokens']
+        batch_size = sequences.size(0)
+        seq_len = sequences.size(1)
+        start_predictions = self._get_start_predictions(state,
+                                                        sequences_dict,
+                                                        batch_size)
+        rollin_output_dict = self.rollin(state={},
+                                            start_predictions=start_predictions,
+                                            rollin_steps=seq_len - 1,
+                                            target_tokens=sequences_dict,
+                                            rollin_mode='teacher_forcing',
+                                        )
+
+        step_log_probs = F.log_softmax(rollin_output_dict['logits'].squeeze(1), dim=-1)
+        oracle_sampled_prediction_log_probs = torch.gather(step_log_probs, 2,
+                                                        sequences[:,1:].unsqueeze(2)) \
+                                                .squeeze(2)
+        sequence_mask = util.get_text_field_mask(sequences_dict)
+        return torch.sum(oracle_sampled_prediction_log_probs * sequence_mask[:, 1:], dim=-1)
 
     def _forward_loop(self,
                       state: Dict[str, torch.Tensor],
