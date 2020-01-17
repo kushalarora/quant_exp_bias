@@ -55,6 +55,7 @@ class ExposureBias(Metric):
         # model_sampled_losses = model_sampled_losses.new_tensor(filtered_predictions_losses)
         
         # TODO (Kushal) Add comments to explain what is going on.
+        # Compute DL(P||M)
         model_sampled_batch_size = len(model_sampled_predictions)
         model_sampled_model_probs = []
         kl_p_m = 0
@@ -85,6 +86,7 @@ class ExposureBias(Metric):
         kl_q_m = 0
         kl_q_m_count = 0
 
+        # Compute DL(Q||M)
         oracle_sampled_oracle_probs = self._oracle.compute_sent_probs(oracle_sampled_predictions)
         for i in range(oracle_sampled_batch_size):
             value = 0
