@@ -90,24 +90,29 @@ def sample_oracle_runner(args: argparse.Namespace,
     dataset_filename = args.dataset_filename
     oracle_filename =  sample_oracle(params, 
                                      serialization_dir,
-                                     num_samples,
+                                    # X 1.2 for test and validation set.
+                                     int(num_samples * 1.2),
                                      dataset_filename)
 
     oracle_train_filename = os.path.join(serialization_dir, 'oracle_samples-train.txt')
     oracle_dev_filename = os.path.join(serialization_dir, 'oracle_samples-dev.txt')
+    oracle_test_filename = os.path.join(serialization_dir, 'oracle_samples-test.txt')
 
     with open(oracle_filename) as full_file, \
          open(oracle_train_filename, 'w') as train_file, \
-         open(oracle_dev_filename, 'w') as dev_file:
+         open(oracle_dev_filename, 'w') as dev_file, \
+         open(oracle_test_filename, 'w') as test_file:
         
         for line in full_file:
             line = line.strip()
             if random.random() < 0.1:
                 print(line, file=dev_file)
+            elif random.random() < 0.2:
+                print(line, file=test_file)
             else:
                 print(line, file=train_file)
 
-    return oracle_train_filename, oracle_dev_filename
+    return oracle_train_filename, oracle_dev_filename, oracle_test_filename
 
 def train_runner(args: argparse.Namespace,
                  serialization_dir: str):
@@ -136,6 +141,7 @@ def train_runner(args: argparse.Namespace,
 
 def quantify_exposure_bias_runner(args: argparse.Namespace,
                                   archive_file: str,
+                                  input_file: str,
                                   output_dir: str,
                                   cuda_device: int,
                                   weights_file: str = None,
@@ -148,6 +154,7 @@ def quantify_exposure_bias_runner(args: argparse.Namespace,
     num_length_samples = num_length_samples or args.num_length_samples
     
     return quantify_exposure_bias(archive_file=archive_file, 
+                                  input_file=input_file,
                                   output_dir=output_dir, 
                                   num_trials=num_trials,
                                   num_length_samples=num_length_samples,

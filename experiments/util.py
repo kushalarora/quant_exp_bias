@@ -79,8 +79,8 @@ def one_exp_run(serialization_dir:str,
     run_serialization_dir = os.path.join(serialization_dir, str(num_samples), str(run))
     overrides = overides_func()
     sample_oracle_args=['sample-oracle', 
-                        param_path, 
-                        '-s', run_serialization_dir, 
+                        param_path,
+                        '-s', run_serialization_dir,
                         '-n', str(num_samples),
                         '-o',  overrides]
 
@@ -91,8 +91,9 @@ def one_exp_run(serialization_dir:str,
         sample_oracle_args += ['-f', dataset_filename]
 
     sample_oracle_args = get_args(args=sample_oracle_args)
-    oracle_train_filename, oracle_dev_filename = sample_oracle_runner(sample_oracle_args,
-                                                                        run_serialization_dir)
+    oracle_train_filename, oracle_dev_filename, oracle_test_filename = \
+                        sample_oracle_runner(sample_oracle_args,
+                                             run_serialization_dir)
 
     os.environ['TRAIN_FILE'] = oracle_train_filename
     os.environ['DEV_FILE'] = oracle_dev_filename
@@ -109,6 +110,7 @@ def one_exp_run(serialization_dir:str,
 
     archive_file = os.path.join(train_model_serialization_dir, 'model.tar.gz')
     metric_list = []
+
     for epoch, qeb_suffix, metric_filename in exp_bias_epochs_func(train_model_serialization_dir):
         qeb_output_dir = os.path.join(run_serialization_dir, 'exp_bias', qeb_suffix)
         metrics = json.load(open(os.path.join(train_model_serialization_dir, metric_filename)))
@@ -120,11 +122,13 @@ def one_exp_run(serialization_dir:str,
 
         qeb_args = get_args(args=['quantify-exposure-bias',
                                     archive_file,
+                                    oracle_test_filename,
                                     '--output-dir', qeb_output_dir,
                                     '--weights-file', weights_file,
                                     '-o',  overrides])
         exp_biases, exp_bias_mean, exp_bias_std = quantify_exposure_bias_runner(qeb_args,
                                                                                 archive_file,
+                                                                                oracle_test_filename,
                                                                                 qeb_output_dir,
                                                                                 cuda_device=cuda_device,
                                                                                 weights_file=weights_file,
@@ -148,6 +152,7 @@ def one_exp_run(serialization_dir:str,
 
         exp_biases, exp_bias_mean, exp_bias_std = quantify_exposure_bias_runner(qeb_args,
                                                                                 archive_file,
+                                                                                oracle_test_filename,
                                                                                 qeb_output_dir,
                                                                                 cuda_device=cuda_device,
                                                                                 num_length_samples=40);
