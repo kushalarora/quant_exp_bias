@@ -49,7 +49,7 @@ and report any metrics calculated by the model.
       --include-package INCLUDE_PACKAGE
                             additional packages to include
 """
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Iterable
 import argparse
 import logging
 import json
@@ -110,7 +110,7 @@ class QuantifyExposureBias(Subcommand):
 
         subparser.add_argument('--num-samples-per-length',
                                  type=int,
-                                 default=1024,
+                                 default=360,
                                  help='Number of samples to draw from $w_{1}^{n}~p$ for approximating expectation.')
 
         subparser.add_argument('--num-length-samples',
@@ -152,7 +152,7 @@ def quantify_exposure_bias(archive_file: str,
                            output_dir: str,
                            num_trials: int = 5,
                            num_length_samples: int = 50,
-                           num_samples_per_length: int = 1024,
+                           num_samples_per_length: int = 360,
                            cuda_device: int = -1,
                            overrides: str = "",
                            weights_file: str = None):
@@ -185,6 +185,7 @@ def quantify_exposure_bias(archive_file: str,
     data_iterator = DataIterator.from_params(iterator_params)
     data_iterator.index_with(model.vocab)
 
+    instances = [instance for instance in instances.instance_generator()]
     output_dir_trail = None
     exp_biases = []
     input_dict = { "compute_exposure_bias": True }
@@ -207,7 +208,7 @@ def quantify_exposure_bias(archive_file: str,
             # sample sentence length
             sampled_instances = _sample_instances(instances, input_dict['generation_batch_size'])
 
-            test_batch = data_iterator(sampled_instances, num_epochs=1, shuffle=False).__next__()
+            test_batch =data_iterator(sampled_instances, num_epochs=1, shuffle=False).__next__()
             test_batch = nn_util.move_to_device(test_batch, cuda_device)
             input_dict.update(test_batch)
             
@@ -216,7 +217,7 @@ def quantify_exposure_bias(archive_file: str,
             metric_trial = model.get_metrics(reset=True, get_exposure_bias=True)
 
             for key, metric in metric_trial.items():
-                logger.info("Trial: %3d :: %s: %4.2f", trail_num, key, metric)
+                logger.info("Trial: %3d :: %s: %5.4f", trail_num, key, metric)
 
             exp_biases.append(metric_trial['exposure_bias'])
 
@@ -243,7 +244,7 @@ def quantify_exposure_bias(archive_file: str,
     return exp_biases, metrics['exposure_bias_mean'], metrics['exposure_bias_std']
 
 
-def _sample_instances(instances:List[Instance], sample_size: int):
+def _sample_instances(instances:Iterable[Instance], sample_size: int):
     total_num_instances = len(instances)
     sampled_instances = []
 
