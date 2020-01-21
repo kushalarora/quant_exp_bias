@@ -18,6 +18,7 @@
       "decoder": {
         "type": "quant_exp_auto_regressive_seq_decoder",
         "max_decoding_steps": 50,
+        // "max_decoding_steps": 30,
         "decoder_net": {
           "type": "quant_exp_bias_lstm_cell",
           "decoding_dim": 300,
@@ -41,6 +42,8 @@
           "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME"),
           "parallelize": true,
           "num_threads": 32,
+          //"max_len": 30,
+          // "use_weighted_choice": false,
         },
       }
     },
@@ -51,6 +54,10 @@
 
         // This is needed stupidly for bucket iterator to work.
         "max_instances_in_memory": 50000
+    },
+    "validation_iterator": {
+      "type": "basic",
+      "batch_size": 1000
     },
     "trainer": {
       "num_epochs": 50,
