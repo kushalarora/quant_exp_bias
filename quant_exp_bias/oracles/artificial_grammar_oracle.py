@@ -31,7 +31,7 @@ def init_pool(grammar_string):
     global grammar
     grammar = PCFG.fromstring(grammar_string)
     parser = InsideChartParser(grammar)
-
+    return parser
 
 @Oracle.register('artificial_lang_oracle')
 class ArtificialLanguageOracle(Oracle):
@@ -237,11 +237,14 @@ class ArtificialLanguageOracle(Oracle):
     @staticmethod
     def _compute_one_sent_prob(sequence: List[str]):
             global parser
-            probs = 1e-45
+            probs = 1e-6
             try:
                 parses = list(parser.parse(sequence))
                 if parses and len(parses) > 0:
-                    probs += np.exp(np.log(reduce(lambda a, b: a + b.prob(), parses, 1e-45)/len(parses))/len(sequence))
+                    # Marginalizing by seq_len + 1 because we assume it emits </S> symbol at the end with prob. 1. 
+                    probs = np.exp(np.log(reduce(lambda a, b: a + b.prob(), parses, 0))/(len(sequence) + 1))
+                    logging.debug(f"Num Parses for Sequence: {sequence}: {len(parses)}:: {probs:.4f}")
+
             except Exception as e:
                 # Ideally if you fail to parse, the prob is zero.
                 #logging.warn(e)
