@@ -538,21 +538,39 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 top_k_log_probabilities = rollout_output_dict["class_log_probabilities"]
                 prediction_loss = top_k_log_probabilities[:,0]
 
+                # This +1 takes care of </S> prediction as predicted token are limited to
+                # token before </S>.
+                normalized_prediction_losses = [pred_loss/(len(pred_tokens) + 1) 
+                                                    for pred_loss, pred_tokens in zip(prediction_loss.data.cpu(), predicted_tokens)]
+
                 oracle_sampled_predicted_tokens = self._decode_tokens(target_tokens['tokens'],
                                     vocab_namespace=self._target_namespace,
                                     truncate=True)
-                oracle_samples_predicted_losses = self.compute_sentence_probs(target_tokens)
 
-                predicted_tokens, model_probs, oracle_probs = self._exposure_bias(model_sampled_losses=prediction_loss.data.cpu(),
-                                                                                  model_sampled_predictions=predicted_tokens,
-                                                                                  use_js=True,
-                                                                                  oracle_sampled_losses=oracle_samples_predicted_losses.data.cpu(),
-                                                                                  oracle_sampled_predictions=oracle_sampled_predicted_tokens)
+                oracle_samples_predicted_losses, \
+                seq_lens, oracle_samples_seq_log_probs = \
+                                            self.compute_sentence_probs(target_tokens)
 
-                output_dict['model_probs'] =model_probs
-                output_dict['oracle_probs'] = oracle_probs
+                model_sampled_predicted_tokens, model_sampled_model_probs, model_sampled_oracle_probs, df_p_qs, \
+                    oracle_sampled_predicted_tokens, oracle_sampled_model_probs, oracle_sampled_oracle_probs, df_q_ps = \
+                            self._exposure_bias(model_sampled_model_log_probs=normalized_prediction_losses,
+                                                model_sampled_predictions=predicted_tokens,
+                                                use_js=True,
+                                                oracle_sampled_model_log_probs=oracle_samples_predicted_losses.data.cpu(),
+                                                oracle_sampled_predictions=oracle_sampled_predicted_tokens,
+                                                oracle_samples_seq_log_probs=oracle_samples_seq_log_probs.data.cpu())
+
+                output_dict['model_sampled_model_probs'] = model_sampled_model_probs
+                output_dict['model_sampled_oracle_probs'] = model_sampled_oracle_probs
+                output_dict['oracle_sampled_model_probs'] = oracle_sampled_model_probs
+                output_dict['oracle_sampled_oracle_probs'] = oracle_sampled_oracle_probs
+                output_dict['model_sampled_scores'] = df_p_qs
+                output_dict['oracle_sampled_scores'] = df_q_ps
+
                 output_dict['prediction_loss'] = prediction_loss.data.cpu()
-                output_dict['predicted_sequences'] = self._detokenizer(predicted_tokens)
+                output_dict['model_sampled_predicted_tokens'] = self._detokenizer(model_sampled_predicted_tokens)
+                output_dict['oracle_sampled_predicted_tokens'] = self._detokenizer(oracle_sampled_predicted_tokens)
+
         return output_dict
 
     def _decode_tokens(self,
@@ -815,7 +833,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
     def compute_sentence_probs(self, 
                                sequences_dict: Dict[str, torch.LongTensor],
                               ) -> torch.FloatTensor:
-        """ Given a batch of tokens, compute the probability of sequences
+        """ Given a batch of tokens, compute the per-token log probability of sequences
             given the trained model. 
         
         Arguments:
@@ -823,6 +841,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         
         Returns:
             probabilities {torch.FloatTensor} -- Probabilities of the sequence.
+            seq_len {torch.LongTensor} -- Length of the non padded sequence.
         """
         state = {}
         sequences = sequences_dict['tokens']
@@ -843,7 +862,11 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                                         sequences[:,1:].unsqueeze(2)) \
                                                 .squeeze(2)
         sequence_mask = util.get_text_field_mask(sequences_dict)
-        return torch.sum(oracle_sampled_prediction_log_probs * sequence_mask[:, 1:], dim=-1)
+        oracle_sampled_prediction_log_probs_summed = torch.sum(oracle_sampled_prediction_log_probs * sequence_mask[:, 1:], dim=-1)
+        non_batch_dims = tuple(range(1, len(sequence_mask.shape)))
+        # shape : (batch_size,)
+        sequence_mask_sum = sequence_mask[:, 1:].sum(dim=non_batch_dims)
+        return oracle_sampled_prediction_log_probs_summed/sequence_mask_sum, sequence_mask_sum, oracle_sampled_prediction_log_probs
 
     def _forward_loop(self,
                       state: Dict[str, torch.Tensor],

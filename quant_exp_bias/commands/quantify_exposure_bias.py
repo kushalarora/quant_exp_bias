@@ -203,8 +203,11 @@ def quantify_exposure_bias(archive_file: str,
         if output_dir:
             output_dir_trail = os.path.join(output_dir, str(trail_num))
             os.makedirs(output_dir_trail, exist_ok=True)
+            # Delete all the previous context of the file. SO/2769061.
+            open(os.path.join(output_dir_trail, 'model_sampled_generated.txt'), "w").close()
+            open(os.path.join(output_dir_trail, 'oracle_sampled_generated.txt'), "w").close()
 
-        for _ in range(num_length_samples):
+        for sample_num in range(num_length_samples):
             # sample sentence length
             sampled_instances = _sample_instances(instances, input_dict['generation_batch_size'])
 
@@ -217,17 +220,24 @@ def quantify_exposure_bias(archive_file: str,
             metric_trial = model.get_metrics(reset=True, get_exposure_bias=True)
 
             for key, metric in metric_trial.items():
-                logger.info("Trial: %3d :: %s: %5.4f", trail_num, key, metric)
+                logger.info("Trial: %3d-%-3d :: %s: %-5.4f", trail_num, sample_num, key, metric)
 
             exp_biases.append(metric_trial['exposure_bias'])
 
-        if output_dir_trail:
-            with open(os.path.join(output_dir_trail, 'generated.txt'), "w") as file:
-                for seq, model_prob, oracle_prob in zip(output_dict['predicted_sequences'],
-                                                        output_dict['model_probs'],
-                                                        output_dict['oracle_probs']):
-                    log_val = math.log(model_prob/(oracle_prob + 1e-45))
-                    print(f'{seq}\tlog({model_prob:.4f}|{oracle_prob:.4f})={log_val:.4f}', file=file)
+            if output_dir_trail:
+                with open(os.path.join(output_dir_trail, 'model_sampled_generated.txt'), "a+") as file:
+                    for seq, model_prob, oracle_prob, value in zip(output_dict['model_sampled_predicted_tokens'],
+                                                                    output_dict['model_sampled_model_probs'],
+                                                                    output_dict['model_sampled_oracle_probs'],
+                                                                    output_dict['model_sampled_scores']):
+                        print(f'{seq} P={model_prob:.4f} Q={oracle_prob:.4f} Df_p_q={value:.4f}', file=file)
+
+                with open(os.path.join(output_dir_trail, 'oracle_sampled_generated.txt'), "a+") as file:
+                    for seq, model_prob, oracle_prob, value in zip(output_dict['oracle_sampled_predicted_tokens'],
+                                                                    output_dict['oracle_sampled_model_probs'],
+                                                                    output_dict['oracle_sampled_oracle_probs'],
+                                                                    output_dict['oracle_sampled_scores']):
+                        print(f'{seq} P={model_prob:.4f} Q={oracle_prob:.4f} Df_q_p={value:.4f}', file=file)
 
     metrics = {
         'exposure_bias_mean': np.mean(exp_biases),
