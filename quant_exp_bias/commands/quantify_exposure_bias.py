@@ -188,6 +188,9 @@ def quantify_exposure_bias(archive_file: str,
     instances = [instance for instance in instances.instance_generator()]
     output_dir_trail = None
     exp_biases = []
+    df_p_qs = []
+    df_q_ps = []
+
     input_dict = { "compute_exposure_bias": True }
     input_dict['generation_batch_size'] = config['model']['decoder'].get('generation_batch_size', num_samples_per_length)
 
@@ -223,6 +226,8 @@ def quantify_exposure_bias(archive_file: str,
                 logger.info("Trial: %3d-%-3d :: %s: %-5.4f", trail_num, sample_num, key, metric)
 
             exp_biases.append(metric_trial['exposure_bias'])
+            df_p_qs.append(metric_trial['df_p_q'])
+            df_q_ps.append(metric_trial['df_q_p'])
 
             if output_dir_trail:
                 with open(os.path.join(output_dir_trail, 'model_sampled_generated.txt'), "a+") as file:
@@ -241,7 +246,11 @@ def quantify_exposure_bias(archive_file: str,
 
     metrics = {
         'exposure_bias_mean': np.mean(exp_biases),
-        'exposure_bias_std': np.std(exp_biases)
+        'exposure_bias_std': np.std(exp_biases),
+        'df_p_q_mean': np.mean(df_p_qs),
+        'df_p_q_std': np.std(df_p_qs),
+        'df_q_p_mean': np.mean(df_q_ps),
+        'df_q_p_std': np.std(df_q_ps),
     }
 
     with open(os.path.join(output_dir, 'metrics.json'), "w") as file:
@@ -250,8 +259,20 @@ def quantify_exposure_bias(archive_file: str,
     logger.info("Exposure Bias Average:")
     logger.info("\t mean: %5.3f", metrics['exposure_bias_mean'])
     logger.info("\t std:  %5.3f", metrics['exposure_bias_std'])
+
+    logger.info("Df (P || Q):")
+    logger.info("\t mean: %5.3f", metrics['df_p_q_mean'])
+    logger.info("\t std: %5.3f", metrics['df_p_q_std'])
+
+    logger.info("Df (Q || P):")
+    logger.info("\t mean: %5.3f", metrics['df_q_p_mean'])
+    logger.info("\t std: %5.3f", metrics['df_q_p_std'])
+
+
     logger.info("Done!!")
-    return exp_biases, metrics['exposure_bias_mean'], metrics['exposure_bias_std']
+    return exp_biases, metrics['exposure_bias_mean'], metrics['exposure_bias_std'], \
+        df_p_qs, metrics['df_p_q_mean'], metrics['df_p_q_std'], \
+        df_q_ps, metrics['df_q_p_mean'], metrics['df_q_p_std']
 
 
 def _sample_instances(instances:Iterable[Instance], sample_size: int):

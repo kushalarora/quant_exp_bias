@@ -26,7 +26,8 @@ import json
 main_args, serialization_dir, param_path, experiment_id = initialize_experiments('artificial_lang/dataset_experiments')
 generate_grammar_file(serialization_dir)
 
-dataset_experiments_params = [(100, 8), (1000,6) , (10000, 4), (100000, 2), (1000000, 1)]
+# dataset_experiments_params = [(100, 8), (1000,6) , (10000, 4), (100000, 2), (1000000, 1)]
+dataset_experiments_params = [(100, 1), (1000, 1) , (10000, 1), (100000, 1), (1000000, 1)]
 
 # # Validation Experiments
 
@@ -45,14 +46,18 @@ def dataset_experiments(dataset_experiments_params,
                 'For this experiment, there should only be one final metric object for a run.'
             run_metrics = run_metrics[0]
 
-            for exp_bias_idx, exp_bias in enumerate(run_metrics['exp_biases']):
+            for exp_bias_idx, (exp_bias, df_p_q, df_q_p) in enumerate(zip(run_metrics['exp_biases'],
+                                                                        run_metrics['df_p_qs'],
+                                                                        run_metrics['df_q_ps'])):
                 result= {
                     'exp_bias': exp_bias,
+                    'Df_p_q': df_p_q,
+                    'Df_q_p': df_q_p,
                     'exp_bias_idx': exp_bias_idx,
                     'num_samples': num_samples,
                     'num_run': num_run,
                     'val_ppl': run_metrics['best_validation_perplexity'],
-                    'best_val_epoch': run_metrics['best_epoch']
+                    'best_val_epoch': run_metrics['best_epoch'],
                 }
                 wandb.log(result)
 

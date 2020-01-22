@@ -984,7 +984,11 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         all_metrics: Dict[str, float] = {}
 
         if get_exposure_bias and self._exposure_bias and not self.training:
-            all_metrics.update({'exposure_bias': self._exposure_bias.get_metric(reset=reset)})
+            exposure_bias, df_p_q, df_q_p = self._exposure_bias.get_metric(reset=reset)
+            all_metrics.update({'exposure_bias': exposure_bias,
+                                'df_p_q': df_p_q,
+                                'df_q_p': df_q_p,
+                               })
             return all_metrics
 
         all_metrics.update({'perplexity': self._perplexity.get_metric(reset=reset),

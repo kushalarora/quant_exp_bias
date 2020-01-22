@@ -27,12 +27,14 @@ class ExposureBias(Metric):
                  type:str = 'hellinger_squared',
                 ) -> None:
         self._total_value = 0.0
+        self._df_p_q = 0.0
+        self._df_q_p = 0.0
         self._count = 0
         self._oracle = oracle
         self._type = type
 
         # D_f(P||Q) = \sum_{x in X} f(p(X)/q(x))q(x)
-        self._Df = ExposureBias.D_f_builder(type)
+        self._Df = ExposureBias.DfBuilder(type)
 
     @overrides
     def __call__(self,
@@ -131,6 +133,9 @@ class ExposureBias(Metric):
                 continue
 
         self._total_value += df_p_q/df_p_q_count + df_q_p/df_q_p_count
+        self._df_p_q +=  df_p_q/df_p_q_count
+        self._df_q_p += df_q_p/df_q_p_count
+
         logging.info(f"KL(P || M) = {df_p_q/df_p_q_count:.4f} \t KL(Q || M) = {df_q_p/df_q_p_count:.4f}")
         return model_sampled_predictions, model_sampled_model_probs, model_sampled_oracle_probs, df_p_qs, \
                 oracle_sampled_predictions, oracle_sampled_model_probs, oracle_sampled_oracle_probs, df_q_ps
@@ -142,17 +147,23 @@ class ExposureBias(Metric):
         -------
         The average of all values that were passed to ``__call__``.
         """
-        average_value = self._total_value 
+        avg_exp_bias = self._total_value 
+        avg_df_p_q = self._df_p_q
+        avg_df_q_p = self._df_q_p
+
         if reset:
             self.reset()
-        return average_value
+
+        return avg_exp_bias, avg_df_p_q, avg_df_q_p
 
     @overrides
     def reset(self):
         self._total_value = 0.0
+        self._df_p_q = 0.0
+        self._df_q_p = 0.0
 
     @staticmethod
-    def D_f_builder(type='kl'):
+    def DfBuilder(type='kl'):
         rfn = lambda p,q,n: np.exp(n * np.log(p/q))
         if type == 'kl':
             return lambda p,q,n: 0.5 * np.log(rfn(q,p,n))

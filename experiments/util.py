@@ -126,17 +126,29 @@ def one_exp_run(serialization_dir:str,
                                     '--output-dir', qeb_output_dir,
                                     '--weights-file', weights_file,
                                     '-o',  overrides])
-        exp_biases, exp_bias_mean, exp_bias_std = quantify_exposure_bias_runner(qeb_args,
-                                                                                archive_file,
-                                                                                oracle_test_filename,
-                                                                                qeb_output_dir,
-                                                                                cuda_device=cuda_device,
-                                                                                weights_file=weights_file,
-                                                                               )
+
+        exp_biases, exp_bias_mean, exp_bias_std, \
+            df_p_qs, df_p_q_mean, df_p_q_std, \
+                df_q_ps, df_q_p_mean, df_q_p_std = quantify_exposure_bias_runner(qeb_args,
+                                                                                    archive_file,
+                                                                                    oracle_test_filename,
+                                                                                    qeb_output_dir,
+                                                                                    cuda_device=cuda_device,
+                                                                                    weights_file=weights_file,
+                                                                                )
 
         metrics['exp_biases'] = exp_biases
         metrics['exp_bias_mean'] = exp_bias_mean
         metrics['exp_bias_std'] = exp_bias_std
+
+        metrics['df_p_qs'] = df_p_qs
+        metrics['df_p_q_mean'] = df_p_q_mean
+        metrics['df_p_q_std'] = df_p_q_std
+
+        metrics['df_q_ps'] = df_q_ps
+        metrics['df_q_p_mean'] = df_q_p_mean
+        metrics['df_q_p_std'] = df_q_p_std
+        
         metric_list.append(metrics)
 
     for key, value, qeb_overides in exp_bias_inference_funcs():
@@ -150,16 +162,27 @@ def one_exp_run(serialization_dir:str,
                                     '--output-dir', qeb_output_dir,
                                     '-o', qeb_overides])
 
-        exp_biases, exp_bias_mean, exp_bias_std = quantify_exposure_bias_runner(qeb_args,
-                                                                                archive_file,
-                                                                                oracle_test_filename,
-                                                                                qeb_output_dir,
-                                                                                cuda_device=cuda_device,
-                                                                                num_length_samples=40);
+        exp_biases, exp_bias_mean, exp_bias_std, \
+            df_p_qs, df_p_q_mean, df_p_q_std, \
+                df_q_ps, df_q_p_mean, df_q_p_std = quantify_exposure_bias_runner(qeb_args,
+                                                                                    archive_file,
+                                                                                    oracle_test_filename,
+                                                                                    qeb_output_dir,
+                                                                                    cuda_device=cuda_device,
+                                                                                    num_length_samples=40);
 
         metrics['exp_biases'] = exp_biases
         metrics['exp_bias_mean'] = exp_bias_mean
         metrics['exp_bias_std'] = exp_bias_std
+
+        metrics['df_p_qs'] = df_p_qs
+        metrics['df_p_q_mean'] = df_p_q_mean
+        metrics['df_p_q_std'] = df_p_q_std
+
+        metrics['df_q_ps'] = df_q_ps
+        metrics['df_q_p_mean'] = df_q_p_mean
+        metrics['df_q_p_std'] = df_q_p_std
+        
         metrics[key] = value
         metric_list.append(metrics)
 

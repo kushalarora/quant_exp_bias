@@ -64,9 +64,13 @@ def scheduled_sampling_experiments(scheduled_sampling_ratios,
                 assert len(run_metrics) == 1, \
                     'For this experiment, there should only be one final metric object for a run.'
                 run_metrics = run_metrics[0]
-                for exp_bias_idx, exp_bias in enumerate(run_metrics['exp_biases']):
+                for exp_bias_idx, (exp_bias, df_p_q, df_q_p) in enumerate(zip(run_metrics['exp_biases'],
+                                                                            run_metrics['df_p_qs'],
+                                                                            run_metrics['df_q_ps'])):                    
                     result= {
                             'exp_bias': exp_bias,
+                            'Df_p_q': df_p_q,
+                            'Df_q_p': df_q_p,
                             'exp_bias_idx': exp_bias_idx,
                             'scheduled_sampling_ratio': ss_ratio,
                             'scheduled_sampling_k': ss_k,

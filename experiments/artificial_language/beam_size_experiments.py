@@ -58,16 +58,20 @@ def beam_size_experiments(beam_sizes,
             for run_metrics in run_metrics_list:
                 beam_size = run_metrics.get('beam_size', 1)
 
-                for exp_bias_idx, exp_bias in enumerate(run_metrics['exp_biases']):
+                for exp_bias_idx, (exp_bias, df_p_q, df_q_p) in enumerate(zip(run_metrics['exp_biases'],
+                                                                            run_metrics['df_p_qs'],
+                                                                            run_metrics['df_q_ps'])):
                     result = {
                                 'exp_bias': exp_bias,
+                                'Df_p_q': df_p_q,
+                                'Df_q_p': df_q_p,
                                 'exp_bias_idx': exp_bias_idx,
                                 'num_run': num_run,
                                 'num_samples': num_samples,
                                 'beam_size': beam_size,
                                 'val_ppl': run_metrics['best_validation_perplexity'],
-                                'best_val_epoch': run_metrics['best_epoch']
-                                }
+                                'best_val_epoch': run_metrics['best_epoch'],
+                             }
                     wandb.log(result)
 
 beam_size_experiments(beam_sizes, num_samples_and_runs, main_args, serialization_dir, param_path)
