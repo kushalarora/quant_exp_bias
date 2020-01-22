@@ -155,9 +155,9 @@ class ExposureBias(Metric):
     def D_f_builder(type='kl'):
         rfn = lambda p,q,n: np.exp(n * np.log(p/q))
         if type == 'kl':
-            return lambda p,q,n: np.log(rfn(q,p,n))
+            return lambda p,q,n: 0.5 * np.log(rfn(q,p,n))
         elif type == 'hellinger_squared':
-            return lambda p,q,n: (np.sqrt(rfn(p,q,n)) - 1)**2
+            return lambda p,q,n: 0.5 * (np.sqrt(rfn(p,q,n)) - 1)**2
         elif type == 'tv':
             return lambda p,q,n: 0.5 * np.abs(rfn(p,q,n) - 1)
         elif type == 'js':
