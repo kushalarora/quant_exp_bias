@@ -168,6 +168,8 @@ def quantify_exposure_bias(archive_file: str,
     model = archive.model
     model.eval()
 
+    generation_batch_size = config['model']['decoder'].get('generation_batch_size', num_samples_per_length)
+
     # Try to use the validation dataset reader if there is one - otherwise fall back
     # to the default dataset_reader used for both training and validation.
     validation_dataset_reader_params = config.pop("validation_dataset_reader", None)
@@ -184,7 +186,7 @@ def quantify_exposure_bias(archive_file: str,
         iterator_params = config.pop("iterator")
     data_iterator = DataIterator.from_params(iterator_params)
     data_iterator.index_with(model.vocab)
-
+    data_iterator._batch_size = generation_batch_size
     instances = [instance for instance in instances.instance_generator()]
     output_dir_trail = None
     exp_biases = []
@@ -192,7 +194,7 @@ def quantify_exposure_bias(archive_file: str,
     df_q_ps = []
 
     input_dict = { "compute_exposure_bias": True }
-    input_dict['generation_batch_size'] = config['model']['decoder'].get('generation_batch_size', num_samples_per_length)
+    input_dict['generation_batch_size'] = generation_batch_size
 
     logger.info(f'Num Trials: {num_trials}')
     logger.info(f'Num Length Samples: {num_length_samples}')
@@ -212,9 +214,7 @@ def quantify_exposure_bias(archive_file: str,
 
         for sample_num in range(num_length_samples):
             # sample sentence length
-            sampled_instances = _sample_instances(instances, input_dict['generation_batch_size'])
-
-            test_batch =data_iterator(sampled_instances, num_epochs=1, shuffle=False).__next__()
+            test_batch = data_iterator(instances, shuffle=True).__next__()
             test_batch = nn_util.move_to_device(test_batch, cuda_device)
             input_dict.update(test_batch)
             
@@ -273,13 +273,3 @@ def quantify_exposure_bias(archive_file: str,
     return exp_biases, metrics['exposure_bias_mean'], metrics['exposure_bias_std'], \
         df_p_qs, metrics['df_p_q_mean'], metrics['df_p_q_std'], \
         df_q_ps, metrics['df_q_p_mean'], metrics['df_q_p_std']
-
-
-def _sample_instances(instances:Iterable[Instance], sample_size: int):
-    total_num_instances = len(instances)
-    sampled_instances = []
-
-    for instance in instances:
-        if random.random() < float(sample_size)/total_num_instances:
-            sampled_instances.append(instance)
-    return sampled_instances
