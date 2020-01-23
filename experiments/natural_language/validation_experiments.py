@@ -32,10 +32,10 @@ args = parser.parse_args()
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
-main_args, serialization_dir, param_path, experiment_id = initialize_experiments('natural_lang/validation_experiments',
+main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('natural_lang/validation_experiments',
                                                                                  param_path = 'training_configs/natural_lang/emnlp_news_gpt2.jsonnet',
                                                                                 )
-                                                                                
+
 num_samples_and_runs = [(50000, 6), (500000, 4), (2000000, 2)]
 
 # # Dataset Experiments
@@ -46,7 +46,7 @@ def validation_experiments(main_args,
                             num_samples,
                             num_runs,
                            ):
-
+    step = 0
     overrides = json.dumps({'trainer': {'num_epochs': 20, 'patience': None}})
 
     def validation_exp_bias_epochs_func(train_model_serialization_dir):
@@ -70,7 +70,7 @@ def validation_experiments(main_args,
             for exp_bias_idx, (exp_bias, df_p_q, df_q_p) in enumerate(zip(run_metrics['exp_biases'],
                                                                         run_metrics['df_p_qs'],
                                                                         run_metrics['df_q_ps'])):                
-                results = {
+                result = {
                             'exp_bias': exp_bias,
                             'Df_p_q': df_p_q,
                             'Df_q_p': df_q_p,
@@ -80,8 +80,8 @@ def validation_experiments(main_args,
                             'num_run': run,
                             'num_samples': num_samples
                         }
-
-                wandb.log(results)
+                experiment.log_metrics(result, step=step)
+                step += 1
 if args.all:
     for num_samples, num_runs in num_samples_and_runs:
         validation_experiments(main_args, serialization_dir, param_path, num_samples, num_runs)

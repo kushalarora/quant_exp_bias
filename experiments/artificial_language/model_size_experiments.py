@@ -23,7 +23,7 @@ import json
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
-main_args, serialization_dir, param_path, experiment_id = initialize_experiments('artificial_lang/model_size_experiments')
+main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/model_size_experiments')
 generate_grammar_file(serialization_dir)
 
 model_sizes  = {
@@ -41,7 +41,7 @@ def model_size_experiments(model_sizes,
                             main_args, 
                             serialization_dir, 
                             param_path):
-    
+    step = 0
     # Setup variables needed later.
     orig_serialization_dir = serialization_dir
     for model_size, model_tuple in model_sizes.items():
@@ -83,6 +83,7 @@ def model_size_experiments(model_sizes,
                                 'val_ppl': run_metrics['best_validation_perplexity'],
                                 'best_val_epoch': run_metrics['best_epoch'],
                             }
-                    wandb.log(result)
+                    experiment.log_metrics(result, step=step)
+                    step += 1
 
 model_size_experiments(model_sizes, num_samples_and_runs, main_args, serialization_dir, param_path)

@@ -34,7 +34,7 @@ args = parser.parse_args()
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
-main_args, serialization_dir, param_path, experiment_id = initialize_experiments('artificial_lang/searnn_experiments', 
+main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/searnn_experiments', 
                                                                                  param_path='training_configs/artificial_grammar/artificial_grammar_searnn.jsonnet')
 generate_grammar_file(serialization_dir)
 
@@ -51,6 +51,7 @@ def searnn_experiments(rollin_rollout_configs,
                             num_runs,
                       ):
     # Setup variables needed later.
+    step = 0
     orig_serialization_dir = serialization_dir
     for rollin_policy, rollout_policy in rollin_rollout_configs:
         os.environ['rollin_mode'] = rollin_policy
@@ -81,7 +82,8 @@ def searnn_experiments(rollin_rollout_configs,
                             'val_ppl': run_metrics['best_validation_perplexity'],
                             'best_val_epoch': run_metrics['best_epoch']
                         }
-                wandb.log(result)
+                experiment.log_metrics(result, step=step)
+                step += 1
 
 if args.all:
     for num_samples, num_runs in num_samples_and_runs:

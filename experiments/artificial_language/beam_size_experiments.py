@@ -23,7 +23,7 @@ import json
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
-main_args, serialization_dir, param_path, experiment_id = initialize_experiments('artificial_lang/beam_size_experiments')
+main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/beam_size_experiments')
 generate_grammar_file(serialization_dir, vocabulary_size=24)
 
 beam_sizes = [2,4,6]
@@ -33,7 +33,7 @@ def beam_size_experiments(beam_sizes,
                             main_args,
                             serialization_dir,
                             param_path):
-
+    step = 0
     # Setup variables needed later.
     orig_serialization_dir = serialization_dir
     def qeb_beam_size_overrides_func():
@@ -72,6 +72,7 @@ def beam_size_experiments(beam_sizes,
                                 'val_ppl': run_metrics['best_validation_perplexity'],
                                 'best_val_epoch': run_metrics['best_epoch'],
                              }
-                    wandb.log(result)
+                    experiment.log_metrics(result, step=step)
+                    step += 1
 
 beam_size_experiments(beam_sizes, num_samples_and_runs, main_args, serialization_dir, param_path)

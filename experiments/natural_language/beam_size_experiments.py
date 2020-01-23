@@ -32,7 +32,7 @@ args = parser.parse_args()
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
-main_args, serialization_dir, param_path, experiment_id = initialize_experiments('natural_lang/beam_size_experiments',
+main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('natural_lang/beam_size_experiments',
                                                                                  param_path = 'training_configs/natural_lang/emnlp_news_gpt2.jsonnet',
                                                                                 )
 
@@ -47,6 +47,7 @@ def beam_size_experiments(beam_sizes,
                             num_runs,
                            ):
 
+    step = 0
     # Setup variables needed later.
     orig_serialization_dir = serialization_dir
     def qeb_beam_size_overrides_func():
@@ -90,8 +91,9 @@ def beam_size_experiments(beam_sizes,
                             'beam_size': beam_size,
                             'val_ppl': run_metrics['best_validation_perplexity'],
                             'best_val_epoch': run_metrics['best_epoch']
-                            }
-                wandb.log(result)
+                         }
+                experiment.log_metrics(result, step=step)
+                step += 1
 
 if args.all:
     for num_samples, num_runs in num_samples_and_runs:

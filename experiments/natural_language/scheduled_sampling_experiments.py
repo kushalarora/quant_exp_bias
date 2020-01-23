@@ -33,9 +33,9 @@ args = parser.parse_args()
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
-main_args, serialization_dir, param_path, experiment_id = initialize_experiments('natural_lang/scheduled_sampling_experiments',
-                                                                                 param_path = 'training_configs/natural_lang/emnlp_news_gpt2.jsonnet',
-                                                                                )
+main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('natural_lang/scheduled_sampling_experiments',
+                                                                                                param_path = 'training_configs/natural_lang/emnlp_news_gpt2.jsonnet',
+                                                                                            )
 
 scheduled_sampling_ratios  = [
         ('uniform', 0.0, -1), ('uniform', 0.1, -1), ('uniform', 0.25, -1), ('uniform', 0.5, -1), ('uniform', 1.0, -1),  # Fixed SS ratio
@@ -55,7 +55,7 @@ def scheduled_sampling_experiments(scheduled_sampling_ratios,
                                     num_samples,
                                     num_runs,
                                   ):
-
+    step = 0
     orig_serialization_dir = serialization_dir
     for ss_type, ss_ratio, ss_k in scheduled_sampling_ratios:
         serialization_dir = os.path.join(orig_serialization_dir, f'{ss_type}_{ss_ratio}_{ss_k}')
@@ -96,7 +96,8 @@ def scheduled_sampling_experiments(scheduled_sampling_ratios,
                         'final_ss_ratio': run_metrics['validation_ss_ratio'],
                         'best_val_ss_ratio': run_metrics['best_validation_ss_ratio']
                     }
-                wandb.log(result)
+                experiment.log_metrics(result, step=step)
+                step += 1
 
 if args.all:
     for num_samples, num_runs in num_samples_and_runs:

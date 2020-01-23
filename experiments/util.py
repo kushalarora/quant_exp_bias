@@ -3,6 +3,7 @@ import os
 import sys
 import wandb
 
+from comet_ml import Experiment
 from datetime import datetime
 from typing import Dict, List, Callable, Tuple, Union, Any
 
@@ -52,12 +53,14 @@ def initialize_experiments(experiment_name: str,
 
     os.environ['TRAIN_FILE'] = ""
     os.environ['DEV_FILE'] = ""
-    wandb.init(project='quantifying_exposure_bias', 
-                name=f'{experiment_name}-{experiment_id}',
-                id=f'{experiment_name}-{experiment_id}', 
-                sync_tensorboard=False)
 
-    return main_args, serialization_dir, param_path, experiment_id
+    experiment = Experiment(workspace='quantifying_exposure_bias', 
+                            project_name=experiment_name,
+                            auto_metric_logging=False,
+                            auto_param_logging=False,
+                           )
+
+    return main_args, serialization_dir, param_path, experiment_id, experiment
 
 def default_overides_func():
     return '{}'

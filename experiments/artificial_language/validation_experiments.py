@@ -23,7 +23,7 @@ import numpy as np
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
-main_args, serialization_dir, param_path, experiment_id = initialize_experiments('artificial_lang/validation_experiments')
+main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/validation_experiments')
 generate_grammar_file(serialization_dir)
 
 # num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
@@ -36,9 +36,8 @@ def validation_experiments(num_samples_and_runs,
                             main_args, 
                             serialization_dir, 
                             param_path):
-
+    step = 0
     overrides = json.dumps({'trainer': {'num_epochs': 50, 'patience': None}})
-
     def validation_exp_bias_epochs_func(train_model_serialization_dir):
         for epoch in range(len(glob.glob(os.path.join(train_model_serialization_dir + '/model_state_epoch_*.th')))):
             qeb_suffix = f'epoch_{epoch}'
@@ -59,7 +58,7 @@ def validation_experiments(num_samples_and_runs,
                 for exp_bias_idx, (exp_bias, df_p_q, df_q_p) in enumerate(zip(run_metrics['exp_biases'],
                                                                             run_metrics['df_p_qs'],
                                                                             run_metrics['df_q_ps'])):                 
-                    results = {
+                    result = {
                                 'exp_bias': exp_bias,
                                 'Df_p_q': df_p_q,
                                 'Df_q_p': df_q_p,
@@ -69,7 +68,7 @@ def validation_experiments(num_samples_and_runs,
                                 'num_run': run,
                                 'num_samples': num_samples
                             }
-
-                    wandb.log(results)
+                    experiment.log_metrics(result, step=step)
+                    step += 1
 
 validation_experiments(num_samples_and_runs, main_args, serialization_dir, param_path)
