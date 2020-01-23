@@ -54,7 +54,8 @@ def initialize_experiments(experiment_name: str,
     os.environ['TRAIN_FILE'] = ""
     os.environ['DEV_FILE'] = ""
 
-    experiment = Experiment(workspace='quantifying_exposure_bias', 
+    experiment = Experiment(api_key='2UIhYs7jRdE2DbJDAB5OysNqM',
+                            workspace='quantifying_exposure_bias', 
                             project_name=experiment_name,
                             auto_metric_logging=False,
                             auto_param_logging=False,
@@ -185,7 +186,7 @@ def one_exp_run(serialization_dir:str,
         metrics['df_q_ps'] = df_q_ps
         metrics['df_q_p_mean'] = df_q_p_mean
         metrics['df_q_p_std'] = df_q_p_std
-        
+
         metrics[key] = value
         metric_list.append(metrics)
 

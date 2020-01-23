@@ -43,6 +43,11 @@ rollin_rollout_configs = [x for x in itertools.product(args.rollins, args.rollou
 
 num_samples_and_runs = [(50000, 4), (500000, 2), (2000000, 2)]
 
+experiment.log_parameters({'serialization_dir': serialization_dir,
+                          'main_args': main_args,
+                          'param_path': param_path,
+                          'experiment_id', experiment_id})
+
 def searnn_experiments(rollin_rollout_configs,
                             num_samples_and_runs,
                             main_args,
@@ -88,6 +93,10 @@ def searnn_experiments(rollin_rollout_configs,
                         }
                 experiment.log_metrics(result, step=step)
                 step += 1
+
+            experiment.log_metric('exp_bias_mean', run_metrics['exp_bias_mean'], step=step)
+            experiment.log_metric('df_p_q_mean', run_metrics['df_p_q_mean'], step=step)
+            experiment.log_metric('df_q_p_mean', run_metrics['df_q_p_mean'], step=step)
 
 if args.all:
     for num_samples, num_runs in num_samples_and_runs:

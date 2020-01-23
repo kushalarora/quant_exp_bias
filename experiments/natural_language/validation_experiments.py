@@ -38,7 +38,10 @@ main_args, serialization_dir, param_path, experiment_id, experiment = initialize
 
 num_samples_and_runs = [(50000, 6), (500000, 4), (2000000, 2)]
 
-# # Dataset Experiments
+experiment.log_parameters({'serialization_dir': serialization_dir,
+                          'main_args': main_args,
+                          'param_path': param_path,
+                          'experiment_id', experiment_id})
 
 def validation_experiments(main_args,
                             serialization_dir,
@@ -82,6 +85,11 @@ def validation_experiments(main_args,
                         }
                 experiment.log_metrics(result, step=step)
                 step += 1
+
+            experiment.log_metric('exp_bias_mean', run_metrics['exp_bias_mean'], step=step)
+            experiment.log_metric('df_p_q_mean', run_metrics['df_p_q_mean'], step=step)
+            experiment.log_metric('df_q_p_mean', run_metrics['df_q_p_mean'], step=step)
+
 if args.all:
     for num_samples, num_runs in num_samples_and_runs:
         validation_experiments(main_args, serialization_dir, param_path, num_samples, num_runs)

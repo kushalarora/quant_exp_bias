@@ -38,6 +38,11 @@ main_args, serialization_dir, param_path, experiment_id, experiment = initialize
 
 dataset_experiments_params = [(10000, 8), (50000, 6) , (500000, 4), (2000000, 2), (5000000, 1)]
 
+experiment.log_parameters({'serialization_dir': serialization_dir,
+                          'main_args': main_args,
+                          'param_path': param_path,
+                          'experiment_id', experiment_id})
+
 def dataset_experiments(main_args,
                         serialization_dir,
                         param_path,
@@ -72,6 +77,10 @@ def dataset_experiments(main_args,
             }
             experiment.log_metrics(result, step=step)
             step += 1
+
+        experiment.log_metric('exp_bias_mean', run_metrics['exp_bias_mean'], step=step)
+        experiment.log_metric('df_p_q_mean', run_metrics['df_p_q_mean'], step=step)
+        experiment.log_metric('df_q_p_mean', run_metrics['df_q_p_mean'], step=step)
 
 if args.all:
     for num_samples, num_runs in dataset_experiments_params:
