@@ -47,7 +47,7 @@ num_samples_and_runs = [(1000, 1), (10000,1), (100000,1)]
 experiment.log_parameters({'serialization_dir': serialization_dir,
                           'main_args': main_args,
                           'param_path': param_path,
-                          'experiment_id', experiment_id})
+                          'experiment_id': experiment_id})
 
 def scheduled_sampling_experiments(scheduled_sampling_ratios,
                                     main_args,

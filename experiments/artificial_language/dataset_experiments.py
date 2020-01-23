@@ -43,7 +43,7 @@ dataset_experiments_params = [(100, 8), (1000,6) , (10000, 4), (100000, 2), (100
 experiment.log_parameters({'serialization_dir': serialization_dir,
                           'main_args': main_args,
                           'param_path': param_path,
-                          'experiment_id', experiment_id})
+                          'experiment_id': experiment_id})
 
 def dataset_experiments(main_args,
                         serialization_dir,

@@ -45,7 +45,7 @@ num_samples_and_runs = [(1000, 4), (10000,2), (100000,2)]
 experiment.log_parameters({'serialization_dir': serialization_dir,
                           'main_args': main_args,
                           'param_path': param_path,
-                          'experiment_id', experiment_id})
+                          'experiment_id': experiment_id})
 
 def searnn_experiments(rollin_rollout_configs,
                             main_args,

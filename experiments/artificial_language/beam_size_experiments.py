@@ -38,7 +38,7 @@ generate_grammar_file(serialization_dir, vocabulary_size=24)
 experiment.log_parameters({'serialization_dir': serialization_dir,
                           'main_args': main_args,
                           'param_path': param_path,
-                          'experiment_id', experiment_id})
+                          'experiment_id': experiment_id})
 
 beam_sizes = [2,4,6]
 num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]

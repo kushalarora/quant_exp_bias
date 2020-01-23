@@ -51,7 +51,7 @@ num_samples_and_runs = [(50000, 4), (500000,2), (2000000,2)]
 experiment.log_parameters({'serialization_dir': serialization_dir,
                           'main_args': main_args,
                           'param_path': param_path,
-                          'experiment_id', experiment_id})
+                          'experiment_id': experiment_id})
 
 experiment.log_parameters(model_sizes)
 

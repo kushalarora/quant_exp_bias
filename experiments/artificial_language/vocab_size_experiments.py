@@ -48,7 +48,7 @@ grammar_vocab_size_and_dist = [x for x in itertools.product(grammar_templates, v
 experiment.log_parameters({'serialization_dir': serialization_dir,
                           'main_args': main_args,
                           'param_path': param_path,
-                          'experiment_id', experiment_id})
+                          'experiment_id': experiment_id})
 
 def vocabulary_size_experiments(grammar_vocab_size_and_dist,
                                 main_args,

@@ -41,7 +41,7 @@ num_samples_and_runs = [(50000, 6), (500000, 4), (2000000, 2)]
 experiment.log_parameters({'serialization_dir': serialization_dir,
                           'main_args': main_args,
                           'param_path': param_path,
-                          'experiment_id', experiment_id})
+                          'experiment_id': experiment_id})
 
 def validation_experiments(main_args,
                             serialization_dir,
