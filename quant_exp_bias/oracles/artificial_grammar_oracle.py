@@ -87,10 +87,10 @@ class ArtificialLanguageOracle(Oracle):
         assert vocabulary_size <= len(printables)
         vocab = [printables[i] for i in range(vocabulary_size)]
         extended_vocab = ["'SOS'", "'EOS'"] + vocab
-        
+
         grammar_template = open(grammar_template_file)
         grammar_rules = []
-        
+
         group_set = set([])
         for template in grammar_template:
             states_and_inputs = template.strip().split()
@@ -99,30 +99,30 @@ class ArtificialLanguageOracle(Oracle):
                 inp, next_state = next_states
             elif len(next_states) == 3:
                 inp, next_state, prob = next_states
-            
+
             if re.match("'<G[0-9]+>'", inp):
                 group_set.add(inp)
             elif inp not in extended_vocab:
                 extended_vocab.append(inp)
-                
+
 
         group2idx = {}
         for i, g in enumerate(group_set):
             group2idx[g] = i
-        
-        num_groups = len(group_set)  
+
+        num_groups = len(group_set)
         group_vocab_size = vocabulary_size//num_groups
 
         current_state_offset = {}
         grammar_template.seek(0)
-        for template in grammar_template:   
-            token2p = {} 
+        for template in grammar_template:
+            token2p = {}
             states_and_inputs = template.strip().split()
             current_state, arrow, next_states = states_and_inputs[0], states_and_inputs[1], states_and_inputs[2:]
-            
+
             if current_state not in current_state_offset:
                 current_state_offset[current_state] = 0
-            
+
             offset = current_state_offset[current_state]
             prob = None
             if len(next_states) == 2:
@@ -147,12 +147,12 @@ class ArtificialLanguageOracle(Oracle):
                     group_num = group2idx[inp]
                     group_vocab = vocab[group_num * group_vocab_size : (group_num + 1) * group_vocab_size]
                     group_p_vocab = _get_vocab_prob(len(group_vocab), offset)
-                    if prob: 
+                    if prob:
                         group_p_vocab =  [prob * x for x in group_p_vocab]
 
                     for token, p in zip(group_vocab, group_p_vocab):
                         token2p[token] = p - epsilon * (vocabulary_size + 2)/len(group_p_vocab)
-                else: 
+                else:
                    token2p[inp] = (prob or 1.0  - offset) - epsilon * (vocabulary_size + 2)
 
                 for token in extended_vocab:
@@ -168,7 +168,7 @@ class ArtificialLanguageOracle(Oracle):
         for rule in grammar_rules:
             grammar_string += f"{rule}\n"
         return grammar_string
-        
+
     @staticmethod
     def _weighted_choice(productions):
         """ TODO (Kushal): Add function doc.
@@ -242,14 +242,14 @@ class ArtificialLanguageOracle(Oracle):
                 parses = list(parser.parse(sequence))
                 if parses and len(parses) > 0:
                     # Marginalizing by seq_len + 1 because we assume it emits </S> symbol at the end with prob. 1. 
-                    probs = np.exp(np.log(reduce(lambda a, b: a + b.prob(), parses, 0))/(len(sequence) + 1))
+                    probs = np.exp(np.log(reduce(lambda a, b: a + b.prob(), parses, 1e-45))/(len(sequence) + 1))
                     logging.debug(f"Num Parses for Sequence: {sequence}: {len(parses)}:: {probs:.4f}")
 
             except Exception as e:
                 # Ideally if you fail to parse, the prob is zero.
                 #logging.warn(e)
                 pass
-            
+
             return probs
 
     def __del__(self):

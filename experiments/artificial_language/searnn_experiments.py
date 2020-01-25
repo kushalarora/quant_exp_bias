@@ -30,12 +30,14 @@ parser.add_argument('--num_runs', type=int, default=1,
 parser.add_argument('--all', action='store_true', help='Run All configurations mentioned below..')
 parser.add_argument('--rollins', nargs='+', help='Rollins to use', type=str, default=['teacher_forcing', 'mixed', 'learned'])
 parser.add_argument('--rollouts', nargs='+', help='Rollouts to use', type=str, default=['reference', 'mixed', 'learned'])
+parser.add_argument('--debug', action='store_true', help='Run in debug mode.')
 args = parser.parse_args()
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
 main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/searnn_experiments', 
-                                                                                 param_path='training_configs/artificial_grammar/artificial_grammar_searnn.jsonnet')
+                                                                                 param_path='training_configs/artificial_grammar/artificial_grammar_searnn.jsonnet',
+                                                                                 debug=args.debug)
 generate_grammar_file(serialization_dir)
 
 rollin_rollout_configs = [x for x in itertools.product(args.rollins, args.rollouts)]

@@ -28,11 +28,12 @@ parser.add_argument('--num_samples', type=int, default=10000,
 parser.add_argument('--num_runs', type=int, default=1,
                     help='Number of runs for the given dataset size.')
 parser.add_argument('--all', action='store_true', help='Run All configurations mentioned below..')
+parser.add_argument('--debug', action='store_true', help='Run in debug mode.')
 args = parser.parse_args()
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
-main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/dataset_experiments')
+main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/dataset_experiments', debug=args.debug)
 generate_grammar_file(serialization_dir)
 
 dataset_experiments_params = [(100, 8), (1000,6) , (10000, 4), (100000, 2), (1000000, 1)]

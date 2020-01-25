@@ -27,6 +27,7 @@ def generate_grammar_file(serialization_dir:str,
     grammar_string = ArtificialLanguageOracle.generate_grammar_string(grammar_template_file=grammar_template,
                                                                         vocabulary_size=vocabulary_size,
                                                                         vocabulary_distribution=vocabulary_distribution)
+    os.makedirs(serialization_dir, exist_ok=True)
     grammar_filename = os.path.join(serialization_dir, 'grammar.txt')
     with open(grammar_filename, 'w') as f:
         f.write(grammar_string)
@@ -34,7 +35,8 @@ def generate_grammar_file(serialization_dir:str,
     return grammar_filename
 
 def initialize_experiments(experiment_name: str, 
-                            param_path: str = None):
+                            param_path: str = None,
+                            debug: bool = False):
     # Ipython by default adds some arguments to sys.argv.
     #  We don't want those arguments, hence we pass [] here.
     #
@@ -59,6 +61,7 @@ def initialize_experiments(experiment_name: str,
                             project_name=experiment_name,
                             auto_metric_logging=False,
                             auto_param_logging=False,
+                            disabled=debug,
                            )
 
     return main_args, serialization_dir, param_path, experiment_id, experiment
@@ -163,6 +166,7 @@ def one_exp_run(serialization_dir:str,
 
         qeb_args = get_args(args=['quantify-exposure-bias',
                                     archive_file,
+                                    oracle_test_filename,
                                     '--output-dir', qeb_output_dir,
                                     '-o', qeb_overides])
 

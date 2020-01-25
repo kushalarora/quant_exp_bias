@@ -30,16 +30,17 @@ parser.add_argument('--num_samples', type=int, default=10000,
 parser.add_argument('--num_runs', type=int, default=1,
                     help='Number of runs for the given dataset size.')
 parser.add_argument('--all', action='store_true', help='Run All configurations mentioned below..')
+parser.add_argument('--debug', action='store_true', help='Run in debug mode.')
 args = parser.parse_args()
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
-main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/vocabulary_size_experiments')
+main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/vocabulary_size_experiments', debug=args.debug)
 vocabulary_sizes  = [6, 12, 24, 48]
 vocab_distributions = ['zipf', 'uniform']
 grammar_templates = ['grammar_templates/grammar_2.template', 'grammar_templates/grammar_1.template']
 
-num_samples_and_runs = [(1000, 4), (10000,4), (100000,2)]
+num_samples_and_runs = [(1000, 4), (10000,3), (100000,2)]
 # num_samples_and_runs = [(1000, 1), (10000,1), (100000,1)]
 
 # # Validation Experiments
@@ -61,9 +62,9 @@ def vocabulary_size_experiments(grammar_vocab_size_and_dist,
     step = 0
     orig_serialization_dir = serialization_dir
     for grammar_template, size, dist in grammar_vocab_size_and_dist:
-        vsexp_serialization_dir = os.path.join(orig_serialization_dir, f'{grammar_template}_{dist}_{size}')
+        vsexp_serialization_dir = os.path.join(orig_serialization_dir,  f'{grammar_template}_{dist}_{size}')
         grammar_filename = generate_grammar_file(vsexp_serialization_dir,
-                                                 grammar_template_file=grammar_template,
+                                                 grammar_template=grammar_template,
                                                  vocabulary_size=size,
                                                  vocabulary_distribution=dist)
 

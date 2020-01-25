@@ -3,19 +3,38 @@
 set -eux
 
 # Dataset Experiments
-sbatch -J al_dse -t 1-00:00:00 ./launcher_basic.sh python -u experiments/artificial_language/dataset_experiments.py
+for i in 100,8,3:00:00 1000,6,3:00:00 10000,4,3:00:00 100000,2,6:00:00 1000000,1,8:00:00; do
+    IFS=","; set -- $i; 
+    sbatch -J al_dse_$1 -t $3 ./launcher_basic.sh python -u experiments/artificial_language/dataset_experiments.py --num_samples $1 --num_runs $2
+done
 
 # Model Size Experiments:
-sbatch -J al_mse -t 1-23:00:00 ./launcher_basic.sh python -u experiments/artificial_language/model_size_experiments.py
+for i in 1000,6,6:00:00 10000,4,12:00:00 100000,2,12:00:00; do
+    IFS=","; set -- $i; 
+    sbatch -J al_mse_$1 -t $3 ./launcher_basic.sh python -u experiments/artificial_language/model_size_experiments.py --num_samples $1 --num_runs $2
+done
 
 # Beam Size Experiments:
-sbatch -J al_bse -t 1-00:00:00 ./launcher_basic.sh python -u experiments/artificial_language/beam_size_experiments.py
+for i in 1000,6,6:00:00 10000,4,6:00:00 100000,2,8:00:00; do
+    IFS=","; set -- $i; 
+    sbatch -J al_bse_$1 -t $3 ./launcher_basic.sh python -u experiments/artificial_language/beam_size_experiments.py  --num_samples $1 --num_runs $2
+done
+
 
 # Validation Experiments:
-sbatch -J al_val -t 2-00:00:00 ./launcher_basic.sh python -u experiments/artificial_language/validation_experiments.py
+for i in 1000,6,6:00:00 10000,4,12:00:00 100000,2,12:00:00; do
+    IFS=","; set -- $i; 
+    sbatch -J al_val_$1 -t $3 ./launcher_basic.sh python -u experiments/artificial_language/validation_experiments.py --num_samples $1 --num_runs $2
+done
 
 # Vocab Size Experiments:
-sbatch -J al_vse -t 2-00:00:00 ./launcher_basic.sh python -u experiments/artificial_language/vocab_size_experiments.py
+for i in 1000,6,6:00:00 10000,4,24:00:00 100000,2,24:00:00; do
+    IFS=","; set -- $i; 
+    sbatch -J al_vse_$1 -t $3 ./launcher_basic.sh python -u experiments/artificial_language/vocab_size_experiments.py --num_samples $1 --num_runs $2
+done
 
 # Scheduled Sampling Experiments:
-sbatch -J al_ss -t 2-00:00:00 ./launcher_basic.sh python -u experiments/artificial_language/scheduled_sampling_experiments.py
+for i in 1000,6,6:00:00 10000,4,24:00:00 100000,2,24:00:00; do
+    IFS=","; set -- $i; 
+    sbatch -J al_ss_$1 -t $3 ./launcher_basic.sh python -u experiments/artificial_language/scheduled_sampling_experiments.py --num_samples $1 --num_runs $2
+done

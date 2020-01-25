@@ -36,8 +36,8 @@ args = parser.parse_args()
 main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/validation_experiments')
 generate_grammar_file(serialization_dir)
 
-# num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
-num_samples_and_runs = [(1000, 1), (10000,1), (100000,1)]
+num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
+#num_samples_and_runs = [(1000, 1), (10000,1), (100000,1)]
 
 experiment.log_parameters({'serialization_dir': serialization_dir,
                           'main_args': main_args,

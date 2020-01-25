@@ -80,7 +80,7 @@ class ExposureBias(Metric):
 
             model_sampled_model_prob_i =  math.exp(model_sampled_model_log_probs[i].item())
             model_sampled_model_probs.append(model_sampled_model_prob_i)
-            
+
             # Here model_sampled_model_prob is Q because the samples
             # come from the model.
             Q = model_sampled_model_prob_i
@@ -97,7 +97,7 @@ class ExposureBias(Metric):
                 # with a warning.
                 logging.warn(f'Df_P_Q => P={P:.4f}, Q={Q:.4f}, Value={value:.4f} for {model_sampled_predictions[i]}.')
                 continue
-            
+
         oracle_sampled_batch_size = len(oracle_sampled_predictions)
         oracle_sampled_model_probs = []
         df_q_ps = []

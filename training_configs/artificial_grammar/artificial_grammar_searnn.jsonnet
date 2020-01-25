@@ -17,8 +17,8 @@
       "use_in_seq2seq_mode": false,
       "decoder": {
         "type": "quant_exp_searnn_decoder",
-        // "max_decoding_steps": 50,
-        "max_decoding_steps": 30,
+        "max_decoding_steps": 50,
+        //"max_decoding_steps": 30,
 
         "rollin_mode":  std.extVar("rollin_mode"),
         "rollout_mode": std.extVar("rollout_mode"),
@@ -44,8 +44,8 @@
           "type": "artificial_lang_oracle",
           "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME"),
           "parallelize": true,
-          "max_len": 30,
-          // "max_len": 50,
+          //"max_len": 30,
+          "max_len": 50,
         },
         "rollout_cost_function": {
           "type": "noisy_oracle",

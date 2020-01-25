@@ -29,14 +29,17 @@ parser.add_argument('--num_samples', type=int, default=10000,
 parser.add_argument('--num_runs', type=int, default=1,
                     help='Number of runs for the given dataset size.')
 parser.add_argument('--all', action='store_true', help='Run All configurations mentioned below..')
+parser.add_argument('--model_sizes', nargs='+', help='Model Sizes to consider', type=str, default=['xsmall', 'small', 'medium', 'large', 'xlarge'])
+parser.add_argument('--debug', action='store_true', help='Run in debug mode.')
+
 args = parser.parse_args()
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
-main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/model_size_experiments')
+main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/model_size_experiments', debug=args.debug)
 generate_grammar_file(serialization_dir)
 
-model_sizes  = {
+model_size_configs  = {
     'xsmall' : (10, 10, 1),
     'small': (100, 100, 1),
     'medium': (300, 300, 1),
@@ -61,7 +64,8 @@ def model_size_experiments(model_sizes,
     step = 0
     # Setup variables needed later.
     orig_serialization_dir = serialization_dir
-    for model_size, model_tuple in model_sizes.items():
+    for model_size in model_sizes:
+        model_tuple = model_size_configs[model_size]
         overrides = json.dumps({'model':{
                                     'decoder': {
                                         'decoder_net': {
@@ -99,6 +103,7 @@ def model_size_experiments(model_sizes,
                             'val_ppl': run_metrics['best_validation_perplexity'],
                             'best_val_epoch': run_metrics['best_epoch'],
                         }
+                experiment.log_parameter('model_size', model_size, step=step)
                 experiment.log_metrics(result, step=step)
                 step += 1
 
@@ -108,6 +113,6 @@ def model_size_experiments(model_sizes,
 
 if args.all:
     for num_samples, num_runs in num_samples_and_runs:
-        model_size_experiments(model_sizes, main_args, serialization_dir, param_path, num_samples, num_runs)
+        model_size_experiments(args.model_sizes, main_args, serialization_dir, param_path, num_samples, num_runs)
 else:
-    model_size_experiments(model_sizes, main_args, serialization_dir, param_path, args.num_samples, args.num_runs)
+    model_size_experiments(args.model_sizes, main_args, serialization_dir, param_path, args.num_samples, args.num_runs)

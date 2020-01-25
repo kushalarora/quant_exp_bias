@@ -21,6 +21,12 @@ from experiments.util import initialize_experiments, generate_grammar_file, one_
 
 import json
 
+scheduled_sampling_ratios  = [
+        ('uniform', 0.0, -1), ('uniform', 0.1, -1), ('uniform', 0.25, -1), ('uniform', 0.5, -1), ('uniform', 1.0, -1),  # Fixed SS ratio
+        # ('quantized', 1.0, 50), ('quantized', 1.0, 100), ('quantized', 1.0, 250), ('quantized', 1.0, 500), ('quantized', 1.0, 1000),  # Linearly increase ss ratio.
+        ('linear', 1.0, 50), ('linear', 1.0, 100), ('linear', 1.0, 250), ('linear', 1.0, 500), ('linear', 1.0, 1000),  # Linearly increase ss ratio.
+]
+
 import argparse
 parser = argparse.ArgumentParser(description='PyTorch Wikitext-2 RNN/LSTM Language Model')
 parser.add_argument('--num_samples', type=int, default=10000,
@@ -35,11 +41,7 @@ args = parser.parse_args()
 main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/scheduled_sampling_experiments')
 generate_grammar_file(serialization_dir)
 
-scheduled_sampling_ratios  = [
-        ('uniform', 0.0, -1), ('uniform', 0.1, -1), ('uniform', 0.25, -1), ('uniform', 0.5, -1), ('uniform', 1.0, -1),  # Fixed SS ratio
-        # ('quantized', 1.0, 50), ('quantized', 1.0, 100), ('quantized', 1.0, 250), ('quantized', 1.0, 500), ('quantized', 1.0, 1000),  # Linearly increase ss ratio.
-        ('linear', 1.0, 50), ('linear', 1.0, 100), ('linear', 1.0, 250), ('linear', 1.0, 500), ('linear', 1.0, 1000),  # Linearly increase ss ratio.
-]
+
 
 # num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
 num_samples_and_runs = [(1000, 1), (10000,1), (100000,1)]
