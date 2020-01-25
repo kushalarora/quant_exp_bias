@@ -6,6 +6,8 @@ import wandb
 
 from matplotlib import pyplot as plt
 
+from random import randint
+from time import sleep
 
 from typing import Dict, List
 
@@ -70,7 +72,7 @@ def validation_experiments(main_args,
         
             for exp_bias_idx, (exp_bias, df_p_q, df_q_p) in enumerate(zip(run_metrics['exp_biases'],
                                                                         run_metrics['df_p_qs'],
-                                                                        run_metrics['df_q_ps'])):                 
+                                                                        run_metrics['df_q_ps'])):
                 result = {
                             'exp_bias': exp_bias,
                             'Df_p_q': df_p_q,
@@ -83,6 +85,8 @@ def validation_experiments(main_args,
                         }
                 experiment.log_metrics(result, step=step)
                 step += 1
+                # This is added to avoid comet.ml's throttle
+                sleep(randint(1,10))
 
             experiment.log_metric('exp_bias_mean', run_metrics['exp_bias_mean'], step=step)
             experiment.log_metric('df_p_q_mean', run_metrics['df_p_q_mean'], step=step)

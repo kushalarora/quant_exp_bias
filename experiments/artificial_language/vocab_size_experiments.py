@@ -9,6 +9,10 @@ from matplotlib import pyplot as plt
 from datetime import datetime
 
 from datetime import datetime
+
+from random import randint
+from time import sleep
+
 from typing import Dict, List
 
 from allennlp.common import Params
@@ -101,6 +105,7 @@ def vocabulary_size_experiments(grammar_vocab_size_and_dist,
                     }
                 experiment.log_metrics(result, step=step)
                 step += 1
+                sleep(randint(1,10))
 
             experiment.log_metric('exp_bias_mean', run_metrics['exp_bias_mean'], step=step)
             experiment.log_metric('df_p_q_mean', run_metrics['df_p_q_mean'], step=step)
