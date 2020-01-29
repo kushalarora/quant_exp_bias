@@ -23,12 +23,16 @@ ExpBiasEpochsFuncType = Callable[[str], List[Tuple[int, str, str]]]
 def generate_grammar_file(serialization_dir:str,
                             grammar_template: str='grammar_templates/grammar_2.template',
                             vocabulary_size: int=6,
-                            vocabulary_distribution: str='uniform'):
+                            vocabulary_distribution: str='uniform',
+                            epsilon=0,
+                         ):
     grammar_string = ArtificialLanguageOracle.generate_grammar_string(grammar_template_file=grammar_template,
                                                                         vocabulary_size=vocabulary_size,
-                                                                        vocabulary_distribution=vocabulary_distribution)
+                                                                        vocabulary_distribution=vocabulary_distribution,
+                                                                        epsilon=epsilon,
+                                                                     )
     os.makedirs(serialization_dir, exist_ok=True)
-    grammar_filename = os.path.join(serialization_dir, 'grammar.txt')
+    grammar_filename = os.path.join(serialization_dir, f'epsilon_{epsilon}_grammar.txt')
     with open(grammar_filename, 'w') as f:
         f.write(grammar_string)
     os.environ["FSA_GRAMMAR_FILENAME"]  = grammar_filename
@@ -73,19 +77,29 @@ def default_exp_bias_epochs_func(train_model_serialization_dir):
     epoch = -1; qeb_suffix = ''; metrics_filename='metrics.json'
     return [(epoch, qeb_suffix, metrics_filename)]
 
-def one_exp_run(serialization_dir:str, 
-                num_samples:int, 
-                run:int, 
+def one_exp_run(serialization_dir:str,
+                num_samples:int,
+                run:int,
                 param_path:str,
                 overides_func:OverrideFuncType = default_overides_func,
                 exp_bias_epochs_func:ExpBiasEpochsFuncType = default_exp_bias_epochs_func,
                 sample_from_file=False,
                 dataset_filename=None,
                 exp_bias_inference_funcs:List[Tuple[str, Any, OverrideFuncType]] = lambda:[],
+                shall_generate_grammar_file:str = False,
+                grammar_template: str='grammar_templates/grammar_2.template',
+                vocabulary_size: int=6,
+                vocabulary_distribution: str='uniform',
                ):
     run_serialization_dir = os.path.join(serialization_dir, str(num_samples), str(run))
+
+    # This is grammar with epsilon 0 to sample correct sequence.
+    if shall_generate_grammar_file:
+        generate_grammar_file(run_serialization_dir, grammar_template,
+                                vocabulary_size, vocabulary_distribution, epsilon=0)
+
     overrides = overides_func()
-    sample_oracle_args=['sample-oracle', 
+    sample_oracle_args=['sample-oracle',
                         param_path,
                         '-s', run_serialization_dir,
                         '-n', str(num_samples),
@@ -105,14 +119,20 @@ def one_exp_run(serialization_dir:str,
     os.environ['TRAIN_FILE'] = oracle_train_filename
     os.environ['DEV_FILE'] = oracle_dev_filename
 
-    train_args = get_args(args=['train', 
-                                    param_path, 
-                                    '-s', run_serialization_dir, 
+    # This is grammar with epsilon 1e-4 to smoothened probability distribution
+    # so that we can assign some prob. to incorrect sequences.
+    if shall_generate_grammar_file:
+        generate_grammar_file(run_serialization_dir, grammar_template,
+                                vocabulary_size, vocabulary_distribution, epsilon=1e-4)
+
+    train_args = get_args(args=['train',
+                                    param_path,
+                                    '-s', run_serialization_dir,
                                     '-o',  overrides])
     trainer_params = Params.from_file(train_args.param_path, train_args.overrides)
     cuda_device = trainer_params['trainer']['cuda_device']
 
-    train_model_serialization_dir = train_runner(train_args, 
+    train_model_serialization_dir = train_runner(train_args,
                                                 run_serialization_dir);
 
     archive_file = os.path.join(train_model_serialization_dir, 'model.tar.gz')

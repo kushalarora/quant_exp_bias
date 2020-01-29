@@ -43,9 +43,6 @@ args = parser.parse_args()
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
 main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/scheduled_sampling_experiments')
-generate_grammar_file(serialization_dir)
-
-
 
 # num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
 num_samples_and_runs = [(1000, 1), (10000,1), (100000,1)]
@@ -78,7 +75,9 @@ def scheduled_sampling_experiments(scheduled_sampling_ratios,
                                         num_samples=num_samples,
                                         run=run,
                                         param_path=param_path,
-                                        overides_func=lambda:overrides)
+                                        overides_func=lambda:overrides,
+                                        shall_generate_grammar_file=True,
+                                     )
 
             assert len(run_metrics) == 1, \
                 'For this experiment, there should only be one final metric object for a run.'

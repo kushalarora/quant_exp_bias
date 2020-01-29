@@ -41,7 +41,6 @@ args = parser.parse_args()
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
 main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/model_size_experiments', debug=args.debug)
-generate_grammar_file(serialization_dir)
 
 model_size_configs  = {
     'xsmall' : (10, 10, 1),
@@ -86,9 +85,11 @@ def model_size_experiments(model_sizes,
         for num_run in range(num_runs):
             run_metrics = one_exp_run(serialization_dir=serialization_dir, 
                                         num_samples=num_samples,
-                                        run=num_run, 
+                                        run=num_run,
                                         param_path=param_path,
-                                        overides_func=lambda:overrides)
+                                        overides_func=lambda:overrides,
+                                        shall_generate_grammar_file=True,
+                                     )
         
             assert len(run_metrics) == 1, \
                 'For this experiment, there should only be one final metric object for a run.'

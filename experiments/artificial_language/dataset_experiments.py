@@ -38,7 +38,6 @@ args = parser.parse_args()
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
 main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/dataset_experiments', debug=args.debug)
-generate_grammar_file(serialization_dir)
 
 dataset_experiments_params = [(100, 8), (1000,6) , (10000, 4), (100000, 2), (1000000, 1)]
 # dataset_experiments_params = [(100, 1), (1000, 1) , (10000, 1), (100000, 1), (1000000, 1)]
@@ -61,7 +60,9 @@ def dataset_experiments(main_args,
         run_metrics = one_exp_run(serialization_dir=serialization_dir,
                                     num_samples=num_samples,
                                     run=num_run,
-                                    param_path=param_path)
+                                    param_path=param_path,
+                                    shall_generate_grammar_file=True,
+                                 )
 
         assert len(run_metrics) == 1, \
             'For this experiment, there should only be one final metric object for a run.'

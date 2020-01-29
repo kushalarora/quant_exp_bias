@@ -67,10 +67,6 @@ def vocabulary_size_experiments(grammar_vocab_size_and_dist,
     orig_serialization_dir = serialization_dir
     for grammar_template, size, dist in grammar_vocab_size_and_dist:
         vsexp_serialization_dir = os.path.join(orig_serialization_dir,  f'{grammar_template}_{dist}_{size}')
-        grammar_filename = generate_grammar_file(vsexp_serialization_dir,
-                                                 grammar_template=grammar_template,
-                                                 vocabulary_size=size,
-                                                 vocabulary_distribution=dist)
 
 
         overrides = json.dumps({'model':{
@@ -79,10 +75,15 @@ def vocabulary_size_experiments(grammar_vocab_size_and_dist,
                                             'grammar_file': grammar_filename}}}})
         for num_run in range(num_runs):
             run_metrics = one_exp_run(serialization_dir=vsexp_serialization_dir,
-                                    num_samples=num_samples,
-                                    run=num_run,
-                                    param_path=param_path,
-                                    overides_func=lambda: overrides)
+                                        num_samples=num_samples,
+                                        run=num_run,
+                                        param_path=param_path,
+                                        overides_func=lambda: overrides,
+                                        grammar_template=grammar_template,
+                                        vocabulary_size=size,
+                                        vocabulary_distribution=dist,
+                                        shall_generate_grammar_file=True,
+                                     )
 
             assert len(run_metrics) == 1, \
                 'For this experiment, there should only be one final metric object for a run.'

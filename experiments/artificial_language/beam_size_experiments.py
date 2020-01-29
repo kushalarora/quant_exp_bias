@@ -36,7 +36,6 @@ args = parser.parse_args()
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
 main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/beam_size_experiments', debug=args.debug)
-generate_grammar_file(serialization_dir, vocabulary_size=24)
 
 experiment.log_parameters({'serialization_dir': serialization_dir,
                           'main_args': main_args,
@@ -72,7 +71,10 @@ def beam_size_experiments(beam_sizes,
                                         num_samples=num_samples,
                                         run=num_run, 
                                         param_path=param_path,
-                                        exp_bias_inference_funcs=qeb_beam_size_overrides_func,)
+                                        exp_bias_inference_funcs=qeb_beam_size_overrides_func,
+                                        shall_generate_grammar_file=True,
+                                        vocabulary_size=24,
+                                      )
 
         for run_metrics in run_metrics_list:
             beam_size = run_metrics.get('beam_size', 1)

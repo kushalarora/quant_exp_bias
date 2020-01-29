@@ -42,7 +42,6 @@ args = parser.parse_args()
 main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/searnn_experiments', 
                                                                                  param_path='training_configs/artificial_grammar/artificial_grammar_searnn.jsonnet',
                                                                                  debug=args.debug)
-generate_grammar_file(serialization_dir)
 
 rollin_rollout_configs = [x for x in itertools.product(args.rollins, args.rollouts)]
 
@@ -72,7 +71,9 @@ def searnn_experiments(rollin_rollout_configs,
             run_metrics = one_exp_run(serialization_dir=serialization_dir, 
                                         num_samples=num_samples,
                                         run=num_run,
-                                        param_path=param_path)
+                                        param_path=param_path,
+                                        shall_generate_grammar_file=True,
+                                        )
 
             assert len(run_metrics) == 1, \
                 'For this experiment, there should only be one final metric object for a run.'
