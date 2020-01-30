@@ -28,12 +28,14 @@ parser.add_argument('--num_samples', type=int, default=10000,
 parser.add_argument('--num_runs', type=int, default=1,
                     help='Number of runs for the given dataset size.')
 parser.add_argument('--all', action='store_true', help='Run All configurations mentioned below..')
+parser.add_argument('--debug', action='store_true', help='Run in debug mode.')
 args = parser.parse_args()
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
 main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('natural_lang/dataset_experiments',
                                                                                  param_path = 'training_configs/natural_lang/emnlp_news_gpt2.jsonnet',
+                                                                                 debug=args.debug,
                                                                                 )
 
 dataset_experiments_params = [(10000, 8), (50000, 6) , (500000, 4), (2000000, 2), (5000000, 1)]
