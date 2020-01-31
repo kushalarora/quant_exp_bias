@@ -7,10 +7,7 @@
 #SBATCH --gres=gpu:1
 ###########################
 
-source activate quant_exp
-
 set -eux
-
 
 export rollin_mode=${rollin_mode:='learned'}
 export rollout_mode=${rollout_mode:='mixed'}
