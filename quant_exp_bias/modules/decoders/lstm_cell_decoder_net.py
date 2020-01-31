@@ -106,10 +106,10 @@ class LstmCellDecoderNet(DecoderNet):
             encoder_out["encoder_outputs"],
             encoder_out["source_mask"],
             bidirectional=self._bidirectional_input,)
-        
+
         # shape: (batch_size, 1, decoder_output_dim)
         decoder_hidden = final_encoder_output.unsqueeze(1)
-       
+
         # shape: (batch_size, 1, decoder_output_dim)
         decoder_context = final_encoder_output.new_zeros(batch_size, self.decoding_dim).unsqueeze(1)
 
@@ -123,7 +123,7 @@ class LstmCellDecoderNet(DecoderNet):
                 previous_state: Dict[str, torch.Tensor],
                 last_predictions_embedding: torch.Tensor,
                ) -> Tuple[Dict[str, torch.Tensor], torch.Tensor]:
-        
+
         # shape (decoder_hidden): (batch_size, 1, decoder_output_dim)
         decoder_hiddens = previous_state.get("decoder_hiddens", None)
 
@@ -176,12 +176,12 @@ class LstmCellDecoderNet(DecoderNet):
             decoder_hidden, decoder_context = self._decoder_cell(decoder_input, 
                                                                  decoder_hidden_and_context)
             decoder_output = decoder_hidden
-                                                            
+
         # TODO(Kushal:) Maybe this is not needed and so is line 141 changes.
         if self._num_decoder_layers > 1:
             decoder_hidden = decoder_hidden.transpose(0,1).contiguous()
             decoder_context = decoder_context.transpose(0,1).contiguous()
-    
+
         decoder_hidden = decoder_hidden.unsqueeze(1)
         decoder_context = decoder_context.unsqueeze(1)
 
@@ -191,7 +191,6 @@ class LstmCellDecoderNet(DecoderNet):
         elif self._accumulate_hidden_states:
             decoder_hiddens = torch.cat([decoder_hiddens, decoder_hidden], dim=1)
             decoder_contexts = torch.cat([decoder_contexts, decoder_context], dim=1)
-        
 
         return (
             {"decoder_hiddens": decoder_hiddens, 

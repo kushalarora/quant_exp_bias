@@ -126,7 +126,6 @@ class ComposedLMBase(Model):
         Dict[str, torch.Tensor]
             The output tensors from the decoder.
         """
-        #import pdb;pdb.set_trace()
         state:  Dict[str, torch.Tensor] = {}
         if self._seq2seq_mode:
             state.update(self._encode(source_tokens))
