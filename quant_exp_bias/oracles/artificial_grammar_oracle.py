@@ -68,9 +68,13 @@ class ArtificialLanguageOracle(Oracle):
     @staticmethod
     def generate_grammar_string(grammar_template_file: str,
                                  vocabulary_size: int,
-                                 vocabulary_distribution: str,):
-        epsilon = 0
+                                 vocabulary_distribution: str,
+                                 epsilon=0,
+                               ):
 
+        # TODO (Kushal): Even with smoothing it will fail to
+        # parse SOS a b EOS it will not reach end state. So,
+        # We should add an end state at each state transition.
         def _get_vocab_prob(vsize, offset=0):
             if vocabulary_distribution == 'zipf':
                 dist = zipf(1.2)
@@ -160,6 +164,8 @@ class ArtificialLanguageOracle(Oracle):
                         p = token2p[token]
                     else:
                         p = epsilon
+                        # p = epsilon/2
+                        # grammar_rules.append(f"{current_state} {arrow} {token} [{epsilon/2:.5f}]")
 
                     current_state_offset[current_state] += p
                     grammar_rules.append(f"{current_state} {arrow} {token} {next_state} [{p:.5f}]")
@@ -237,20 +243,31 @@ class ArtificialLanguageOracle(Oracle):
     @staticmethod
     def _compute_one_sent_prob(sequence: List[str]):
             global parser
-            probs = 1e-6
+            probs = 1e-2
+            cond_probs = []
             try:
                 parses = list(parser.parse(sequence))
                 if parses and len(parses) > 0:
-                    # Marginalizing by seq_len + 1 because we assume it emits </S> symbol at the end with prob. 1. 
-                    probs = np.exp(np.log(reduce(lambda a, b: a + b.prob(), parses, 1e-45))/(len(sequence) + 1))
-                    logging.debug(f"Num Parses for Sequence: {sequence}: {len(parses)}:: {probs:.4f}")
+                    # We will only consider top parse as
+                    # other are because of smoothing.
+                    parse = parses[0]
 
+                    # Marginalizing by seq_len + 1 because we assume it emits </S> symbol at the end with prob. 1. 
+                    probs = np.exp(np.log(parse.prob())/(len(sequence) + 1))
+
+                    st_probs = [st.prob() for st in parse.subtrees()]
+                    for i in range(len(st_probs) - 1):
+                        cond_probs.append(st_probs[i]/st_probs[i+1])
+                    cond_probs.append(st_probs[-1])
+                    cond_probs.append(1.0)
             except Exception as e:
                 # Ideally if you fail to parse, the prob is zero.
                 #logging.warn(e)
                 pass
 
-            return probs
+            if len(cond_probs) == 0:
+                cond_probs = [1e-2] * (len(sequence) + 1)
+            return probs, cond_probs
 
     def __del__(self):
         self._pool.terminate()

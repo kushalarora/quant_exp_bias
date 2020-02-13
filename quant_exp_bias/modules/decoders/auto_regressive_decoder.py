@@ -107,6 +107,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 ) -> None:
         super().__init__(target_embedder)
 
+        self.current_device = torch.cuda.current_device() if torch.cuda.is_available() else 'cpu'
         self._vocab = vocab
         self._seq2seq_mode = use_in_seq2seq_mode
 
@@ -141,9 +142,10 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
 
         if self._mask_pad_and_oov:
             self._vocab_mask = torch.ones(self._vocab.get_vocab_size(self._target_namespace),
-                                        device=torch.cuda.current_device()) \
+                                            device=self.current_device) \
                                     .scatter(0, torch.tensor([self._padding_index, self._oov_index, self._start_index],
-                                                 device=torch.cuda.current_device()), 0)
+                                                                device=self.current_device),
+                                                0)
         if use_bleu:
             pad_index = self._vocab.get_token_index(self._vocab._padding_token, self._target_namespace)  # pylint: disable=protected-access
             self._bleu = BLEU(exclude_indices={pad_index, self._end_index, self._start_index})
@@ -333,9 +335,9 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 rollout_mixing_prob_tensor = torch.bernoulli(torch.ones(batch_size) * self._rollout_mixing_prob)
 
             rollout_mixing_mask = rollout_mixing_prob_tensor \
-                                                .unsqueeze(1) \
-                                                .expand(logits.shape) \
-                                                .to(torch.cuda.current_device())
+                                    .unsqueeze(1) \
+                                    .expand(logits.shape) \
+                                    .to(self.current_device)
 
             # The target_logits ranges from (-inf , 0), so, by adding those to logits,
             # we turn the values that are not target token to -inf, hence making the distribution
@@ -465,6 +467,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                                         target_tokens,
                                                         generation_batch_size)
 
+        # TODO (Kushal): Clean this if else loop jungle.
         # This is training loop.
         if (not compute_exposure_bias) and target_tokens:
             rollin_output_dict, rollout_output_dict = \
@@ -485,7 +488,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             # we need to roll out the learned policy and the output
             # of this rollout is used to compute the secondary metrics
             # like BLEU, or exposure bias.
-            state = {}
+            state = encoder_out
             state.update(decoder_init_state)
             rollout_output_dict = self.rollout(state,
                                                 start_predictions,
@@ -540,25 +543,30 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
 
                 # This +1 takes care of </S> prediction as predicted token are limited to
                 # token before </S>.
-                normalized_prediction_losses = [pred_loss/(len(pred_tokens) + 1) 
+                normalized_prediction_losses = [torch.exp(pred_loss/(len(pred_tokens) + 1)).item()
                                                     for pred_loss, pred_tokens in zip(prediction_loss.data.cpu(), predicted_tokens)]
 
                 oracle_sampled_predicted_tokens = self._decode_tokens(target_tokens['tokens'],
                                     vocab_namespace=self._target_namespace,
                                     truncate=True)
 
-                oracle_samples_predicted_losses, \
-                seq_lens, oracle_samples_seq_log_probs = \
-                                            self.compute_sentence_probs(target_tokens)
+                oracle_sampled_model_probs, seq_lens, oracle_sampled_model_seq_probs = \
+                                                self.compute_sentence_probs(target_tokens)
+
+                step_log_probs = F.log_softmax(rollout_output_dict['logits'].squeeze(1), dim=-1)
+                model_sampled_model_seq_probs = torch.exp(torch.gather(step_log_probs, 2,
+                                                                        best_predictions[:,1:].unsqueeze(2)) \
+                                                                .squeeze(2))
 
                 model_sampled_predicted_tokens, model_sampled_model_probs, model_sampled_oracle_probs, df_p_qs, \
                     oracle_sampled_predicted_tokens, oracle_sampled_model_probs, oracle_sampled_oracle_probs, df_q_ps = \
-                            self._exposure_bias(model_sampled_model_log_probs=normalized_prediction_losses,
+                            self._exposure_bias(model_sampled_model_probs=normalized_prediction_losses,
                                                 model_sampled_predictions=predicted_tokens,
+                                                model_sampled_model_seq_probs=model_sampled_model_seq_probs.data.cpu(),
                                                 use_js=True,
-                                                oracle_sampled_model_log_probs=oracle_samples_predicted_losses.data.cpu(),
+                                                oracle_sampled_model_probs=oracle_sampled_model_probs.data.cpu(),
                                                 oracle_sampled_predictions=oracle_sampled_predicted_tokens,
-                                                oracle_samples_seq_log_probs=oracle_samples_seq_log_probs.data.cpu())
+                                                oracle_sampled_model_seq_probs=oracle_sampled_model_seq_probs.data.cpu())
 
                 output_dict['model_sampled_model_probs'] = model_sampled_model_probs
                 output_dict['model_sampled_oracle_probs'] = model_sampled_oracle_probs
@@ -830,18 +838,19 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             output_dict["loss_batch"] = loss_batch
         return output_dict
 
-    def compute_sentence_probs(self, 
+    def compute_sentence_probs(self,
                                sequences_dict: Dict[str, torch.LongTensor],
                               ) -> torch.FloatTensor:
         """ Given a batch of tokens, compute the per-token log probability of sequences
-            given the trained model. 
-        
+            given the trained model.
+
         Arguments:
             sequences_dict {Dict[str, torch.LongTensor]} -- The sequences that needs to be scored.
-        
+
         Returns:
-            probabilities {torch.FloatTensor} -- Probabilities of the sequence.
-            seq_len {torch.LongTensor} -- Length of the non padded sequence.
+            oracle_sampled_model_probs {torch.FloatTensor} -- Probabilities of the sequence.
+            seq_lens {torch.LongTensor} -- Length of the non padded sequence.
+            oracle_sampled_model_seq_probs {torch.LongTensor} -- Probability of per prediction in a sequence
         """
         state = {}
         sequences = sequences_dict['tokens']
@@ -861,12 +870,20 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         oracle_sampled_prediction_log_probs = torch.gather(step_log_probs, 2,
                                                         sequences[:,1:].unsqueeze(2)) \
                                                 .squeeze(2)
+
         sequence_mask = util.get_text_field_mask(sequences_dict)
         oracle_sampled_prediction_log_probs_summed = torch.sum(oracle_sampled_prediction_log_probs * sequence_mask[:, 1:], dim=-1)
         non_batch_dims = tuple(range(1, len(sequence_mask.shape)))
+
         # shape : (batch_size,)
         sequence_mask_sum = sequence_mask[:, 1:].sum(dim=non_batch_dims)
-        return oracle_sampled_prediction_log_probs_summed/sequence_mask_sum, sequence_mask_sum, oracle_sampled_prediction_log_probs
+
+        # oracle_sampled_model_probs, \
+        # seq_lens,
+        # oracle_sampled_model_seq_probs
+        return torch.exp(oracle_sampled_prediction_log_probs_summed/sequence_mask_sum), \
+                sequence_mask_sum, \
+                torch.exp(oracle_sampled_prediction_log_probs)
 
     def _forward_loop(self,
                       state: Dict[str, torch.Tensor],
@@ -908,8 +925,9 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         # Initialize target predictions with the start index.
         # shape: (batch_size,)
         return torch.zeros((batch_size,),
-                                       dtype=torch.long,
-                                       device=torch.cuda.current_device()).fill_(self._start_index)
+                            dtype=torch.long,
+                            device=self.current_device) \
+                    .fill_(self._start_index)
 
     def _prepare_output_projections(self,
                                     last_predictions: torch.Tensor,

@@ -65,7 +65,7 @@
           },
         },
         "temperature": 1000,
-        "num_random_to_add": 10,
+        "num_neighbors_to_add": 10,
         "num_tokens_to_rollout": 15,
       }
   },

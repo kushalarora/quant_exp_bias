@@ -55,7 +55,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                  num_tokens_to_rollout:int = -1,
                  detokenizer: DeTokenizer = default_tokenizer,
                  temperature: int = 1,
-                 num_random_to_add: int = 0,
+                 num_neighbors_to_add: int = 0,
                 ) -> None:
         super().__init__(vocab=vocab,
                          max_decoding_steps=max_decoding_steps,
@@ -101,9 +101,9 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         self._temperature = temperature
 
         self._rollout_mask = torch.tensor([self._padding_index, self._start_index],
-                                device=torch.cuda.current_device())
+                                           device=self.current_device)
 
-        self._num_random_to_add = num_random_to_add
+        self._num_neighbors_to_add = num_neighbors_to_add
 
     @overrides
     def _forward_loop(self,
@@ -198,14 +198,21 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                                              value=-1e2) \
                                     .scatter_(dim=1,
                                               index=targets[:, step].unsqueeze(1),
-                                              value=1e3) \
-                                    .scatter_(dim=1,
-                                              index=self._rollout_mask.new_zeros((rollin_logits.size(0), 1)).fill_(self._end_index),
                                               value=1e3)
 
-            if self._num_random_to_add > 0:
-                # Select these self._num_random_to_add random tokens.
-                random_tokens = torch.randint(low=5, high=num_classes, size=(batch_size, self._num_random_to_add)).to(torch.cuda.current_device())
+            if self._num_neighbors_to_add > 0:
+                # Select these self._num_neighbors_to_add random tokens.
+                # We add _num_neighbors_to_add/2 both on left and the right side. 
+                # Neighbors are previous and next words in the context.
+                num_neighbors_to_add = (self._num_neighbors_to_add // 2) * 2
+                if target_tokens is not None:
+                    left_context = min(step, num_neighbors_to_add//2)
+                    right_context = min(num_decoding_steps - step, num_neighbors_to_add - left_context)
+                    try:
+                        random_tokens = target_tokens['tokens'][:, step-left_context: step+right_context]
+                    except:
+                        import pdb;pdb.set_trace()
+
                 masked_step_logits = masked_step_logits.scatter_(dim=1,
                                                                  index=random_tokens,
                                                                  value=1e2)
@@ -342,6 +349,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         predictions = rollin_output_dict['predictions'].squeeze(1)
         loss_batch = rollout_output_dict['loss_batch']
         output_dict = {'predictions': predictions.data.cpu()}
+
         if self._combiner_mode == 'kl':
 
             target_mask = util.get_text_field_mask(target_tokens)

@@ -22,9 +22,10 @@ class ExposureBias(Metric):
     the metric for you, for instance, you can use this to report the average result using our
     ``Metric`` API.
     """
-    def __init__(self, 
+    def __init__(self,
                  oracle: Oracle,
-                 type:str = 'hellinger_squared',
+                 type:str = 'tv',
+                 at_prefix_level:bool = True,
                 ) -> None:
         self._total_value = 0.0
         self._df_p_q = 0.0
@@ -32,18 +33,20 @@ class ExposureBias(Metric):
         self._count = 0
         self._oracle = oracle
         self._type = type
+        self._at_prefix_level = at_prefix_level
 
         # D_f(P||Q) = \sum_{x in X} f(p(X)/q(x))q(x)
         self._Df = ExposureBias.DfBuilder(type)
 
     @overrides
     def __call__(self,
-                 model_sampled_model_log_probs: torch.FloatTensor,
+                 model_sampled_model_probs: torch.FloatTensor,
                  model_sampled_predictions: List[str],
-                 use_js: bool = False, 
-                 oracle_sampled_model_log_probs: torch.FloatTensor = None,
+                 model_sampled_model_seq_probs: torch.FloatTensor,
+                 use_js: bool = False,
+                 oracle_sampled_model_probs: torch.FloatTensor = None,
                  oracle_sampled_predictions: List[str] = [],
-                 oracle_samples_seq_log_probs: torch.FloatTensor = None,
+                 oracle_sampled_model_seq_probs: torch.FloatTensor = None,
                 ):
         """
         Parameters
@@ -51,86 +54,89 @@ class ExposureBias(Metric):
         value : ``float``
             The value to average.
         """
-        # filtered_predictions = []
-        # filtered_predictions_losses = []
-
-        # If it is an empty sequence or 1 word sequence,
-        # ignore it.
-        # for i, prediction in enumerate(model_sampled_predictions):
-        #     if len(prediction) > 1:
-        #         filtered_predictions.append(prediction)
-        #         filtered_predictions_losses.append(model_sampled_losses[i])
-
-        # model_sampled_predictions = filtered_predictions
-        # model_sampled_losses = model_sampled_losses.new_tensor(filtered_predictions_losses)
-        
         # TODO (Kushal) Add comments to explain what is going on.
         # Compute DL(P||M)
         model_sampled_batch_size = len(model_sampled_predictions)
-        model_sampled_model_probs = []
         df_p_q = 0
         df_p_q_count = 0
         df_p_qs = []
 
-        model_sampled_oracle_probs = self._oracle.compute_sent_probs(model_sampled_predictions)
+        model_sampled_oracle_probs = []
+        model_sampled_oracle_probs_and_seq_probs = self._oracle.compute_sent_probs(model_sampled_predictions)
         for i in range(model_sampled_batch_size):
-            value = 0
+
             if len(model_sampled_predictions[i]) == 0:
                 continue
 
-            model_sampled_model_prob_i =  math.exp(model_sampled_model_log_probs[i].item())
-            model_sampled_model_probs.append(model_sampled_model_prob_i)
+            if self._at_prefix_level:
+                df_p_q_seq = 0
+                seq_len = len(model_sampled_predictions[i])
+                prev_p_q = 1.0
+                for j in range(seq_len):
+                    # Here model_sampled_model_prob is Q because the samples
+                    # come from the model.
+                    Q = model_sampled_model_seq_probs[i][j].item()
+                    P = model_sampled_oracle_probs_and_seq_probs[i][1][j]
 
-            # Here model_sampled_model_prob is Q because the samples
-            # come from the model.
-            Q = model_sampled_model_prob_i
-            P = model_sampled_oracle_probs[i]
-            value = self._Df(P, Q, len(model_sampled_predictions[i]))
-            df_p_q += value
-            df_p_qs.append(value)
-            df_p_q_count += 1
 
-            if random.random() < 0.2:
-                logging.debug(f"Df_P_Q => P={P:.4f}, Q={Q:.4f}, Value={value:.4f}")
+                    # value, prev_p, prev_q = self._Df(P, Q, prev_p, prev_q, j+1)
+                    value, prev_p_q = self._Df(P, Q, prev_p_q, j+1)
 
-            if  np.isneginf(value) or np.isposinf(value):
-                # with a warning.
-                logging.warn(f'Df_P_Q => P={P:.4f}, Q={Q:.4f}, Value={value:.4f} for {model_sampled_predictions[i]}.')
-                continue
+                    df_p_q_seq += value
 
+                df_p_q += df_p_q_seq
+                df_p_qs.append(df_p_q_seq/seq_len)
+                df_p_q_count += seq_len
+            else:
+                Q = model_sampled_model_probs[i]
+                P = model_sampled_oracle_probs[i]
+                value, _ = self._Df(P, Q, 1, 1)
+                df_p_q += value
+                df_p_qs.append(value)
+                df_p_q_count += 1
+
+            model_sampled_oracle_probs.append(model_sampled_oracle_probs_and_seq_probs[i][0])
         oracle_sampled_batch_size = len(oracle_sampled_predictions)
-        oracle_sampled_model_probs = []
         df_q_ps = []
         df_q_p = 0
         df_q_p_count = 0
 
         # Compute DL(Q||M)
-        oracle_sampled_oracle_probs = self._oracle.compute_sent_probs(oracle_sampled_predictions)
+        oracle_sampled_oracle_probs = []
+        oracle_sampled_oracle_probs_and_seq_probs = self._oracle.compute_sent_probs(oracle_sampled_predictions)
         for i in range(oracle_sampled_batch_size):
-            value = 0
+
             if len(oracle_sampled_predictions[i]) == 0:
                 continue
-            
-            oracle_sampled_model_prob_i =  math.exp(oracle_sampled_model_log_probs[i].item())
 
-            oracle_sampled_model_probs.append(oracle_sampled_model_prob_i)
-           
-            # Here oracle_sampled_oracle_probs is Q because the samples
-            # come from the oracle.
-            Q = oracle_sampled_oracle_probs[i]
-            P = oracle_sampled_model_prob_i
-            value = self._Df(P, Q, len(oracle_sampled_predictions[i]))
-            df_q_p += value
-            df_q_ps.append(value)
-            df_q_p_count += 1
+            import pdb; pdb.set_trace()
+            if self._at_prefix_level:
+                df_q_p_seq = 0
+                seq_len = len(oracle_sampled_predictions[i])
+                prev_p_q = 1.0
+                for j in range(seq_len):
+                    # Here oracle_sampled_oracle_probs is Q because the samples
+                    # come from the oracle.
+                    Q = oracle_sampled_oracle_probs_and_seq_probs[i][1][j]
+                    P = oracle_sampled_model_seq_probs[i][j].item()
 
-            if random.random() < 0.2:
-                logging.debug(f"Df_Q_P => Q={Q:.4f}, P={P:.4f}, Value={value:.4f}")
+                    #value, prev_p, prev_q = self._Df(P, Q, prev_p, prev_q, j+1)
+                    value, prev_p_q = self._Df(P, Q, prev_p_q, j+1)
 
-            if  np.isneginf(value) or np.isposinf(value):
-                # with a warning.
-                logging.warn(f'Df_Q_P ==> Q={Q:.4f}, P={P:.4f}, Value={value:.4f} for {model_sampled_predictions[i]:.4f}.')
-                continue
+                    df_q_p_seq += value
+
+                df_q_p += df_q_p_seq
+                df_q_ps.append(df_q_p_seq/seq_len)
+                df_q_p_count += seq_len
+            else:
+                Q = oracle_sampled_oracle_probs[i]
+                P = oracle_sampled_model_probs[i]
+                value, _ = self._Df(P, Q, 1, 1)
+                df_q_p += value
+                df_q_ps.append(value)
+                df_q_p_count += 1
+
+            oracle_sampled_oracle_probs.append(oracle_sampled_oracle_probs_and_seq_probs[i][0])
 
         self._total_value += df_p_q/df_p_q_count + df_q_p/df_q_p_count
         self._df_p_q +=  df_p_q/df_p_q_count
@@ -147,7 +153,7 @@ class ExposureBias(Metric):
         -------
         The average of all values that were passed to ``__call__``.
         """
-        avg_exp_bias = self._total_value 
+        avg_exp_bias = self._total_value
         avg_df_p_q = self._df_p_q
         avg_df_q_p = self._df_q_p
 
@@ -164,12 +170,12 @@ class ExposureBias(Metric):
 
     @staticmethod
     def DfBuilder(type='kl'):
-        rfn = lambda p,q,n: np.exp(n * np.log(p/q))
+        r_fn = lambda p,q,prev_p_q,n: np.exp(1.0/n * ((n-1)*np.log(prev_p_q) + np.log(p) - np.log(q)))
         if type == 'kl':
-            return lambda p,q,n: 0.5 * np.log(rfn(q,p,n))
+            return lambda p,q,prev_p_q,n: (np.log(r_fn(q,p,prev_p_q,n)), r_fn(q,p,prev_p_q,n))
         elif type == 'hellinger_squared':
-            return lambda p,q,n: 0.5 * (np.sqrt(rfn(p,q,n)) - 1)**2
+            return lambda p,q,prev_p_q,n: ((np.sqrt(r_fn(p,q,prev_p_q,n)) - 1)**2, r_fn(p,q,prev_p_q,n))
         elif type == 'tv':
-            return lambda p,q,n: 0.5 * np.abs(rfn(p,q,n) - 1)
+            return lambda p,q,prev_p_q,n: (np.abs(r_fn(p,q,prev_p_q,1) - 1), r_fn(p,q,prev_p_q,1))
         elif type == 'js':
-            return lambda p,q,n: 0.5 * np.log(2/(rfn(p,q,n) + 1))
+            return lambda p,q,prev_p_q,n: (np.log(2/(r_fn(p,q,prev_p_q,n) + 1)), r_fn(p,q,prev_p_q,n))

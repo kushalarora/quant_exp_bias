@@ -39,27 +39,17 @@ class NoiseOracleCostFunction(CostFunction):
         # This hack given 0 oracle prob to sequences of length 1. 
         # This is done as GPT2 craches for length 1 sequences.
 
-        filtered_predictions = []
-        old2new = {}
-        for i, prediction in enumerate(predictions):
-            if len(prediction) > 1:
-                old2new[i] = len(filtered_predictions)
-                filtered_predictions.append(prediction)
 
-        filtered_oracle_probs = self._oracle.compute_sent_probs(filtered_predictions)
+        oracle_probs_and_seq_probs = self._oracle.compute_sent_probs(predictions)
 
         oracle_probs = []
         j = 0
         for i, prediction in enumerate(predictions):
-            if i in old2new:
-                oracle_probs.append(filtered_oracle_probs[j])
-                j += 1
-            else:
-                oracle_probs.append(0)
+            oracle_probs.append(oracle_probs_and_seq_probs[i][0])
 
         # We return neg log prob.
         # The objective should be minimize this cost to 0.
-        return -1 * torch.log(torch.cuda.FloatTensor(oracle_probs)+ 1e-45).to(torch.cuda.current_device())
+        return -1 * torch.log(torch.FloatTensor(oracle_probs)+ 1e-45).to(torch.cuda.current_device() if torch.cuda.is_available() else 'cpu')
 
     @overrides
     def takes_decoded_input(self):
