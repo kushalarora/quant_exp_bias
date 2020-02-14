@@ -109,7 +109,6 @@ class ExposureBias(Metric):
             if len(oracle_sampled_predictions[i]) == 0:
                 continue
 
-            import pdb; pdb.set_trace()
             if self._at_prefix_level:
                 df_q_p_seq = 0
                 seq_len = len(oracle_sampled_predictions[i])
