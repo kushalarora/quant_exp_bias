@@ -56,6 +56,9 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                  detokenizer: DeTokenizer = default_tokenizer,
                  temperature: int = 1,
                  num_neighbors_to_add: int = 0,
+                 do_max_rollout_steps: bool = False,
+                 mask_padding_and_start: bool = True,
+                 must_include_target_token: bool = True,
                 ) -> None:
         super().__init__(vocab=vocab,
                          max_decoding_steps=max_decoding_steps,
@@ -105,6 +108,11 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
 
         self._num_neighbors_to_add = num_neighbors_to_add
 
+        self._do_max_rollout_steps = do_max_rollout_steps
+
+        self._mask_padding_and_start = mask_padding_and_start
+        self._must_include_target_token = must_include_target_token
+
     @overrides
     def _forward_loop(self,
                       state: Dict[str, torch.Tensor],
@@ -138,16 +146,24 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         rollin_decoder_context = state['decoder_contexts']
 
         # If num_tokens_to_rollout is not specified (default value: -1), consider all tokens for next step.
+        # We do not want to rollout pad, oov, eos and sos tokens.
+
         num_tokens_to_rollout = self._num_tokens_to_rollout \
                                     if self._num_tokens_to_rollout > 0 else \
-                                        num_classes - self._rollout_mask.size(0) # We do not want to rollout pad, oov, eos and sos tokens.
+                                        num_classes - self._rollout_mask.size(0) 
 
         def rollout_mixing_func():
+            """ This function generates batch specific random mask
+                which is used to decide either pick the next target token
+                or pick next prediction.
+            """
             return torch.bernoulli(torch.ones(batch_size) * self._rollout_mixing_prob) \
                         .unsqueeze(1) \
                         .expand(batch_size, num_tokens_to_rollout) \
                         .reshape(-1)
 
+        # Reshape/expand source_mask and encoder output
+        # to effective batch size of batch_size * num_tokens_to_rollout.
         source_mask = state.get('source_mask', None)
         if source_mask is not None:
             batch_size, source_length = source_mask.shape
@@ -155,7 +171,6 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                             .unsqueeze(1) \
                             .expand(batch_size, num_tokens_to_rollout, source_length) \
                             .reshape(batch_size * num_tokens_to_rollout, source_length)
-
             state['source_mask'] = source_mask
 
         encoder_outputs = state.get('encoder_outputs', None)
@@ -165,13 +180,13 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                                 .unsqueeze(1) \
                                 .expand(batch_size, num_tokens_to_rollout, source_length, hidden_size) \
                                 .reshape(batch_size * num_tokens_to_rollout, source_length, hidden_size)
-
             state['encoder_outputs'] = encoder_outputs
 
+        rollout_loss_batch = []
         rollout_logits = []
         rollout_predictions = []
         next_tokens_list = []
-
+        rollout_output_dict = {}
         # For SEARNN, we will have one extra step as we look at
         # rollout happening given certain actions were taken.
         # So, we extend targets by 1 to get cost for last action
@@ -185,49 +200,48 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
             targets_plus_1 = torch.cat([targets, targets[:, -1].unsqueeze(1)], dim=-1)
 
         for step in range(1, num_decoding_steps + 1):
-            rollout_steps = num_decoding_steps + 1 - step
+            rollout_steps = (self._max_decoding_steps  + 1 - step) if self._do_max_rollout_steps else \
+                                (num_decoding_steps + 1 - step)
 
-            # Do not select masked tokens and always select target token and end of sentence token.
+            # Do not select masked tokens and always select target token.
             # This will set masked tokens values to be really low and
             # selected tokens value to be really high.
             # So that topk or sampling doesn't return masked values and always returns selected values.
+            masked_step_logits = rollin_logits[:, step - 1, :].clone().detach()
 
-            masked_step_logits = rollin_logits[:, step - 1, :] \
-                                    .scatter(dim=1,
-                                             index=self._rollout_mask.expand(rollin_logits.size(0), -1),
-                                             value=-1e2) \
-                                    .scatter_(dim=1,
-                                              index=targets[:, step].unsqueeze(1),
-                                              value=1e3)
+            if self._mask_padding_and_start:
+                masked_step_logits.scatter_(dim=1,
+                                            index=self._rollout_mask.expand(rollin_logits.size(0), -1),
+                                            value=-1e2)
+
+            if self._must_include_target_token:
+                masked_step_logits.scatter_(dim=1,
+                                            index=targets[:, step].unsqueeze(1),
+                                            value=1e3)
 
             if self._num_neighbors_to_add > 0:
-                # Select these self._num_neighbors_to_add random tokens.
-                # We add _num_neighbors_to_add/2 both on left and the right side. 
+                # Select these self._num_neighbors_to_add tokens.
+                # We add _num_neighbors_to_add/2 both on left and the right side.
                 # Neighbors are previous and next words in the context.
                 num_neighbors_to_add = (self._num_neighbors_to_add // 2) * 2
                 if target_tokens is not None:
                     left_context = min(step, num_neighbors_to_add//2)
                     right_context = min(num_decoding_steps - step, num_neighbors_to_add - left_context)
-                    try:
-                        random_tokens = target_tokens['tokens'][:, step-left_context: step+right_context]
-                    except:
-                        import pdb;pdb.set_trace()
+                    neighbor_tokens = target_tokens['tokens'][:, step-left_context: step+right_context]
 
-                masked_step_logits = masked_step_logits.scatter_(dim=1,
-                                                                 index=random_tokens,
-                                                                 value=1e2)
+                    masked_step_logits = masked_step_logits.scatter_(dim=1,
+                                                                    index=neighbor_tokens,
+                                                                    value=1e2)
 
+            # softmax of masked step logits + some noise to break ties while topk.
             masked_step_probabilities = F.softmax(masked_step_logits, dim=-1)  + \
                                             1e-10 * masked_step_logits.new_zeros(masked_step_logits.shape).uniform_(0,1)
 
+            # searnn_next_step_tokens: (batch_size, num_tokens_to_rollout)
             _, searnn_next_step_tokens = torch.topk(masked_step_logits,
                                                     num_tokens_to_rollout,
                                                     dim=-1)
-
-            searnn_next_step_tokens, _ = torch.sort(searnn_next_step_tokens)
             next_tokens_list.append(searnn_next_step_tokens)
-
-            searnn_next_step_num_classes = len(searnn_next_step_tokens)
 
             # shape (rollin_start_predictions) : (batch_size * num_tokens_to_rollout)
             rollin_start_predictions = searnn_next_step_tokens.reshape(-1)
@@ -254,25 +268,28 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
             # decoder_hidden_step: (batch_size, hidden_state_size)
             decoder_hidden_step = rollin_decoder_hiddens[:, step - 1, :]
 
-            # decoder_hidden_step_expanded: (batch_size, num_tokens_to_rollout, hidden_state_size)
+            # decoder_hidden_step_expanded: (batch_size *  num_tokens_to_rollout, 1, hidden_state_size)
             decoder_hidden_step_expanded = decoder_hidden_step \
                                             .unsqueeze(1) \
-                                            .expand(batch_size, num_tokens_to_rollout, hidden_size)
+                                            .expand(batch_size, num_tokens_to_rollout, hidden_size) \
+                                            .reshape(-1, 1,  hidden_size)
 
             # decoder_context_step: (batch_size, hidden_state_size)
             decoder_context_step = rollin_decoder_context[:, step - 1, :]
 
-            # decoder_hidden_step_expanded: (batch_size, num_tokens_to_rollout, hidden_state_size)
+            # decoder_hidden_step_expanded: (batch_size *  num_tokens_to_rollout, 1, hidden_state_size)
             decoder_context_step_expanded = decoder_context_step \
                                                 .unsqueeze(1) \
-                                                .expand(batch_size, num_tokens_to_rollout, hidden_size)
+                                                .expand(batch_size, num_tokens_to_rollout, hidden_size) \
+                                                .reshape(-1, 1, hidden_size)
 
             # decoder_hidden: (batch_size * num_tokens_to_rollout, 1, hidden_state_size)
-            state['decoder_hiddens'] = decoder_hidden_step_expanded.reshape(-1, 1,  hidden_size)
+            state['decoder_hiddens'] = decoder_hidden_step_expanded
 
             # decoder_context: (batch_size *  num_tokens_to_rollout, 1, hidden_state_size)
-            state['decoder_contexts'] = decoder_context_step_expanded.reshape(-1, 1, hidden_size)
+            state['decoder_contexts'] = decoder_context_step_expanded
 
+            # TODO (Kushal): Maybe do mixed properly by using scatter function.
             if self._rollin_mode == 'teacher_forcing' or \
                 self._rollin_mode == 'mixed':
                 prediction_prefixes = targets[:, :step] \
@@ -289,57 +306,40 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                                             if step > 0 else None
 
             self._decoder_net._accumulate_hidden_states = False
+            output = self.rollout(state,
+                                    rollin_start_predictions,
+                                    rollout_steps=rollout_steps,
+                                    rollout_mode=self._rollout_mode,
+                                    target_tokens=target_tokens_truncated,
+                                    prediction_prefixes=prediction_prefixes,
+                                    target_prefixes=target_prefixes,
+                                    truncate_at_end_all=False,
+                                    rollout_mixing_func=rollout_mixing_func)
+            predictions = output['predictions']\
+                            .reshape(batch_size, num_tokens_to_rollout, -1)
+            rollout_predictions.append(predictions.unsqueeze(1))
 
-            rollout_output_dict = self.rollout(state, 
-                                                rollin_start_predictions, 
-                                                rollout_steps=rollout_steps,
-                                                rollout_mode=self._rollout_mode,
-                                                target_tokens=target_tokens_truncated, 
-                                                prediction_prefixes=prediction_prefixes,
-                                                target_prefixes=target_prefixes, 
-                                                truncate_at_end_all=False,
-                                                rollout_mixing_func=rollout_mixing_func)
+            # shape is (batch_size, 1, num_tokens_to_rollout) so that we can concat them
+            # together at the end of the loop.
+            loss_batch =  output['loss_batch'] \
+                                .reshape(batch_size, 1, num_tokens_to_rollout)
+            rollout_loss_batch.append(loss_batch)
+            rollout_logits.append(torch.cat([rollin_logits[:, :step, :].unsqueeze(1), 
+                                             output['logits']], dim=2))
 
-            rollout_output_dict['predictions'] = rollout_output_dict['predictions']\
-                                                    .reshape(batch_size, num_tokens_to_rollout, -1)
-
-            rollout_predictions.append(rollout_output_dict['predictions'].unsqueeze(1))
-            rollout_output_dict['loss_batch'] =  rollout_output_dict['loss_batch'] \
-                                                    .reshape(batch_size, 1, num_tokens_to_rollout)
-
-            rollout_logits.append(rollout_output_dict['loss_batch'])
-        rollout_output_dict['loss_batch'] = torch.cat(rollout_logits, dim=1)
+        rollout_output_dict['loss_batch'] = torch.cat(rollout_loss_batch, dim=1)
         rollout_output_dict['predictions'] = torch.cat(rollout_predictions, dim=1)
-        rollout_output_dict['next_tokens'] = torch.stack(next_tokens_list, dim=1)
+        rollout_output_dict['next_tokens'] = torch.cat(next_tokens_list, dim=1)
+
+        rollout_output_dict['logits'] = torch.stack(rollout_logits, dim=1)
         return rollin_output_dict, rollout_output_dict
 
-    # This code is dead for now.
-    # Leaving it here in case we need it.
-    def _get_mask(self, predictions, target_tokens, loss_batch):
-        # SEARNN with KL might not produce the sequences that
-        # match target sequence on length. This is especially true
-        # with LM done with learned rollins. The pattern observed
-        # here is that sequence lengths keep shrinking.
-
-        # This code computes mask from predicted tokens by observing
-        # first time eos token is produced. Everything after that is
-        # masked out.
-        target_mask = util.get_text_field_mask(target_tokens)
-        mask = predictions.new_ones(predictions.shape)
-
-        for i, indices in enumerate(predictions.detach().cpu().tolist()):
-            if self._end_index in indices:
-                end_idx = indices.index(self._end_index)
-                mask[i, :end_idx + 1] = 1
-                mask[i, end_idx + 1:] = 0
-            else:
-                mask[i] = target_mask[i]
-                end_idx = target_mask[i].sum() - 1
-                loss_batch[i, end_idx - 1, self._end_index] = 1e-45
-        return mask
-
     @overrides
-    def _combine_rollin_rollout_losses(self, rollin_output_dict, rollout_output_dict, target_tokens):
+    def _combine_rollin_rollout_losses(self,
+                                        rollin_output_dict: Dict[str, torch.Tensor],
+                                        rollout_output_dict: Dict[str, torch.Tensor],
+                                        state: Dict[str, torch.Tensor],
+                                        target_tokens: Dict[str, torch.LongTensor]):
 
         # rollin_logits: (batch_size, num_rollin_steps, num_classes)
         logits = rollin_output_dict['logits'].squeeze(1)

@@ -340,7 +340,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                     .to(self.current_device)
 
             # The target_logits ranges from (-inf , 0), so, by adding those to logits,
-            # we turn the values that are not target token to -inf, hence making the distribution
+            # we turn the values that are not target tokens to -inf, hence making the distribution
             # skew towards the target.
             output_logits += rollout_mixing_mask * target_logits
         else:
@@ -478,6 +478,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
 
             output_dict.update(self._combine_rollin_rollout_losses(rollin_output_dict,
                                                                     rollout_output_dict,
+                                                                    state,
                                                                     target_tokens,))
 
             # The rollin loss (w or w/o teacher_forcing is perplexity.)
@@ -644,6 +645,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
     def _combine_rollin_rollout_losses(self,
                                        rollin_output_dict: Dict[str, torch.Tensor],
                                        rollout_output_dict: Dict[str, torch.Tensor],
+                                       state: Dict[str, torch.Tensor],
                                        target_tokens) -> Dict[str, torch.LongTensor]:
         """ Given rollin and rollout, how to combine loss from rollin and
             rollout to compute final loss. This will be used to learning local
