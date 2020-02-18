@@ -225,12 +225,13 @@ class ArtificialLanguageOracle(Oracle):
         #         outputs.append(sample)
         # return outputs[:num_samples]
 
-        samples = self._pool.starmap(ArtificialLanguageOracle.generate_sequence, [(self._grammar_string, self._use_weighted_choice)]* num_samples * 2)
-        outputs = []
-        for sample in samples:
-            if (len(sample) <= self._max_len) and (len(sample) >= self._min_len):
-                outputs.append(sample)
-        return outputs[:num_samples]
+        outputs = set([])
+        while len(outputs) < num_samples:
+            samples = self._pool.starmap(ArtificialLanguageOracle.generate_sequence, [(self._grammar_string, self._use_weighted_choice)]* num_samples * 2)
+            for sample in samples:
+                if (len(sample) <= self._max_len) and (len(sample) >= self._min_len):
+                    outputs.add(sample)
+        return list(outputs)[:num_samples]
 
     def compute_sent_probs(self, sequences: List[List[str]]):
         """ TODO (Kushal): Add function doc.
