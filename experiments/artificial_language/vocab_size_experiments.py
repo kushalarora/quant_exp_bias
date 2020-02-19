@@ -68,17 +68,11 @@ def vocabulary_size_experiments(grammar_vocab_size_and_dist,
     for grammar_template, size, dist in grammar_vocab_size_and_dist:
         vsexp_serialization_dir = os.path.join(orig_serialization_dir,  f'{grammar_template}_{dist}_{size}')
 
-
-        overrides = json.dumps({'model':{
-                                    'decoder': {
-                                        'oracle': {
-                                            'grammar_file': grammar_filename}}}})
         for num_run in range(num_runs):
             run_metrics = one_exp_run(serialization_dir=vsexp_serialization_dir,
                                         num_samples=num_samples,
                                         run=num_run,
                                         param_path=param_path,
-                                        overides_func=lambda: overrides,
                                         grammar_template=grammar_template,
                                         vocabulary_size=size,
                                         vocabulary_distribution=dist,
@@ -90,7 +84,7 @@ def vocabulary_size_experiments(grammar_vocab_size_and_dist,
             run_metrics = run_metrics[0]
             for exp_bias_idx, (exp_bias, df_p_q, df_q_p) in enumerate(zip(run_metrics['exp_biases'],
                                                                         run_metrics['df_p_qs'],
-                                                                        run_metrics['df_q_ps'])):                
+                                                                        run_metrics['df_q_ps'])):
                 result= {
                         'exp_bias': exp_bias,
                         'Df_p_q': df_p_q,
@@ -106,7 +100,7 @@ def vocabulary_size_experiments(grammar_vocab_size_and_dist,
                     }
                 experiment.log_metrics(result, step=step)
                 step += 1
-                sleep(randint(1,10))
+                sleep(randint(1,10)/10.0)
 
             experiment.log_metric('exp_bias_mean', run_metrics['exp_bias_mean'], step=step)
             experiment.log_metric('df_p_q_mean', run_metrics['df_p_q_mean'], step=step)

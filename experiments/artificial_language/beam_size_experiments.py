@@ -95,7 +95,7 @@ def beam_size_experiments(beam_sizes,
                             }
                 experiment.log_metrics(result, step=step)
                 step += 1
-                sleep(randint(1,10))
+                sleep(randint(1,10)/10.0)
 
             experiment.log_metric('exp_bias_mean', run_metrics['exp_bias_mean'], step=step)
             experiment.log_metric('df_p_q_mean', run_metrics['df_p_q_mean'], step=step)
