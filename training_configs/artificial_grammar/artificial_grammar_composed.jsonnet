@@ -17,8 +17,8 @@
       "use_in_seq2seq_mode": false,
       "decoder": {
         "type": "quant_exp_auto_regressive_seq_decoder",
-        "max_decoding_steps": 50,
-        // "max_decoding_steps": 30,
+        //"max_decoding_steps": 50,
+        "max_decoding_steps": 30,
         "decoder_net": {
           "type": "quant_exp_bias_lstm_cell",
           "decoding_dim": 300,
@@ -42,8 +42,7 @@
           "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME"),
           "parallelize": true,
           "num_threads": 32,
-          //"max_len": 30,
-          // "use_weighted_choice": false,
+          "max_len": 30,
         },
       }
     },
