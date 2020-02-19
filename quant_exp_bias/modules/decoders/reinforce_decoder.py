@@ -56,8 +56,8 @@ class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
                  detokenizer: DeTokenizer = default_tokenizer,
                  temperature: int = 1,
                  num_neighbors_to_add: int = 0,
-                 do_max_rollout_steps: bool = False,
-                 num_mle_iters:int = 100,
+                 do_max_rollout_steps: bool = True,
+                 num_mle_iters:int = 0,
                  rollin_rollout_mixing_coeff:float = 0.,
                 ) -> None:
         super().__init__(vocab=vocab,
@@ -83,6 +83,7 @@ class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
                          mask_pad_and_oov=mask_pad_and_oov,
                          tie_output_embedding=tie_output_embedding,
                          label_smoothing_ratio=label_smoothing_ratio,
+
                          oracle=oracle,
                          rollout_cost_function=rollout_cost_function,
                          rollin_rollout_combination_mode=rollin_rollout_combination_mode,
@@ -132,50 +133,50 @@ class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
             # rollout_output_dict['baseline_rewards'] = self._baseline_regressor(state['decoder_hiddens'].detach()).squeeze(-1)
             output_dict = { 'predictions': rollin_output_dict['predictions']}
             if target_tokens:
-                target_mask = util.get_text_field_mask(target_tokens)
-                target_mask = target_mask[:, 1:].float()
-                non_batch_dims = tuple(range(1, len(target_mask.shape)))
-
-                # rollout_loss_batch : (batch_size,)
-                rollout_reward_batch = torch.exp(-1 * (rollout_output_dict['loss_batch'] - rollout_output_dict['loss_batch'].mean()))
-                # rollout_baseline_reward = rollout_output_dict['baseline_rewards']
-
-                # rollout_cost_batch_expanded = rollout_cost_batch \
-                #                                 .unsqueeze(1) \
-                #                                 .expand(rollout_baseline_reward.shape)
-
-                # baseline_reward_regressor_loss = torch.dist(rollout_cost_batch_expanded, 
-                #                                             rollout_baseline_reward,
-                #                                             p=2)
+                # rollout_loss_batch : (batch_size,rollout_steps)
+                rollout_reward_batch = torch.exp(-1 * rollout_output_dict['loss_batch'])
 
                 if self.training_iteration < self._num_mle_iters:
                     loss_batch = rollin_output_dict['loss_batch']
                 else:
-                    # rewards = (rollout_cost_batch_expanded - rollout_baseline_reward).detach()
-                    import pdb;pdb.set_trace()
                     rewards = rollout_reward_batch.detach()
-                    predictions = rollout_output_dict["predictions"].squeeze(dim=2)[:, :, 1:-1]
-                    rollout_logits = F.log_softmax(rollout_output_dict["logits"].squeeze(dim=2)[:, :, :-1], dim=-1)
+
+                    # predictions: (batch_size, rollout_steps, rollout_steps - 1)
+                    predictions = rollout_output_dict["predictions"].squeeze(dim=2)[:, :, 1:]
+
+                    # rollout_logits: (batch_size, rollout_steps, rollout_steps - 1)
+                    rollout_logits = F.log_softmax(rollout_output_dict["logits"].squeeze(dim=2), dim=-1)
 
                     log_probs = torch.gather(rollout_logits, -1, predictions.unsqueeze(dim=3)).squeeze(dim=3)
 
                     batch_size, rollout_size, seq_size = log_probs.shape
 
-                    # Get mask expects di
+                    # Get mask expects first detects </S> and considers all the tokens before this
+                    # and masks out everything after this.
                     log_prob_mask_flattened = self._get_mask(predictions.reshape(batch_size*rollout_size, seq_size))
                     log_prob_mask = log_prob_mask_flattened.reshape(batch_size, rollout_size, seq_size)
 
                     log_probs *= log_prob_mask
 
+
                     # We are trying to maximize the reward, hence minimizing the log prob * reward.
-                    rollout_rl_loss_batch = (-1 * log_probs * rewards).sum(dim=tuple(range(1, len(rewards.shape))))
+                    summed_reward_log_probs = (-1 * log_probs * rewards).sum(dim=-1)
+                    num_tokens_per_seq = log_prob_mask.sum(dim=-1)
+
+                    rollout_rl_loss_batch = (summed_reward_log_probs/num_tokens_per_seq).mean(dim=-1)
+
                     loss_batch = self._rollin_rollout_mixing_coeff *  rollin_output_dict['loss_batch']  + \
                                  (1 - self._rollin_rollout_mixing_coeff) * rollout_rl_loss_batch
 
                 # shape : (batch_size,)
+                target_mask = util.get_text_field_mask(target_tokens)
+                target_mask = target_mask[:, 1:].float()
+                non_batch_dims = tuple(range(1, len(target_mask.shape)))
+
                 target_mask_sum = target_mask.sum(dim=non_batch_dims)
                 num_non_empty_sequences = ((target_mask_sum > 0).float().sum() + 1e-13)
                 loss = loss_batch.sum()/num_non_empty_sequences
+
                 # output_dict['loss'] = rollin_output_dict['loss'] if self.training_iteration < 10 else rollin_output_dict['loss'] + loss
                 # output_dict['loss'] = loss + 0 * baseline_reward_regressor_loss
                 output_dict['loss'] = loss
