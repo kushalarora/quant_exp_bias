@@ -544,7 +544,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
 
                 # This +1 takes care of </S> prediction as predicted token are limited to
                 # token before </S>.
-                normalized_prediction_losses = [torch.exp(pred_loss/(len(pred_tokens) + 1)).item()
+                normalized_prediction_losses = [torch.exp(pred_loss/(len(pred_tokens) + 1))
                                                     for pred_loss, pred_tokens in zip(prediction_loss.data.cpu(), predicted_tokens)]
 
                 oracle_sampled_predicted_tokens = self._decode_tokens(target_tokens['tokens'],
