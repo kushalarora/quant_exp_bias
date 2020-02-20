@@ -244,7 +244,7 @@ class ArtificialLanguageOracle(Oracle):
     @staticmethod
     def _compute_one_sent_prob(sequence: List[str]):
             global parser
-            probs = 1e-2
+            probs = 1e-6 * len(sequence)
             cond_probs = []
             try:
                 parses = list(parser.parse(sequence))
@@ -267,7 +267,7 @@ class ArtificialLanguageOracle(Oracle):
                 pass
 
             if len(cond_probs) == 0:
-                cond_probs = [1e-2] * (len(sequence) + 1)
+                cond_probs = [1e-6] * (len(sequence) + 1)
             return probs, cond_probs
 
     def __del__(self):
