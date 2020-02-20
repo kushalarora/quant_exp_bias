@@ -80,7 +80,7 @@
       "batch_size": 1000
     },
     "trainer": {
-      "num_epochs": 100,
+      "num_epochs": 50,
       "cuda_device" : 0,
       "validation_metric": "-perplexity",
       "optimizer": {
@@ -93,7 +93,7 @@
       //     "mode": "min",
       //     "patience": 2
       // },
-      "patience": 20,
+      "patience": 10,
       "should_log_learning_rate": true,
       "log_batch_size_period": 50,
       "num_serialized_models_to_keep": -1
