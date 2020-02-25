@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple, Optional, Callable
+from typing import Dict, List, Tuple, Optional, Callable, Iterable
 from overrides import overrides
 
 import torch
@@ -187,6 +187,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         rollout_predictions = []
         next_tokens_list = []
         rollout_output_dict = {}
+        rollout_steps_list = []
         # For SEARNN, we will have one extra step as we look at
         # rollout happening given certain actions were taken.
         # So, we extend targets by 1 to get cost for last action
@@ -208,7 +209,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
             # selected tokens value to be really high.
             # So that topk or sampling doesn't return masked values and always returns selected values.
             masked_step_logits = rollin_logits[:, step - 1, :].clone().detach()
-
+            rollout_steps_list.append(step - 1)
             if self._mask_padding_and_start:
                 masked_step_logits.scatter_(dim=1,
                                             index=self._rollout_mask.expand(rollin_logits.size(0), -1),
@@ -242,6 +243,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                                                     num_tokens_to_rollout,
                                                     dim=-1)
             next_tokens_list.append(searnn_next_step_tokens)
+
 
             # shape (rollin_start_predictions) : (batch_size * num_tokens_to_rollout)
             rollin_start_predictions = searnn_next_step_tokens.reshape(-1)
@@ -306,6 +308,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                                             if step > 0 else None
 
             self._decoder_net._accumulate_hidden_states = False
+
             output = self.rollout(state,
                                     rollin_start_predictions,
                                     rollout_steps=rollout_steps,
@@ -315,6 +318,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                                     target_prefixes=target_prefixes,
                                     truncate_at_end_all=False,
                                     rollout_mixing_func=rollout_mixing_func)
+
             predictions = output['predictions']\
                             .reshape(batch_size, num_tokens_to_rollout, -1)
             rollout_predictions.append(predictions.unsqueeze(1))
@@ -336,6 +340,8 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         rollout_output_dict['loss_batch'] = torch.cat(rollout_loss_batch, dim=1)
         rollout_output_dict['predictions'] = torch.cat(rollout_predictions, dim=1)
         rollout_output_dict['next_tokens'] = torch.stack(next_tokens_list, dim=1)
+        rollout_output_dict['rollout_steps'] = torch.tensor(rollout_steps_list, 
+                                                            device=self.current_device)
 
         rollout_output_dict['logits'] = torch.stack(rollout_logits, dim=1)
         return rollin_output_dict, rollout_output_dict
@@ -349,18 +355,27 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
 
         # rollin_logits: (batch_size, num_rollin_steps, num_classes)
         logits = rollin_output_dict['logits'].squeeze(1)
-
         next_tokens = rollout_output_dict['next_tokens']
-        scattered_logits = torch.gather(input=logits, dim=-1, index=next_tokens)
+
+        # Only consider those logits which you did rollout for.
+        # By default this will be for all, but in certain cases of
+        # filtering, we might only consider a select few.
+        rollout_steps = rollout_output_dict['rollout_steps']
+        rolled_out_logits = logits[:, rollout_steps, :]
+
+        # Similarly, only update logits (or not mask logits) for steps
+        # we rollout out for,
+        target_mask = util.get_text_field_mask(target_tokens)
+        target_mask = target_mask[:, 1:][:, rollout_steps].float()
+        non_batch_dims = tuple(range(1, len(target_mask.shape)))
+
+        scattered_logits = torch.gather(input=rolled_out_logits, dim=-1, index=next_tokens)
         predictions = rollin_output_dict['predictions'].squeeze(1)
         loss_batch = rollout_output_dict['loss_batch']
         output_dict = {'predictions': predictions.data.cpu()}
 
         if self._combiner_mode == 'kl':
 
-            target_mask = util.get_text_field_mask(target_tokens)
-            target_mask = target_mask[:, 1:].float()
-            non_batch_dims = tuple(range(1, len(target_mask.shape)))
 
             x = F.log_softmax(scattered_logits, dim=-1)
             y = F.softmax(-1 * self._temperature * loss_batch, dim=-1)
