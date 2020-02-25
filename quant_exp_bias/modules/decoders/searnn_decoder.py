@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 
 import numpy as np
-
+import random
 from allennlp.common.util import START_SYMBOL, END_SYMBOL
 from allennlp.data.vocabulary import Vocabulary, DEFAULT_OOV_TOKEN, DEFAULT_PADDING_TOKEN
 from allennlp.modules import Embedding
@@ -59,6 +59,8 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                  do_max_rollout_steps: bool = False,
                  mask_padding_and_start: bool = True,
                  must_include_target_token: bool = True,
+                 rollout_iter_function: Callable[[int], Iterable[int]]=lambda x: range(1, x),
+                 rollout_ratio:float = 1.0,
                 ) -> None:
         super().__init__(vocab=vocab,
                          max_decoding_steps=max_decoding_steps,
@@ -112,6 +114,9 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
 
         self._mask_padding_and_start = mask_padding_and_start
         self._must_include_target_token = must_include_target_token
+
+        self._rollout_iter_function = rollout_iter_function
+        self._rollout_ratio = rollout_ratio
 
     @overrides
     def _forward_loop(self,
@@ -200,7 +205,12 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
             # targets_plus_1 Shape: (batch_size, num_decoding_steps + 2)
             targets_plus_1 = torch.cat([targets, targets[:, -1].unsqueeze(1)], dim=-1)
 
-        for step in range(1, num_decoding_steps + 1):
+        for step in self._rollout_iter_function(num_decoding_steps + 1):
+
+            # Do not rollout for (1 - self._rollout_ratio) steps.
+            if random.random() < (1 - self._rollout_ratio):
+                continue
+
             rollout_steps = (self._max_decoding_steps  + 1 - step) if self._do_max_rollout_steps else \
                                 (num_decoding_steps + 1 - step)
 
