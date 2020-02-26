@@ -3,7 +3,7 @@ import os
 import sys
 import wandb
 
-from comet_ml import Experiment
+from comet_ml import Experiment, OfflineExperiment
 from datetime import datetime
 from typing import Dict, List, Callable, Tuple, Union, Any
 
@@ -40,7 +40,9 @@ def generate_grammar_file(serialization_dir:str,
 
 def initialize_experiments(experiment_name: str, 
                             param_path: str = None,
-                            debug: bool = False):
+                            debug: bool = False, 
+                            offline: bool = False,
+                          ):
     # Ipython by default adds some arguments to sys.argv.
     #  We don't want those arguments, hence we pass [] here.
     #
@@ -60,13 +62,25 @@ def initialize_experiments(experiment_name: str,
     os.environ['TRAIN_FILE'] = ""
     os.environ['DEV_FILE'] = ""
 
-    experiment = Experiment(api_key='2UIhYs7jRdE2DbJDAB5OysNqM',
-                            workspace='quantifying_exposure_bias', 
-                            project_name=experiment_name,
-                            auto_metric_logging=False,
-                            auto_param_logging=False,
-                            disabled=debug,
-                           )
+    try:
+        if offline:
+            raise ValueError
+
+        experiment = Experiment(api_key='2UIhYs7jRdE2DbJDAB5OysNqM',
+                                workspace='quantifying_exposure_bias', 
+                                project_name=experiment_name,
+                                auto_metric_logging=False,
+                                auto_param_logging=False,
+                                disabled=debug,
+                            )
+    except:
+        experiment = OfflineExperiment(
+                        workspace="quantifying_exposure_bias",
+                        project_name=experiment_name,
+                        auto_metric_logging=False,
+                        auto_param_logging=False,
+                        offline_directory="./comet_exp/",
+        )
 
     return main_args, serialization_dir, param_path, experiment_id, experiment
 
