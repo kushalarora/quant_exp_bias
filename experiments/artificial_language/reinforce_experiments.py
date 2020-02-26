@@ -44,6 +44,12 @@ main_args, serialization_dir, param_path, experiment_id, experiment = initialize
 
 num_samples_and_runs = [(1000, 4), (10000,2), (100000,2)]
 
+samples2pretrained_model = {
+        1000 : 'results/artificial_grammar/artificial_lang/dataset_experiments/02_20_2020_18_56_56/1000/0/training',
+        5000: 'results/artificial_grammar/artificial_lang/dataset_experiments/02_20_2020_18_56_56/5000/0/training',
+        25000: 'results/artificial_grammar/artificial_lang/dataset_experiments/02_20_2020_18_56_56/25000/0/training',
+}
+
 experiment.log_parameters({'serialization_dir': serialization_dir,
                           'main_args': main_args,
                           'param_path': param_path,
@@ -55,6 +61,11 @@ def reinforce_experiments(main_args,
                             num_samples,
                             num_runs,
                       ):
+
+    pretrained_model = samples2pretrained_model[num_samples]
+    os.environ['VOCAB_PATH'] = os.path.join(pretrained_model, 'vocabulary')
+    os.environ['WEIGHT_FILE_PATH'] = os.path.join(pretrained_model, 'best.th')
+
     # Setup variables needed later.
     step = 0
     orig_serialization_dir = serialization_dir
@@ -91,7 +102,7 @@ def reinforce_experiments(main_args,
         experiment.log_metric('exp_bias_mean', run_metrics['exp_bias_mean'], step=step)
         experiment.log_metric('df_p_q_mean', run_metrics['df_p_q_mean'], step=step)
         experiment.log_metric('df_q_p_mean', run_metrics['df_q_p_mean'], step=step)
-        
+
 
 if args.all:
     for num_samples, num_runs in num_samples_and_runs:
