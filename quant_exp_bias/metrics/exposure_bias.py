@@ -79,8 +79,8 @@ class ExposureBias(Metric):
                 for j in range(seq_len):
                     # Here model_sampled_model_prob is Q because the samples
                     # come from the model.
-                    Q = model_sampled_model_seq_probs[i][j].item()
                     P = model_sampled_oracle_probs_and_seq_probs[i][1][j]
+                    Q = model_sampled_model_seq_probs[i][j].item()
 
                     value, prev_p_q = self._Df(P, Q, prev_p_q, j+1)
 
@@ -129,8 +129,9 @@ class ExposureBias(Metric):
                 df_q_ps.append(df_q_p_seq/seq_len)
                 df_q_p_count += seq_len
             else:
-                Q = oracle_sampled_oracle_probs_and_seq_probs[i][0]
                 P = oracle_sampled_model_probs[i].item()
+                Q = oracle_sampled_oracle_probs_and_seq_probs[i][0]
+
                 value, _ = self._Df(P, Q, 1.0, seq_len)
                 df_q_p += value
                 df_q_ps.append(value)
@@ -170,8 +171,10 @@ class ExposureBias(Metric):
 
     @staticmethod
     def DfBuilder(type='kl', rfn=rfn_sequence):
+        if type == 'abs_kl':
+            return lambda p,q,prev_p_q,n: (0.5 * np.abs(np.log(rfn(q,p,prev_p_q,n))), rfn(q,p,prev_p_q,n))
         if type == 'kl':
-            return lambda p,q,prev_p_q,n: (0.5 * np.log(rfn(q,p,prev_p_q,n)), r_fn(q,p,prev_p_q,n))
+            return lambda p,q,prev_p_q,n: (0.5 * np.log(rfn(q,p,prev_p_q,n)), rfn(q,p,prev_p_q,n))
         elif type == 'hellinger_squared':
             return lambda p,q,prev_p_q,n: (0.5 * (np.sqrt(rfn(p,q,prev_p_q,n)) - 1)**2, rfn(p,q,prev_p_q,n))
         elif type == 'tv':
