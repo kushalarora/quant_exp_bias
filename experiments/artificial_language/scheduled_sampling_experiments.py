@@ -28,7 +28,7 @@ import json
 scheduled_sampling_ratios  = [
         ('uniform', 0.0, -1), ('uniform', 0.1, -1), ('uniform', 0.25, -1), ('uniform', 0.5, -1), ('uniform', 1.0, -1),  # Fixed SS ratio
         # ('quantized', 1.0, 50), ('quantized', 1.0, 100), ('quantized', 1.0, 250), ('quantized', 1.0, 500), ('quantized', 1.0, 1000),  # Linearly increase ss ratio.
-        ('linear', 1.0, 50), ('linear', 1.0, 100), ('linear', 1.0, 250), ('linear', 1.0, 500), ('linear', 1.0, 1000),  # Linearly increase ss ratio.
+        ('linear', 1.0, 50), ('linear', 1.0, 100), ('linear', 1.0, 500), ('linear', 1.0, 1000),  # Linearly increase ss ratio.
 ]
 
 import argparse
@@ -62,6 +62,7 @@ def scheduled_sampling_experiments(scheduled_sampling_ratios,
     step = 0
     orig_serialization_dir = serialization_dir
     for ss_type, ss_ratio, ss_k in scheduled_sampling_ratios:
+        ss_k = ss_k * (num_samples/1000.0)
         serialization_dir = os.path.join(orig_serialization_dir, f'{ss_type}_{ss_ratio}_{ss_k}')
         overrides = json.dumps({'model': {
                                     'decoder': {
@@ -84,7 +85,7 @@ def scheduled_sampling_experiments(scheduled_sampling_ratios,
             run_metrics = run_metrics[0]
             for exp_bias_idx, (exp_bias, df_p_q, df_q_p) in enumerate(zip(run_metrics['exp_biases'],
                                                                         run_metrics['df_p_qs'],
-                                                                        run_metrics['df_q_ps'])):                    
+                                                                        run_metrics['df_q_ps'])):
                 result= {
                         'exp_bias': exp_bias,
                         'Df_p_q': df_p_q,
