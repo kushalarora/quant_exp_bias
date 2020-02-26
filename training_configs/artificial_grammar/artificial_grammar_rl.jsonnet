@@ -11,7 +11,7 @@
       "end_tokens": ["</S>"]
     },
     "vocabulary": {
-      "directory_path": "results/artificial_grammar/artificial_lang/dataset_experiments/02_18_2020_17_13_06/1000/0/training/vocabulary"
+      "directory_path": std.extVar("VOCAB_PATH"), 
     },
     "train_data_path": std.extVar("TRAIN_FILE"),
     "validation_data_path": std.extVar("DEV_FILE"),
@@ -55,13 +55,12 @@
         // "rollout_cost_function": {
         //   "type": "hamming",
         // },
-
       },
       "initializer": [
           ["_decoder._decoder_net.*|_decoder._output_projection*|_decoder.target_embedder*|_decoder._dropout",
             {
               "type": "pretrained",
-              "weights_file_path": "results/artificial_grammar/artificial_lang/dataset_experiments/02_18_2020_17_13_06/1000/0/training/best.th",
+              "weights_file_path": std.extVar("WEIGHT_FILE_PATH"), 
               "parameter_name_overrides": {},
             },
           ],
@@ -70,8 +69,8 @@
     "iterator": {
       "type": "bucket",
       "sorting_keys": [["target_tokens", "num_tokens"]],
-      "batch_size": 32, 
-      
+      "batch_size": 32,
+
       // This is needed stupidly for bucket iterator to work.
       "max_instances_in_memory": 50000
     },
@@ -85,7 +84,7 @@
       "validation_metric": "-perplexity",
       "optimizer": {
         "type": "adam",
-        "lr": 0.001
+        "lr": 0.01
       },
       // "learning_rate_scheduler": {
       //     "type": "reduce_on_plateau",
