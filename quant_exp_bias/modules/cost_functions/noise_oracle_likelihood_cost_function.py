@@ -6,16 +6,19 @@ from quant_exp_bias.modules.cost_functions.cost_function import CostFunction
 from quant_exp_bias.oracles.oracle_base import Oracle
 
 import logging
+import numpy as np
 import torch
+
 
 @CostFunction.register("noisy_oracle")
 class NoiseOracleCostFunction(CostFunction):
-    """This cost function computes the cost(negative likelihood) of predicted sequence under oracle and 
-        returns a cost corrputed by noise. 
+    """This cost function computes the cost(negative likelihood) of predicted sequence under oracle and
+        returns a cost corrputed by noise.
     """
     name: str = "noisy_oracle_cf"
-    def __init__(self, 
-                 oracle: Oracle, 
+
+    def __init__(self,
+                 oracle: Oracle,
                  noise_type=None) -> None:
         self._oracle = oracle
         self._noise_type = noise_type
@@ -23,11 +26,10 @@ class NoiseOracleCostFunction(CostFunction):
         if self._noise_type is not None:
             # Figure out how to add noise.
             pass
-   
+
     def __call__(self,
                  predictions: List[str],
                  gold_labels: List[str] = None) -> torch.Tensor:
-
         """ Computes cost under oracle and returns the batch cost.
 
         Arguments:
@@ -36,20 +38,26 @@ class NoiseOracleCostFunction(CostFunction):
 
         """
 
-        # This hack given 0 oracle prob to sequences of length 1. 
+        # This hack given 0 oracle prob to sequences of length 1.
         # This is done as GPT2 craches for length 1 sequences.
 
-
-        oracle_probs_and_seq_probs = self._oracle.compute_sent_probs(predictions)
+        oracle_probs_and_seq_probs = self._oracle.compute_sent_probs(
+            predictions)
 
         oracle_probs = []
         j = 0
         for i, prediction in enumerate(predictions):
-            oracle_probs.append(oracle_probs_and_seq_probs[i][0])
+            gold_len, pred_len = (len(gold_labels[i]), len(predictions[i]))
+
+            brevity_penality = 0.5 * np.abs(1 - float(pred_len)/gold_len)
+            oracle_probs.append(
+                np.log(oracle_probs_and_seq_probs[i][0]) - brevity_penality + 1e-45)
 
         # We return neg log prob.
         # The objective should be minimize this cost to 0.
-        return -1 * torch.log(torch.FloatTensor(oracle_probs)+ 1e-45).to(torch.cuda.current_device() if torch.cuda.is_available() else 'cpu')
+        return -1 * torch.FloatTensor(oracle_probs) \
+            .to(torch.cuda.current_device()
+                if torch.cuda.is_available() else 'cpu')
 
     @overrides
     def takes_decoded_input(self):
