@@ -22,6 +22,8 @@ from quant_exp_bias.modules.cost_functions.noise_oracle_likelihood_cost_function
 from quant_exp_bias.modules.detokenizers.detokenizer import DeTokenizer, default_tokenizer
 
 torch.autograd.set_detect_anomaly(True)
+
+
 @SeqDecoder.register("quant_exp_reinforce_decoder")
 class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
 
@@ -57,9 +59,10 @@ class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
                  temperature: int = 1,
                  num_neighbors_to_add: int = 0,
                  do_max_rollout_steps: bool = True,
-                 num_mle_iters:int = 0,
-                 rollin_rollout_mixing_coeff:float = 0.,
-                ) -> None:
+                 num_mle_iters: int = 0,
+                 rollin_rollout_mixing_coeff: float = 0.33,
+                 detach_rollin_logits: bool = True,
+                 ) -> None:
         super().__init__(vocab=vocab,
                          max_decoding_steps=max_decoding_steps,
                          generation_batch_size=generation_batch_size,
@@ -76,7 +79,7 @@ class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
                          use_bleu=use_bleu,
                          use_hamming=use_hamming,
                          dropout=dropout,
-                         sample_output=sample_output, 
+                         sample_output=sample_output,
                          start_token=start_token,
                          end_token=end_token,
                          num_decoder_layers=num_decoder_layers,
@@ -93,7 +96,9 @@ class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
                          detokenizer=detokenizer,
                          must_include_target_token=False,
                          do_max_rollout_steps=do_max_rollout_steps,
-                        )
+                         rollout_ratio=0.25,
+                         detach_rollin_logits=detach_rollin_logits,
+                         )
 
         self._rollin_steps = rollin_steps
         self._combiner_loss = None
@@ -101,10 +106,6 @@ class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
         self._num_mle_iters = num_mle_iters
         self._rollin_rollout_mixing_coeff = rollin_rollout_mixing_coeff
 
-        self._baseline_regressor = torch.nn.Linear(self._decoder_net.get_output_dim(), 1)
-    
-    # This code is dead for now.
-    # Leaving it here in case we need it.
     def _get_mask(self, predictions):
         # SEARNN with KL might not produce the sequences that
         # match target sequence on length. This is especially true
@@ -124,40 +125,47 @@ class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
 
     @overrides
     def _combine_rollin_rollout_losses(self,
-                                        rollin_output_dict: Dict[str, torch.Tensor],
-                                        rollout_output_dict: Dict[str, torch.Tensor],
-                                        state: Dict[str, torch.Tensor],
-                                        target_tokens: Dict[str, torch.LongTensor]):
+                                       rollin_output_dict: Dict[str, torch.Tensor],
+                                       rollout_output_dict: Dict[str, torch.Tensor],
+                                       state: Dict[str, torch.Tensor],
+                                       target_tokens: Dict[str, torch.LongTensor]):
 
         if self._combiner_mode == 'rl':
+
             # rollout_output_dict['baseline_rewards'] = self._baseline_regressor(state['decoder_hiddens'].detach()).squeeze(-1)
-            output_dict = { 'predictions': rollin_output_dict['predictions']}
+            output_dict = {'predictions': rollin_output_dict['predictions']}
             if target_tokens:
                 # rollout_loss_batch : (batch_size,rollout_steps)
-                rollout_reward_batch = torch.exp(-1 * rollout_output_dict['loss_batch'])
+                rollout_reward_batch = -1 * rollout_output_dict['loss_batch']
 
                 if self.training_iteration < self._num_mle_iters:
                     loss_batch = rollin_output_dict['loss_batch']
                 else:
                     rewards = rollout_reward_batch.detach()
+                    rewards = (rewards - rewards.mean())/rewards.std()
 
                     # predictions: (batch_size, rollout_steps, rollout_steps - 1)
-                    predictions = rollout_output_dict["predictions"].squeeze(dim=2)[:, :, 1:]
+                    predictions = rollout_output_dict["predictions"].squeeze(dim=2)
+                    predictions = predictions[:, :, 1:]
 
                     # rollout_logits: (batch_size, rollout_steps, rollout_steps - 1)
-                    rollout_logits = F.log_softmax(rollout_output_dict["logits"].squeeze(dim=2), dim=-1)
+                    rollout_logits = F.log_softmax(rollout_output_dict["logits"].squeeze(dim=2),
+                                                   dim=-1)
 
-                    log_probs = torch.gather(rollout_logits, -1, predictions.unsqueeze(dim=3)).squeeze(dim=3)
+                    log_probs = torch.gather(rollout_logits, -1,
+                                             predictions.unsqueeze(dim=3))\
+                                     .squeeze(dim=3)
 
                     batch_size, rollout_size, seq_size = log_probs.shape
 
                     # Get mask expects first detects </S> and considers all the tokens before this
                     # and masks out everything after this.
                     log_prob_mask_flattened = self._get_mask(predictions.reshape(batch_size*rollout_size, seq_size))
-                    log_prob_mask = log_prob_mask_flattened.reshape(batch_size, rollout_size, seq_size)
+                    log_prob_mask = log_prob_mask_flattened.reshape(batch_size, 
+                                                                    rollout_size, 
+                                                                    seq_size)
 
                     log_probs *= log_prob_mask
-
 
                     # We are trying to maximize the reward, hence minimizing the log prob * reward.
                     summed_reward_log_probs = (-1 * log_probs * rewards).sum(dim=-1)
@@ -165,8 +173,8 @@ class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
 
                     rollout_rl_loss_batch = (summed_reward_log_probs/num_tokens_per_seq).mean(dim=-1)
 
-                    loss_batch = self._rollin_rollout_mixing_coeff *  rollin_output_dict['loss_batch']  + \
-                                 (1 - self._rollin_rollout_mixing_coeff) * rollout_rl_loss_batch
+                    loss_batch = self._rollin_rollout_mixing_coeff * rollin_output_dict['loss_batch'] + \
+                                  (1 - self._rollin_rollout_mixing_coeff) * rollout_rl_loss_batch
 
                 # shape : (batch_size,)
                 target_mask = util.get_text_field_mask(target_tokens)

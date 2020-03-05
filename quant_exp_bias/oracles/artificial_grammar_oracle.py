@@ -26,12 +26,15 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 # https://stackoverflow.com/questions/9944370/use-of-initialize-in-python-multiprocessing-worker-pool
 parser = None
 grammar = None
+
+
 def init_pool(grammar_string):
     global parser
     global grammar
     grammar = PCFG.fromstring(grammar_string)
     parser = InsideChartParser(grammar)
     return parser
+
 
 @Oracle.register('artificial_lang_oracle')
 class ArtificialLanguageOracle(Oracle):
@@ -41,7 +44,7 @@ class ArtificialLanguageOracle(Oracle):
     """
 
     def __init__(self,
-                 grammar_file:str,
+                 grammar_file: str,
                  use_weighted_choice: bool = True,
                  parallelize=True,
                  num_threads=64,
@@ -64,13 +67,12 @@ class ArtificialLanguageOracle(Oracle):
 
         self._pool = Pool(self._num_threads, init_pool, [self._grammar_string])
 
-
     @staticmethod
     def generate_grammar_string(grammar_template_file: str,
-                                 vocabulary_size: int,
-                                 vocabulary_distribution: str,
-                                 epsilon=0,
-                               ):
+                                vocabulary_size: int,
+                                vocabulary_distribution: str,
+                                epsilon=0,
+                                ):
 
         # TODO (Kushal): Even with smoothing it will fail to
         # parse SOS a b EOS it will not reach end state. So,
@@ -83,7 +85,7 @@ class ArtificialLanguageOracle(Oracle):
             elif vocabulary_distribution == 'uniform':
                 p_vocab = [1.0/vsize] * vsize
 
-            p_vocab =  [(1.0 - offset) * x for x in p_vocab]
+            p_vocab = [(1.0 - offset) * x for x in p_vocab]
 
             return p_vocab
 
@@ -108,7 +110,6 @@ class ArtificialLanguageOracle(Oracle):
                 group_set.add(inp)
             elif inp not in extended_vocab:
                 extended_vocab.append(inp)
-
 
         group2idx = {}
         for i, g in enumerate(group_set):
@@ -136,7 +137,7 @@ class ArtificialLanguageOracle(Oracle):
                 prob = float(prob)
 
             if inp == "'EOS'":
-                token2p[inp] = (prob or 1.0 - offset)  - epsilon * (vocabulary_size + 2) 
+                token2p[inp] = (prob or 1.0 - offset) - epsilon * (vocabulary_size + 2)
 
                 for token in extended_vocab:
                     if token in token2p:
@@ -149,15 +150,15 @@ class ArtificialLanguageOracle(Oracle):
             else:
                 if re.match("'<G[0-9]+>'", inp):
                     group_num = group2idx[inp]
-                    group_vocab = vocab[group_num * group_vocab_size : (group_num + 1) * group_vocab_size]
+                    group_vocab = vocab[group_num * group_vocab_size: (group_num + 1) * group_vocab_size]
                     group_p_vocab = _get_vocab_prob(len(group_vocab), offset)
                     if prob:
-                        group_p_vocab =  [prob * x for x in group_p_vocab]
+                        group_p_vocab = [prob * x for x in group_p_vocab]
 
                     for token, p in zip(group_vocab, group_p_vocab):
                         token2p[token] = p - epsilon * (vocabulary_size + 2)/len(group_p_vocab)
                 else:
-                   token2p[inp] = (prob or 1.0  - offset) - epsilon * (vocabulary_size + 2)
+                    token2p[inp] = (prob or 1.0 - offset) - epsilon * (vocabulary_size + 2)
 
                 for token in extended_vocab:
                     if token in token2p:
@@ -211,7 +212,9 @@ class ArtificialLanguageOracle(Oracle):
                     all_terminals = False
                     derivations = grammar._lhs_index[symbol]
                     derivation = choice(derivations)
-                    ArtificialLanguageOracle._rewrite_at(position, derivation.rhs(), sentence_list)
+                    ArtificialLanguageOracle._rewrite_at(position,
+                                                         derivation.rhs(),
+                                                         sentence_list)
         return ' '.join(sentence_list)
 
     def sample_training_set(self, num_samples: int):
@@ -227,7 +230,8 @@ class ArtificialLanguageOracle(Oracle):
 
         outputs = set([])
         while len(outputs) < num_samples:
-            samples = self._pool.starmap(ArtificialLanguageOracle.generate_sequence, [(self._grammar_string, self._use_weighted_choice)]* num_samples * 2)
+            samples = self._pool.starmap(ArtificialLanguageOracle.generate_sequence,
+                                         [(self._grammar_string, self._use_weighted_choice)] * num_samples * 2)
             for sample in samples:
                 if (len(sample) <= self._max_len) and (len(sample) >= self._min_len):
                     outputs.add(sample)
@@ -238,37 +242,38 @@ class ArtificialLanguageOracle(Oracle):
         """
         # TODO (Kushal): Reformat the code to move the for loop in the base class.
         # with Pool(self._num_threads, init_pool, [self._grammar_string]) as pool:
-            # return self._pool.starmap(ArtificialLanguageOracle._compute_one_sent_prob, [(sequence, ) for sequence in sequences])
+        # return self._pool.starmap(ArtificialLanguageOracle._compute_one_sent_prob, [(sequence, ) for sequence in sequences])
         return self._pool.starmap(ArtificialLanguageOracle._compute_one_sent_prob, [(sequence, ) for sequence in sequences])
 
     @staticmethod
     def _compute_one_sent_prob(sequence: List[str]):
-            global parser
-            probs = 1e-6 * len(sequence)
-            cond_probs = []
-            try:
-                parses = list(parser.parse(sequence))
-                if parses and len(parses) > 0:
+        global parser
+        probs = 1e-6 * len(sequence)
+        cond_probs = []
+        try:
+            parses = list(parser.parse(sequence))
+            if parses and len(parses) > 0:
                     # We will only consider top parse as
                     # other are because of smoothing.
-                    parse = parses[0]
+                parse = parses[0]
 
-                    # Marginalizing by seq_len + 1 because we assume it emits </S> symbol at the end with prob. 1. 
-                    probs = np.exp(np.log(parse.prob())/(len(sequence) + 1))
+                # Marginalizing by seq_len + 1 because we assume it emits </S> symbol at the end with prob. 1.
+                probs = np.exp(np.log(parse.prob() + 1e-100) /
+                               (len(sequence) + 1))
 
-                    st_probs = [st.prob() for st in parse.subtrees()]
-                    for i in range(len(st_probs) - 1):
-                        cond_probs.append(st_probs[i]/st_probs[i+1])
-                    cond_probs.append(st_probs[-1])
-                    cond_probs.append(1.0)
-            except Exception as e:
-                # Ideally if you fail to parse, the prob is zero.
-                #logging.warn(e)
-                pass
+                st_probs = [st.prob() for st in parse.subtrees()]
+                for i in range(len(st_probs) - 1):
+                    cond_probs.append(st_probs[i]/st_probs[i+1])
+                cond_probs.append(st_probs[-1])
+                cond_probs.append(1.0)
+        except Exception as e:
+            # Ideally if you fail to parse, the prob is zero.
+            # logging.warn(e)
+            pass
 
-            if len(cond_probs) == 0:
-                cond_probs = [1e-6] * (len(sequence) + 1)
-            return probs, cond_probs
+        if len(cond_probs) == 0:
+            cond_probs = [1e-6] * (len(sequence) + 1)
+        return probs, cond_probs
 
     def __del__(self):
         self._pool.terminate()

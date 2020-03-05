@@ -48,10 +48,10 @@ class NoiseOracleCostFunction(CostFunction):
         j = 0
         for i, prediction in enumerate(predictions):
             gold_len, pred_len = (len(gold_labels[i]), len(predictions[i]))
-
-            brevity_penality = 0.5 * np.abs(1 - float(pred_len)/gold_len)
-            oracle_probs.append(
-                np.log(oracle_probs_and_seq_probs[i][0]) - brevity_penality + 1e-45)
+            # This encourages model to generate sequences which are of equal
+            # length as gold sequence.
+            brevity_penality = np.abs(1 - float(pred_len)/gold_len)
+            oracle_probs.append(np.log(oracle_probs_and_seq_probs[i][0] + 1e-45) - brevity_penality)
 
         # We return neg log prob.
         # The objective should be minimize this cost to 0.

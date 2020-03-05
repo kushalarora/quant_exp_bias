@@ -22,7 +22,7 @@ from quant_exp_bias.modules.detokenizers.detokenizer import DeTokenizer, default
 @SeqDecoder.register("quant_exp_searnn_decoder")
 class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
 
-    def __init__(self, 
+    def __init__(self,
                  vocab: Vocabulary,
                  max_decoding_steps: int,
                  decoder_net: DecoderNet,
@@ -61,6 +61,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                  must_include_target_token: bool = True,
                  rollout_iter_function: Callable[[int], Iterable[int]]=lambda x: range(1, x),
                  rollout_ratio:float = 1.0,
+                 detach_rollin_logits: bool = False,
                 ) -> None:
         super().__init__(vocab=vocab,
                          max_decoding_steps=max_decoding_steps,
@@ -78,7 +79,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                          use_bleu=use_bleu,
                          use_hamming=use_hamming,
                          dropout=dropout,
-                         sample_output=sample_output, 
+                         sample_output=sample_output,
                          start_token=start_token,
                          end_token=end_token,
                          num_decoder_layers=num_decoder_layers,
@@ -118,6 +119,8 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         self._rollout_iter_function = rollout_iter_function
         self._rollout_ratio = rollout_ratio
 
+        self._detach_rollin_logits = detach_rollin_logits
+
     @overrides
     def _forward_loop(self,
                       state: Dict[str, torch.Tensor],
@@ -155,7 +158,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
 
         num_tokens_to_rollout = self._num_tokens_to_rollout \
                                     if self._num_tokens_to_rollout > 0 else \
-                                        num_classes - self._rollout_mask.size(0) 
+                                        num_classes - self._rollout_mask.size(0)
 
         def rollout_mixing_func():
             """ This function generates batch specific random mask
@@ -206,9 +209,11 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
             targets_plus_1 = torch.cat([targets, targets[:, -1].unsqueeze(1)], dim=-1)
 
         for step in self._rollout_iter_function(num_decoding_steps + 1):
-
+            
+            # Always do rollout for first step. 
             # Do not rollout for (1 - self._rollout_ratio) steps.
-            if random.random() < (1 - self._rollout_ratio):
+            if len(rollout_logits) > 0 and \
+                random.random() < (1 - self._rollout_ratio):
                 continue
 
             rollout_steps = (self._max_decoding_steps  + 1 - step) if self._do_max_rollout_steps else \
@@ -344,13 +349,16 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                                         .expand(batch_size, num_tokens_to_rollout, step, -1) \
                                         .reshape(batch_size * num_tokens_to_rollout, 1, step, -1)
 
-            rollout_logits.append(torch.cat([rollin_logits_prefix, 
-                                            output['logits']], dim=2))
+            if self._detach_rollin_logits:
+                rollin_logits_prefix = rollin_logits_prefix.detach()
+
+            rollout_logits.append(torch.cat([rollin_logits_prefix,
+                                             output['logits']], dim=2))
 
         rollout_output_dict['loss_batch'] = torch.cat(rollout_loss_batch, dim=1)
         rollout_output_dict['predictions'] = torch.cat(rollout_predictions, dim=1)
         rollout_output_dict['next_tokens'] = torch.stack(next_tokens_list, dim=1)
-        rollout_output_dict['rollout_steps'] = torch.tensor(rollout_steps_list, 
+        rollout_output_dict['rollout_steps'] = torch.tensor(rollout_steps_list,
                                                             device=self.current_device)
 
         rollout_output_dict['logits'] = torch.stack(rollout_logits, dim=1)
