@@ -55,6 +55,7 @@
           },
         },
         "temperature": 1000,
+        "rollout_ratio": 0.25,
       }
     },
     "iterator": {
@@ -72,7 +73,6 @@
     "trainer": {
       "num_epochs": 50,
       "cuda_device" : 0,
-      // "validation_metric": "-perplexity",
       "optimizer": {
         "type": "adam",
         "lr": 0.01

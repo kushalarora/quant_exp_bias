@@ -11,7 +11,7 @@
       "end_tokens": ["</S>"]
     },
     "vocabulary": {
-      "directory_path": std.extVar("VOCAB_PATH"), 
+      "directory_path": std.extVar("VOCAB_PATH"),
     },
     "train_data_path": std.extVar("TRAIN_FILE"),
     "validation_data_path": std.extVar("DEV_FILE"),
@@ -21,10 +21,10 @@
       "decoder": {
         "type": "quant_exp_reinforce_decoder",
         "max_decoding_steps": 50,
-        "generation_batch_size": 32, 
+        "generation_batch_size": 32,
         "decoder_net": {
           "type": "quant_exp_bias_lstm_cell",
-          "decoding_dim": 300, 
+          "decoding_dim": 300,
           "target_embedding_dim": 300,
         },
         "target_embedder": {
@@ -60,7 +60,7 @@
           ["_decoder._decoder_net.*|_decoder._output_projection*|_decoder.target_embedder*|_decoder._dropout",
             {
               "type": "pretrained",
-              "weights_file_path": std.extVar("WEIGHT_FILE_PATH"), 
+              "weights_file_path": std.extVar("WEIGHT_FILE_PATH"),
               "parameter_name_overrides": {},
             },
           ],
@@ -81,16 +81,14 @@
     "trainer": {
       "num_epochs": 50,
       "cuda_device" : 0,
-      "validation_metric": "-perplexity",
+       "validation_metric": "-perplexity",
       "optimizer": {
         "type": "adam",
-        "lr": 0.01
+        "lr": 0.001
       },
       // "learning_rate_scheduler": {
-      //     "type": "reduce_on_plateau",
-      //     "factor": 0.5,
-      //     "mode": "min",
-      //     "patience": 2
+      //     "type": "exponential",
+      //     "gamma": 0.99,
       // },
       "patience": 10,
       "should_log_learning_rate": true,
