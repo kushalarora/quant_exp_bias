@@ -125,7 +125,7 @@ def one_exp_run(serialization_dir: str,
     if shall_generate_grammar_file:
         generate_grammar_file(run_serialization_dir, grammar_template,
                               vocabulary_size, vocabulary_distribution, epsilon=0)
-    else:
+    elif grammar_file_epsilon_0:
         os.environ["FSA_GRAMMAR_FILENAME"] = grammar_file_epsilon_0
 
     overrides = overides_func()
@@ -154,7 +154,7 @@ def one_exp_run(serialization_dir: str,
     if shall_generate_grammar_file:
         generate_grammar_file(run_serialization_dir, grammar_template,
                               vocabulary_size, vocabulary_distribution, epsilon=1e-4)
-    else:
+    elif grammar_file_epsilon_0 or grammar_file_epsilon:
         os.environ["FSA_GRAMMAR_FILENAME"] = grammar_file_epsilon or grammar_file_epsilon_0
 
     train_args = get_args(args=['train',
