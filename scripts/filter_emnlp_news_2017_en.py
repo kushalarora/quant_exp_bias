@@ -1,7 +1,7 @@
 import sys
 min_len=10
 max_len=50
-min_word_freq=500
+min_word_freq=1000
 
 word2count={}
 word2lineidx = {}
