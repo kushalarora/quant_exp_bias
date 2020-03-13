@@ -17,8 +17,8 @@
     },
     // "train_data_path": "data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered.2000000",
     "train_data_path": std.extVar("TRAIN_FILE"),
-    // "validation_data_path": std.extVar("DEV_FILE"),
-    "validation_data_path": "data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered.dev",
+    "validation_data_path": std.extVar("DEV_FILE"),
+    // "validation_data_path": "data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered.dev",
     "model": {
       "type": "quant_exp_composed_lm",
       "use_in_seq2seq_mode": false,
