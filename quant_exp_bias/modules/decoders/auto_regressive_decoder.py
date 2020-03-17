@@ -871,7 +871,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         step_log_probs = F.log_softmax(rollin_output_dict['logits'].squeeze(1), dim=-1)
         oracle_sampled_prediction_log_probs = torch.gather(step_log_probs, 2,
                                                         sequences[:,1:].unsqueeze(2)) \
-                                                .squeeze(2)
+                                                    .squeeze(2)
 
         sequence_mask = util.get_text_field_mask(sequences_dict)
         oracle_sampled_prediction_log_probs_summed = torch.sum(oracle_sampled_prediction_log_probs * sequence_mask[:, 1:], dim=-1)
