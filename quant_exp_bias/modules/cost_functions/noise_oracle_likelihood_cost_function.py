@@ -19,9 +19,11 @@ class NoiseOracleCostFunction(CostFunction):
 
     def __init__(self,
                  oracle: Oracle,
-                 noise_type=None) -> None:
+                 noise_type: str = None, 
+                 add_brevity_penalty: bool = False) -> None:
         self._oracle = oracle
         self._noise_type = noise_type
+        self._add_brevity_penalty = add_brevity_penalty
 
         if self._noise_type is not None:
             # Figure out how to add noise.
@@ -50,7 +52,8 @@ class NoiseOracleCostFunction(CostFunction):
             gold_len, pred_len = (len(gold_labels[i]), len(predictions[i]))
             # This encourages model to generate sequences which are of equal
             # length as gold sequence.
-            brevity_penality = np.abs(1 - float(pred_len)/gold_len)
+            brevity_penality = np.abs(1 - float(pred_len)/gold_len) \
+                                    if self._add_brevity_penalty else 0
             oracle_probs.append(np.log(oracle_probs_and_seq_probs[i][0] + 1e-45) - brevity_penality)
 
         # We return neg log prob.
