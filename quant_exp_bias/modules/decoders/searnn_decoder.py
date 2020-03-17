@@ -156,9 +156,10 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         # If num_tokens_to_rollout is not specified (default value: -1), consider all tokens for next step.
         # We do not want to rollout pad, oov, eos and sos tokens.
 
-        num_tokens_to_rollout = self._num_tokens_to_rollout \
-                                    if self._num_tokens_to_rollout > 0 else \
-                                        num_classes - self._rollout_mask.size(0)
+        num_tokens_to_rollout = (self._num_tokens_to_rollout \
+                                    if self._num_tokens_to_rollout > 0  else \
+                                        (num_classes - self._rollout_mask.size(0) if self._mask_padding_and_start \
+                                            else num_classes))
 
         def rollout_mixing_func():
             """ This function generates batch specific random mask
@@ -215,8 +216,10 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
             if len(rollout_logits) > 0 and \
                 random.random() < (1 - self._rollout_ratio):
                 continue
-
-            rollout_steps = (self._max_decoding_steps  + 1 - step) if self._do_max_rollout_steps else \
+            
+            # There might be a case where max_decoding_steps < num_decoding_steps, in this 
+            # case we want to rollout beyond max_decoding_steps
+            rollout_steps = (max(self._max_decoding_steps, num_decoding_steps)  + 1 - step) if self._do_max_rollout_steps else \
                                 (num_decoding_steps + 1 - step)
 
             # Do not select masked tokens and always select target token.
@@ -225,15 +228,6 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
             # So that topk or sampling doesn't return masked values and always returns selected values.
             masked_step_logits = rollin_logits[:, step - 1, :].clone().detach()
             rollout_steps_list.append(step - 1)
-            if self._mask_padding_and_start:
-                masked_step_logits.scatter_(dim=1,
-                                            index=self._rollout_mask.expand(rollin_logits.size(0), -1),
-                                            value=-1e2)
-
-            if self._must_include_target_token:
-                masked_step_logits.scatter_(dim=1,
-                                            index=targets[:, step].unsqueeze(1),
-                                            value=1e3)
 
             if self._num_neighbors_to_add > 0:
                 # Select these self._num_neighbors_to_add tokens.
@@ -248,6 +242,22 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                     masked_step_logits = masked_step_logits.scatter_(dim=1,
                                                                     index=neighbor_tokens,
                                                                     value=1e2)
+            
+            # These masks should be done after sampling and including 
+            # random words and neighbors as they might include start
+            # and EOS and padding tokens, we should do this after selecting
+            # those.
+            if self._mask_padding_and_start:
+                masked_step_logits.scatter_(dim=1,
+                                            index=self._rollout_mask.expand(
+                                                rollin_logits.size(0), -1),
+                                            value=-1e2)
+
+            if self._must_include_target_token:
+                masked_step_logits.scatter_(dim=1,
+                                            index=targets[:, step].unsqueeze(
+                                                1),
+                                            value=1e3)
 
             # softmax of masked step logits + some noise to break ties while topk.
             masked_step_probabilities = F.softmax(masked_step_logits, dim=-1)  + \
@@ -370,7 +380,6 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                                         rollout_output_dict: Dict[str, torch.Tensor],
                                         state: Dict[str, torch.Tensor],
                                         target_tokens: Dict[str, torch.LongTensor]):
-
         # rollin_logits: (batch_size, num_rollin_steps, num_classes)
         logits = rollin_output_dict['logits'].squeeze(1)
         next_tokens = rollout_output_dict['next_tokens']
