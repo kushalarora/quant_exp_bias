@@ -52,7 +52,7 @@ class BLEUCostFunction(CostFunction):
                                   predictions):
                 self._scorer.add_string(' '.join(ref),
                                         ' '.join(pred))
-                bleu_costs.append(self._scorer.score() + 1e-45)
+                bleu_costs.append(self._scorer.score()/100.0 + 1e-45)
                 self._scorer.reset()
             bleu_cost =  -1 * torch.tensor(bleu_costs).to(torch.cuda.current_device() if torch.cuda.is_available() else 'cpu')
 
