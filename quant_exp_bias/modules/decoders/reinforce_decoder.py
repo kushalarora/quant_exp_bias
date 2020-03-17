@@ -62,7 +62,9 @@ class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
                  num_mle_iters: int = 0,
                  rollin_rollout_mixing_coeff: float = 0.33,
                  detach_rollin_logits: bool = True,
+                 rollout_ratio: float = 1.0,
                  ) -> None:
+
         super().__init__(vocab=vocab,
                          max_decoding_steps=max_decoding_steps,
                          generation_batch_size=generation_batch_size,
@@ -96,7 +98,7 @@ class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
                          detokenizer=detokenizer,
                          must_include_target_token=False,
                          do_max_rollout_steps=do_max_rollout_steps,
-                         rollout_ratio=0.25,
+                         rollout_ratio=rollout_ratio,
                          detach_rollin_logits=detach_rollin_logits,
                          )
 
