@@ -10,10 +10,13 @@
       "tokenizer": {
         "type": "pretrained_transformer",
         "model_name": "gpt2",
-        "start_tokens": ["<S>"],
-        "end_tokens": ["</S>"],
+        "start_tokens": ["@@@@"],
+        "end_tokens": ["####"],
         "do_lowercase": false,
       },
+    },
+    "vocabulary": {
+        "directory_path": "training_configs/natural_lang/vocab/",
     },
     // "train_data_path": "data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered.2000000",
     "train_data_path": std.extVar("TRAIN_FILE"),
@@ -29,14 +32,14 @@
         "rollout_mode": std.extVar("rollout_mode"),
         "decoder_net": {
           "type": "quant_exp_bias_lstm_cell",
-          "decoding_dim": 1200, 
-          "target_embedding_dim": 400,
+          "decoding_dim": 600, 
+          "target_embedding_dim": 300,
 
           "num_decoder_layers": 1,
         },
         "target_embedder": {
           "vocab_namespace": "target_tokens",
-          "embedding_dim": 400,
+          "embedding_dim": 300,
         },
         "use_in_seq2seq_mode": false,
         "target_namespace": "target_tokens",
@@ -44,8 +47,8 @@
         "use_bleu" : false,
         "sample_output": true,
         "dropout": 0.2,
-        "start_token": "<S>",
-        "end_token": "</S>",
+        "start_token": "@@@@",
+        "end_token": "####",
         "oracle": {
           "type": "gpt2_oracle",
           "model_name": "gpt2",
@@ -60,19 +63,21 @@
           "oracle": {
             "type": "gpt2_oracle",
             "model_name": "gpt2",
-            "batch_size": 30,
-            "cuda_device": -2,
+            "batch_size": 5,
+            "cuda_device": 0,
           },
         },
         "temperature": 1000,
-        "num_neighbors_to_add": 10,
-        "num_tokens_to_rollout": 15,
+        "num_neighbors_to_add": 5,
+        "num_tokens_to_rollout": 10,
+        "rollout_ratio": 0.10,
+
       }
   },
   "iterator": {
       "type": "bucket",
       "sorting_keys": [["target_tokens", "num_tokens"]],
-      "batch_size": 10,
+      "batch_size": 5,
       // This is needed stupidly for bucket iterator to work.
       "max_instances_in_memory": 500000
   },
@@ -82,7 +87,7 @@
     "cuda_device" : 0,
     "optimizer": {
       "type": "adam",
-      "lr": 0.001,
+      "lr": 0.01,
     },
     "learning_rate_scheduler": {
         "type": "reduce_on_plateau",

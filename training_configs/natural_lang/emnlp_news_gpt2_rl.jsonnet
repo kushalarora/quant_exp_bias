@@ -16,7 +16,7 @@
       },
     },
     "vocabulary": {
-        "directory_path": "training_configs/natural_lang/vocab/",
+        "directory_path": std.extVar("VOCAB_PATH"),
     },
     // "train_data_path": "data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered.2000000",
     "train_data_path": std.extVar("TRAIN_FILE"),
@@ -26,14 +26,13 @@
       "type": "quant_exp_composed_lm",
       "use_in_seq2seq_mode": false,
       "decoder": {
-        "type": "quant_exp_auto_regressive_seq_decoder",
+        "type": "quant_exp_reinforce_decoder",
+        "generation_batch_size": 32,
         "max_decoding_steps": 50,
         "decoder_net": {
           "type": "quant_exp_bias_lstm_cell",
           "decoding_dim": 1200, 
           "target_embedding_dim": 400,
-          # This doesn't seem to be working as of
-          # now.
           "num_decoder_layers": 1,
         },
         "target_embedder": {
@@ -50,21 +49,45 @@
         "end_token": "####",
         "oracle": {
           "type": "gpt2_oracle",
-          "model_name": "gpt2-xl",
+          "model_name": "gpt2",
           "batch_size": 10,
         },
         "detokenizer": {
           "type": "gpt2_detokenizer",
           "model_name": "gpt2"
         },
-      }
+        "rollout_cost_function": {
+          "type": "noisy_oracle",
+          "oracle": {
+            "type": "gpt2_oracle",
+            "model_name": "gpt2",
+            "batch_size": 20,
+            "cuda_device": -2,
+          },
+        },
+        "rollout_ratio": 0.25,
+
+      },
+      "initializer": [
+          ["_decoder._decoder_net.*|_decoder._output_projection*|_decoder.target_embedder*|_decoder._dropout",
+            {
+              "type": "pretrained",
+              "weights_file_path": std.extVar("WEIGHT_FILE_PATH"),
+              "parameter_name_overrides": {},
+            },
+          ],
+      ]
   },
   "iterator": {
       "type": "bucket",
       "sorting_keys": [["target_tokens", "num_tokens"]],
-      "batch_size": 64,
+      "batch_size": 12,
       // This is needed stupidly for bucket iterator to work.
       "max_instances_in_memory": 500000
+  },
+  "validation_iterator": {
+      "type": "basic",
+      "batch_size": 12
   },
   "trainer": {
     "num_epochs": 20,
