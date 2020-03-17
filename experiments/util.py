@@ -44,6 +44,7 @@ def initialize_experiments(experiment_name: str,
                            param_path: str = None,
                            debug: bool = False,
                            offline: bool = False,
+                           experiment_text: str = None,
                            ):
     # Ipython by default adds some arguments to sys.argv.
     #  We don't want those arguments, hence we pass [] here.
@@ -63,27 +64,30 @@ def initialize_experiments(experiment_name: str,
 
     os.environ['TRAIN_FILE'] = ""
     os.environ['DEV_FILE'] = ""
-
+    
+    workspace_name = 'quantifying_exposure_bias'
+    if debug:
+        workspace_name += '-debug'
     try:
         if offline:
             raise ValueError
-
         experiment = Experiment(api_key='2UIhYs7jRdE2DbJDAB5OysNqM',
-                                workspace='quantifying_exposure_bias',
+                                workspace=workspace_name,
                                 project_name=experiment_name,
                                 auto_metric_logging=False,
                                 auto_param_logging=False,
-                                disabled=debug,
                                 )
     except:
         experiment = OfflineExperiment(
-            workspace="quantifying_exposure_bias",
+            workspace=workspace_name,
             project_name=experiment_name,
             auto_metric_logging=False,
             auto_param_logging=False,
             offline_directory="./comet_exp/",
         )
-
+    
+    if experiment_text:
+        experiment.log_text(experiment_text)
     return main_args, serialization_dir, param_path, experiment_id, experiment
 
 
@@ -153,7 +157,7 @@ def one_exp_run(serialization_dir: str,
     # so that we can assign some prob. to incorrect sequences.
     if shall_generate_grammar_file:
         generate_grammar_file(run_serialization_dir, grammar_template,
-                              vocabulary_size, vocabulary_distribution, epsilon=1e-4)
+                              vocabulary_size, vocabulary_distribution, epsilon=0)
     elif grammar_file_epsilon_0 or grammar_file_epsilon:
         os.environ["FSA_GRAMMAR_FILENAME"] = grammar_file_epsilon or grammar_file_epsilon_0
 
