@@ -31,11 +31,15 @@ parser.add_argument('--num_runs', type=int, default=1,
                     help='Number of runs for the given dataset size.')
 parser.add_argument('--all', action='store_true', help='Run All configurations mentioned below..')
 parser.add_argument('--debug', action='store_true', help='Run in debug mode.')
+parser.add_argument('--exp_msg', type=str, default=None, help='Debug(maybe) experiment message.')
+
 args = parser.parse_args()
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
-main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/beam_size_experiments', debug=args.debug)
+main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/beam_size_experiments', 
+                                                                                             debug=args.debug,
+                                                                                             experiment_text=args.exp_msg)
 
 experiment.log_parameters({'serialization_dir': serialization_dir,
                           'main_args': main_args,

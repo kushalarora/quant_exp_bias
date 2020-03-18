@@ -31,14 +31,15 @@ parser.add_argument('--all', action='store_true', help='Run All configurations m
 parser.add_argument('--rollins', nargs='+', help='Rollins to use', type=str, default=['teacher_forcing', 'mixed', 'learned'])
 parser.add_argument('--rollouts', nargs='+', help='Rollouts to use', type=str, default=['reference', 'mixed', 'learned'])
 parser.add_argument('--debug', action='store_true', help='Run in debug mode.')
-
+parser.add_argument('--exp_msg', type=str, default=None, help='Debug(maybe) experiment message.')
 args = parser.parse_args()
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
 main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('natural_lang/searnn_experiments',
-                                                                                                param_path = 'training_configs/natural_lang/emnlp_news_gpt2_searnn.jsonnet',
-                                                                                                debug=args.debug,
+                                                                                             param_path = 'training_configs/natural_lang/emnlp_news_gpt2_searnn.jsonnet',
+                                                                                             debug=args.debug,
+                                                                                             experiment_text=args.exp_msg,
                                                                                             )
 generate_grammar_file(serialization_dir)
 
