@@ -5,9 +5,26 @@ from overrides import overrides
 
 from allennlp.common.util import END_SYMBOL
 from allennlp.data.vocabulary import DEFAULT_PADDING_TOKEN, DEFAULT_OOV_TOKEN
+from multiprocessing import Pool
+
 import torch
 
 from quant_exp_bias.modules.cost_functions import CostFunction
+
+def init_pool():
+    global scorer
+    scorer = SacrebleuScorer()
+    return scorer
+
+
+def compute_bleu_score(prediction: List[str], 
+                       gold_label: List[str]):
+    global scorer
+    scorer.add_string(' '.join(gold_label),
+                      ' '.join(prediction))
+    score = scorer.score()/100.0 + 1e-45
+    scorer.reset()
+    return score
 
 @CostFunction.register("bleu")
 class BLEUCostFunction(CostFunction):
@@ -16,14 +33,24 @@ class BLEUCostFunction(CostFunction):
     """
 
     def __init__(self,
-                 pad_token = 0,
-                 eos_token = 4,
-                 unk_token = 1,
-                 use_decoded_inputs = True,
+                 pad_token:int = 0,
+                 eos_token: int = 4,
+                 unk_token: int = 1,
+                 use_decoded_inputs:bool = True,
+                 use_parallel: bool = True,
+                 num_threads:int = 64,
                  ):
 
+        self._num_threads = num_threads
+
+        self._use_parallel = use_parallel
+
         if use_decoded_inputs:
-            self._scorer = SacrebleuScorer()
+            if use_parallel:
+                self._pool = Pool(self._num_threads, 
+                                  init_pool)
+            else:
+                self._scorer = SacrebleuScorer()
         else:
             self._scorer = Scorer(pad_token,
                                 eos_token,
@@ -47,13 +74,16 @@ class BLEUCostFunction(CostFunction):
         """
         bleu_costs = []
         if self._use_decoded_inputs:
-            total_count = 0
-            for ref, pred  in zip(gold_labels, 
-                                  predictions):
-                self._scorer.add_string(' '.join(ref),
-                                        ' '.join(pred))
-                bleu_costs.append(self._scorer.score()/100.0 + 1e-45)
-                self._scorer.reset()
+            if self._use_parallel:
+                bleu_costs = self._pool.starmap(compute_bleu_score, zip(predictions, gold_labels))
+            else:
+                for ref, pred  in zip(gold_labels, 
+                                    predictions):
+                    self._scorer.add_string(' '.join(ref),
+                                            ' '.join(pred))
+                    bleu_costs.append(self._scorer.score()/100.0 + 1e-45)
+                    self._scorer.reset()
+            
             bleu_cost =  -1 * torch.tensor(bleu_costs).to(torch.cuda.current_device() if torch.cuda.is_available() else 'cpu')
 
         else:
@@ -61,7 +91,7 @@ class BLEUCostFunction(CostFunction):
             bleu_cost = -1 * self._scorer.add(gold_labels.type(torch.IntTensor),
                                                 predictions.type(torch.IntTensor)).score()
 
-        self._scorer.reset()
+            self._scorer.reset()
         return bleu_cost
 
     @overrides
