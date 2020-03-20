@@ -84,12 +84,12 @@ class BLEUCostFunction(CostFunction):
                     bleu_costs.append(self._scorer.score()/100.0 + 1e-45)
                     self._scorer.reset()
             
-            bleu_cost =  -1 * torch.tensor(bleu_costs).to(torch.cuda.current_device() if torch.cuda.is_available() else 'cpu')
+            bleu_cost =  (1.0 - torch.tensor(bleu_costs)).to(torch.cuda.current_device() if torch.cuda.is_available() else 'cpu')
 
         else:
             predictions, gold_labels, mask = self.unwrap_to_tensors(predictions, gold_labels, mask)
-            bleu_cost = -1 * self._scorer.add(gold_labels.type(torch.IntTensor),
-                                                predictions.type(torch.IntTensor)).score()
+            bleu_cost = (1.0 - self._scorer.add(gold_labels.type(torch.IntTensor),
+                                                predictions.type(torch.IntTensor)).score())
 
             self._scorer.reset()
         return bleu_cost
