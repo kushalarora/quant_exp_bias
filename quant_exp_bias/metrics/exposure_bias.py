@@ -98,11 +98,11 @@ class ExposureBias(Metric):
                 P = model_sampled_oracle_probs_and_seq_probs[i][0]
                 Q = model_sampled_model_probs[i].item()
 
-                value, _ = self._Df(P, Q, 1.0, 1.0)
+                value, _ = self._Df(P, Q, 1.0, seq_len)
                 df_p_q += 0.5 * value
 
                 df_p_qs.append(value)
-                df_p_q_count += 1
+                df_p_q_count += seq_len
 
             model_sampled_oracle_probs.append(model_sampled_oracle_probs_and_seq_probs[i][0])
         oracle_sampled_batch_size = len(oracle_sampled_predictions)
@@ -138,11 +138,11 @@ class ExposureBias(Metric):
                 P = oracle_sampled_oracle_probs_and_seq_probs[i][0]
                 Q = oracle_sampled_model_probs[i].item()
                 
-                value, _ = self._Df(Q, P, 1.0, 1.0)
+                value, _ = self._Df(Q, P, 1.0, seq_len)
                 df_q_p += 0.5 * value
 
                 df_q_ps.append(value)
-                df_q_p_count += 1
+                df_q_p_count += seq_len
 
             oracle_sampled_oracle_probs.append(oracle_sampled_oracle_probs_and_seq_probs[i][0])
 
