@@ -35,24 +35,22 @@ parser.add_argument('--all', action='store_true',
                     help='Run All configurations mentioned below..')
 parser.add_argument('--debug', action='store_true', help='Run in debug mode.')
 parser.add_argument('--exp_msg', type=str, default=None, help='Debug(maybe) experiment message.')
-
 args = parser.parse_args()
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
-main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/reinforce_experiments',
-                                                                                             param_path='training_configs/artificial_grammar/artificial_grammar_rl_bleu.jsonnet',
+main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('natural_lang/reinforce_experiments',
+                                                                                             param_path='training_configs/natural_lang/emnlp_news_gpt2_rl.jsonnet',
                                                                                              debug=args.debug,
                                                                                              experiment_text=args.exp_msg,
-                                                                                             )
+                                                                                            )
 
 
-num_samples_and_runs = [(1000, 4), (10000, 2), (100000, 2)]
+num_samples_and_runs = [(10000, 4), (50000, 2), (2000000, 2)]
 
 samples2pretrained_model = {
-    1000: 'results/artificial_grammar/artificial_lang/dataset_experiments/03_18_2020_00_04_07/1000/0/',
-    10000: 'results/artificial_grammar/artificial_lang/dataset_experiments/03_18_2020_00_04_07/10000/0/',
-    50000: 'results/artificial_grammar/artificial_lang/dataset_experiments/03_18_2020_00_04_07/50000/0/',
+    10000: 'results/artificial_grammar/natural_lang/dataset_experiments/03_15_2020_00_43_12/10000/0/',
+    50000: 'results/artificial_grammar/natural_lang/dataset_experiments/03_14_2020_22_59_49/50000/0/',
 }
 
 experiment.log_parameters({'serialization_dir': serialization_dir,
@@ -84,11 +82,8 @@ def reinforce_experiments(main_args,
                                   num_samples=num_samples,
                                   run=num_run,
                                   param_path=param_path,
-                                  shall_generate_grammar_file=False,
-                                  grammar_file_epsilon_0=os.path.join(
-                                      pretrained_model, 'epsilon_0_grammar.txt'),
-                                  grammar_file_epsilon=os.path.join(
-                                      pretrained_model, 'epsilon_0.0001_grammar.txt'),
+                                  sample_from_file=True,
+                                  dataset_filename='data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered',
                                   )
 
         assert len(run_metrics) == 1, \

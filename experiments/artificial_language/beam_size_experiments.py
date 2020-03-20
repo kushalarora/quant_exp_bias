@@ -3,7 +3,6 @@
 
 import os
 import sys
-import wandb
 
 from matplotlib import pyplot as plt
 from datetime import datetime
@@ -39,7 +38,8 @@ args = parser.parse_args()
 
 main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/beam_size_experiments', 
                                                                                              debug=args.debug,
-                                                                                             experiment_text=args.exp_msg)
+                                                                                             experiment_text=args.exp_msg,
+                                                                                             )
 
 experiment.log_parameters({'serialization_dir': serialization_dir,
                           'main_args': main_args,

@@ -1,7 +1,6 @@
 import json
 import os
 import sys
-import wandb
 
 from comet_ml import Experiment, OfflineExperiment
 from datetime import datetime
@@ -65,14 +64,13 @@ def initialize_experiments(experiment_name: str,
     os.environ['TRAIN_FILE'] = ""
     os.environ['DEV_FILE'] = ""
     
-    workspace_name = 'quantifying_exposure_bias'
     if debug:
-        workspace_name += '-debug'
+        experiment_name += '_debug'
     try:
         if offline:
             raise ValueError
         experiment = Experiment(api_key='2UIhYs7jRdE2DbJDAB5OysNqM',
-                                workspace=workspace_name,
+                                workspace='quantifying_exposure_bias',
                                 project_name=experiment_name,
                                 auto_metric_logging=False,
                                 auto_param_logging=False,

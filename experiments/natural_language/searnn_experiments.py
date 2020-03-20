@@ -3,7 +3,6 @@
 import itertools
 import os
 import sys
-import wandb
 
 from matplotlib import pyplot as plt
 from datetime import datetime
