@@ -27,6 +27,7 @@
       "use_in_seq2seq_mode": false,
       "decoder": {
         "type": "quant_exp_auto_regressive_seq_decoder",
+        "generation_batch_size": 64,
         "max_decoding_steps": 50,
         "decoder_net": {
           "type": "quant_exp_bias_lstm_cell",
