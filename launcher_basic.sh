@@ -12,5 +12,8 @@
 ###########################
 
 set -x
+source ~/.bashrc
+conda deactivate
+module load httpproxy
 source activate quant_exp
 $@
