@@ -9,7 +9,6 @@ import math
 
 import torch.nn.functional as F
 
-import pdb;pdb.set_trace()
 if len(sys.argv) > 2:
     model_name = sys.argv[2]
 else:
@@ -26,7 +25,7 @@ count = 0
 sequences = []
 with open(sys.argv[1]) as f:
     for i, line in enumerate(f):
-        tokens = tokenizer.tokenize(line)
+        tokens = tokenizer.tokenize('@@@@ '  + line + ' ####')
         if len(tokens) < 2:
             continue
         
@@ -67,7 +66,7 @@ for i in range(0, len(sequences), batch_size):
                                             ignore_index = -1, reduction='none').view(batch_size, -1)
 
         loss_batch_seq *=mask[:, 1:]
-        seq_sizes = mask.sum(dim=-1)
+        seq_sizes = mask[:, 1:].sum(dim=-1)
 
         loss_batch = loss_batch_seq.sum(dim=-1)/seq_sizes
 
