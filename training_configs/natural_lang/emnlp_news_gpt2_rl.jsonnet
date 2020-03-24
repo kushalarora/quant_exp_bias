@@ -27,17 +27,17 @@
       "use_in_seq2seq_mode": false,
       "decoder": {
         "type": "quant_exp_reinforce_decoder",
-        "generation_batch_size": 32,
+        "generation_batch_size": 64,
         "max_decoding_steps": 50,
         "decoder_net": {
           "type": "quant_exp_bias_lstm_cell",
-          "decoding_dim": 1200, 
-          "target_embedding_dim": 400,
+          "decoding_dim": 800, 
+          "target_embedding_dim": 300,
           "num_decoder_layers": 1,
         },
         "target_embedder": {
           "vocab_namespace": "target_tokens",
-          "embedding_dim": 400,
+          "embedding_dim": 300,
         },
         "use_in_seq2seq_mode": false,
         "target_namespace": "target_tokens",
@@ -83,7 +83,7 @@
       "sorting_keys": [["target_tokens", "num_tokens"]],
       "batch_size": 12,
       // This is needed stupidly for bucket iterator to work.
-      "max_instances_in_memory": 500000
+      "max_instances_in_memory": 2000000
   },
   "validation_iterator": {
       "type": "basic",

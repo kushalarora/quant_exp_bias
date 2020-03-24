@@ -32,7 +32,7 @@
         "rollout_mode": std.extVar("rollout_mode"),
         "decoder_net": {
           "type": "quant_exp_bias_lstm_cell",
-          "decoding_dim": 600, 
+          "decoding_dim": 800, 
           "target_embedding_dim": 300,
 
           "num_decoder_layers": 1,
