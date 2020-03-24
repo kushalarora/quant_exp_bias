@@ -24,12 +24,12 @@
         "rollout_mode": std.extVar("rollout_mode"),
         "decoder_net": {
           "type": "quant_exp_bias_lstm_cell",
-          "decoding_dim": 300,
-          "target_embedding_dim": 300,
+          "decoding_dim": 100,
+          "target_embedding_dim": 100,
         },
         "target_embedder": {
           "vocab_namespace": "target_tokens",
-          "embedding_dim": 300
+          "embedding_dim": 100
         },
         "use_in_seq2seq_mode": false,
         "target_namespace": "target_tokens",
@@ -48,14 +48,10 @@
           "max_len": 50,
         },
         "rollout_cost_function": {
-          "type": "noisy_oracle",
-          "oracle": {
-            "type": "artificial_lang_oracle",
-            "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME"),
-          },
+          "type": "bleu",
         },
         "temperature": 1000,
-        "rollout_ratio": 0.25,
+        "rollout_ratio": 0.30,
       }
     },
     "iterator": {
@@ -72,6 +68,7 @@
     },
     "trainer": {
       "num_epochs": 50,
+       //"validation_metric": "-perplexity",
       "cuda_device" : 0,
       "optimizer": {
         "type": "adam",

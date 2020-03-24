@@ -24,12 +24,12 @@
         "generation_batch_size": 32,
         "decoder_net": {
           "type": "quant_exp_bias_lstm_cell",
-          "decoding_dim": 300,
-          "target_embedding_dim": 300,
+          "decoding_dim": 100,
+          "target_embedding_dim": 100,
         },
         "target_embedder": {
           "vocab_namespace": "target_tokens",
-          "embedding_dim": 300
+          "embedding_dim": 100
         },
         "use_in_seq2seq_mode": false,
         "target_namespace": "target_tokens",
@@ -69,7 +69,7 @@
     "iterator": {
       "type": "bucket",
       "sorting_keys": [["target_tokens", "num_tokens"]],
-      "batch_size": 32,
+      "batch_size": 256,
 
       // This is needed stupidly for bucket iterator to work.
       "max_instances_in_memory": 50000
