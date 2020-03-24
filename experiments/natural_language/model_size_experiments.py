@@ -45,9 +45,9 @@ main_args, serialization_dir, param_path, experiment_id, experiment = initialize
 msz2config  = {
     'xsmall' : (100, 100, 1),
     'small': (300, 300, 1),
-    'medium': (1200, 400, 1),
-    'large': (1200, 400, 2),
-    'xlarge': (1200, 400, 4)
+    'medium': (800, 300, 1),
+    'large': (2400, 300, 1),
+    'xlarge': (2400, 300, 2)
     }
 
 # num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
@@ -129,6 +129,7 @@ if args.all:
         model_size_experiments(model_sizes, main_args,
                                 serialization_dir, param_path, num_samples, num_runs)
 else:
+    # You can specify the model sizes you want to run, else it runs everything.
     model_sizes = args.model_sizes or msz2config.keys()
     model_size_experiments(model_sizes, main_args, serialization_dir, 
                             param_path, args.num_samples, args.num_runs)
