@@ -30,6 +30,8 @@ parser.add_argument('--num_runs', type=int, default=1,
 parser.add_argument('--all', action='store_true', help='Run All configurations mentioned below..')
 parser.add_argument('--debug', action='store_true', help='Run in debug mode.')
 parser.add_argument('--exp_msg', type=str, default=None, help='Debug(maybe) experiment message.')
+parser.add_argument('--model_sizes', nargs='+', help='Model sizes to use',
+                        type=str, default=None)
 args = parser.parse_args()
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
@@ -40,7 +42,7 @@ main_args, serialization_dir, param_path, experiment_id, experiment = initialize
                                                                                              experiment_text=args.exp_msg,
                                                                                             )
 
-model_sizes  = {
+msz2config  = {
     'xsmall' : (100, 100, 1),
     'small': (300, 300, 1),
     'medium': (1200, 400, 1),
@@ -56,7 +58,7 @@ experiment.log_parameters({'serialization_dir': serialization_dir,
                           'param_path': param_path,
                           'experiment_id': experiment_id})
 
-experiment.log_parameters(model_sizes)
+experiment.log_parameters(msz2config)
 
 def model_size_experiments(model_sizes,
                             main_args,
@@ -68,7 +70,8 @@ def model_size_experiments(model_sizes,
     step = 0
     # Setup variables needed later.
     orig_serialization_dir = serialization_dir
-    for model_size, model_tuple in model_sizes.items():
+    for model_size in model_sizes:
+        model_tuple = msz2config[model_size]
         overrides = json.dumps({'model':{
                                     'decoder': {
                                         'decoder_net': {
@@ -118,8 +121,14 @@ def model_size_experiments(model_sizes,
             experiment.log_metric('df_q_p_mean', run_metrics['df_q_p_mean'], step=step)
     experiment.log_parameters({})
     experiment.log_asset_folder(serialization_dir, log_file_name=True, recursive=True)
+
+
 if args.all:
+    model_sizes = msz2configs.keys()
     for num_samples, num_runs in num_samples_and_runs:
-        model_size_experiments(model_sizes, main_args, serialization_dir, param_path, num_samples, num_runs)
+        model_size_experiments(model_sizes, main_args,
+                                serialization_dir, param_path, num_samples, num_runs)
 else:
-    model_size_experiments(model_sizes, main_args, serialization_dir, param_path, args.num_samples, args.num_runs)
+    model_sizes = args.model_sizes or msz2config.keys()
+    model_size_experiments(model_sizes, main_args, serialization_dir, 
+                            param_path, args.num_samples, args.num_runs)
