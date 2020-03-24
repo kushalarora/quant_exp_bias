@@ -69,7 +69,11 @@ def validation_experiments(main_args,
                                         overides_func=lambda:overrides,
                                         exp_bias_epochs_func=validation_exp_bias_epochs_func,
                                         sample_from_file=True,
-                                        dataset_filename='data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered')
+                                        dataset_filename='data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered',
+                                        num_trials=5,
+                                        num_length_samples=5,
+                                        num_samples_per_length=32,
+                                      )
         for run_metrics in run_metrics_list:
             epoch = run_metrics['epoch']
 
