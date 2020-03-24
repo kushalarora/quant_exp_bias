@@ -21,6 +21,8 @@ class NaturalLanguageOracle(Oracle):
                  num_threads=128,
                  cuda_device=-1,
                  batch_size=None,
+                 start_token='@@@@',
+                 end_token='####',
                 ):
         super(Oracle, self).__init__()
         # self._parallelize = parallelize
@@ -42,6 +44,8 @@ class NaturalLanguageOracle(Oracle):
 
         self.batch_size = batch_size
         self.model.eval()
+        self._start_token = start_token
+        self._end_token = end_token
 
     def sample_training_set(self, num_samples: int):
         """
@@ -60,6 +64,7 @@ class NaturalLanguageOracle(Oracle):
             batch = sequences[i:i + batch_size] if i + batch_size < seq_batch_size else sequences[i:seq_batch_size]
             bsize = self.batch_size if i + batch_size < len(sequences) else seq_batch_size - i
 
+            batch = [[self._start_token] + sequence + [self._end_token] for sequence in batch]
             max_len = max(3, max([len(sequence) for sequence in batch]))
             ids = [self.tokenizer.convert_tokens_to_ids(sequence) + [self.tokenizer.eos_token_id] * (max_len - len(sequence)) for sequence in batch]
             tensor_input = torch.tensor(ids).to(self.device)
@@ -78,14 +83,13 @@ class NaturalLanguageOracle(Oracle):
                                                     ignore_index = -1, reduction='none').view(bsize, -1)
 
                 loss_batch_seq *=attention_mask[:, 1:]
-                seq_sizes = attention_mask.sum(dim=-1)
+                seq_sizes = attention_mask[:,1:].sum(dim=-1)
 
-                loss_batch = loss_batch_seq.sum(dim=-1)/seq_sizes
+                loss_batch = loss_batch_seq.sum(dim=-1)/(seq_sizes + 1)
 
-                seq_probs = torch.exp(-1 * torch.gather(shift_logits, 2, shift_labels.unsqueeze(2))
-                                           .squeeze(2))
+                seq_probs = torch.exp(-1 * loss_batch_seq)
 
                 for j in range(bsize):
                     prob = math.exp(-1 * loss_batch[j].item())
-                    output.append((prob, seq_probs[j].tolist()))
+                    output.append((prob, seq_probs[j].tolist(), seq_sizes[j]))
         return output
