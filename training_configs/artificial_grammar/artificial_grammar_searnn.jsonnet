@@ -68,7 +68,7 @@
     },
     "trainer": {
       "num_epochs": 50,
-       //"validation_metric": "-perplexity",
+       "validation_metric": "-perplexity",
       "cuda_device" : 0,
       "optimizer": {
         "type": "adam",
