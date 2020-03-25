@@ -82,10 +82,10 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                  use_in_seq2seq_mode: bool = False,
                  target_namespace: str = "tokens",
                  beam_size: int = None,
-                 scheduled_sampling_ratio: float = 0.2,
+                 scheduled_sampling_ratio: float = 0.0,
                  scheduled_sampling_k: int = 100,
                  scheduled_sampling_type: str = 'uniform',
-                 rollin_mode: str = 'teacher_forcing',
+                 rollin_mode: str = 'mixed',
                  rollout_mode: str = 'learned',
                  use_bleu: bool = False,
                  use_hamming: bool = False,
@@ -210,7 +210,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                       timestep: int,
                       last_predictions: torch.LongTensor,
                       target_tokens: Dict[str, torch.LongTensor] = None,
-                      rollin_mode = 'teacher_forcing') -> torch.LongTensor:
+                      rollin_mode = 'mixed') -> torch.LongTensor:
         """ Roll-in policy to use.
             This takes in targets, timestep and last_predictions, and decide
             which to use for taking next step i.e., generating next token.
@@ -218,6 +218,10 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 - teacher_forcing,
                 - learned,
                 - mixed,
+
+            By default the mode is mixed with scheduled_sampling_ratio=0.0. This 
+            defaults to teacher_forcing. You can also explicitly run with teacher_forcing
+            mode.
 
         Arguments:
             timestep {int} -- Current timestep decides which target token to use.
@@ -352,7 +356,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                   last_predictions: torch.Tensor,
                   state: Dict[str, torch.Tensor],
                   target_tokens: Dict[str, torch.LongTensor] = None,
-                  rollin_mode: str = 'learned',
+                  rollin_mode: str = 'mixed',
                   rollout_mode: str = 'learned',
                   rollout_mixing_func: RolloutMixingProbFuncType = None,
                  ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
@@ -668,7 +672,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                state: Dict[str, torch.Tensor],
                start_predictions: torch.LongTensor,
                rollin_steps: int,
-               rollin_mode: str = 'teacher_forcing',
+               rollin_mode: str = 'mixed',
                target_tokens: Dict[str, torch.LongTensor] = None,
                beam_size:int = 1,
                per_node_beam_size: int = None,
@@ -861,6 +865,10 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         start_predictions = self._get_start_predictions(state,
                                                         sequences_dict,
                                                         batch_size)
+        
+        # We are now computing probability considering given the sequence,
+        # So, we will use rollin_mode=teacher_forcing as we want to select
+        # token from the sequences for which we need to compute the probability.
         rollin_output_dict = self.rollin(state={},
                                             start_predictions=start_predictions,
                                             rollin_steps=seq_len - 1,
