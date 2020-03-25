@@ -96,7 +96,7 @@ def searnn_experiments(rollin_rollout_configs,
         os.environ['rollin_mode'] = rollin_policy
         os.environ['rollout_mode'] = rollout_policy
 
-        serialization_dir = os.path.join(orig_serialization_dir, f'{rollin_policy}_{rollout_policy}')
+        serialization_dir = os.path.join(orig_serialization_dir, f'{rollin_policy}_{rollout_policy}_{cost_func}_{mixing_coeff}')
         for num_run in range(num_runs):
             # Using partial here as we want the os.environ for noisy oracle to be
             # instantiated with overrides method is called.
@@ -125,6 +125,7 @@ def searnn_experiments(rollin_rollout_configs,
                             'rollin_policy': rollin_policy,
                             'rollout_policy': rollout_policy,
                             'cost_func': cost_func,
+                            'mixing_coeff': mixing_coeff,
                             'val_ppl': run_metrics['best_validation_perplexity'],
                             'best_val_epoch': run_metrics['best_epoch']
                         }
