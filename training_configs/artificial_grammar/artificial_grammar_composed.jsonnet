@@ -66,11 +66,15 @@
         "type": "adam",
         "lr": 0.01
       },
+      // "learning_rate_scheduler": {
+      //     "type": "exponential",
+      //     "gamma": 0.99,
+      // },
       "learning_rate_scheduler": {
           "type": "reduce_on_plateau",
           "factor": 0.5,
           "mode": "min",
-          "patience": 0
+          "patience": 2
       },
       "patience": 10,
       "should_log_learning_rate": true,
