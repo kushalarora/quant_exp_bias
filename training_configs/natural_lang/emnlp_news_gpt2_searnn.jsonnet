@@ -71,7 +71,7 @@
   "iterator": {
       "type": "bucket",
       "sorting_keys": [["target_tokens", "num_tokens"]],
-      "batch_size": 5,
+      "batch_size": 4,
       // This is needed stupidly for bucket iterator to work.
       "max_instances_in_memory": 500000
   },
