@@ -403,7 +403,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         predictions = rollin_output_dict['predictions'].squeeze(1)
         loss_batch = rollout_output_dict['loss_batch']
         output_dict = {'predictions': predictions.data.cpu()}
-
+        
         if self._combiner_mode == 'kl':
             x = F.log_softmax(scattered_logits, dim=-1)
             y = F.softmax(-1 * self._temperature * loss_batch, dim=-1)
@@ -419,11 +419,11 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
             # shape : (batch_size,)
             target_mask_sum = target_mask.sum(dim=non_batch_dims)
             num_non_empty_sequences = ((target_mask_sum > 0).float().sum() + 1e-13)
-           
+
             loss_batch = self._rollin_rollout_mixing_coeff * rollin_output_dict['loss_batch'] + \
                                 (1 - self._rollin_rollout_mixing_coeff) * kl_loss_batch
             
-            loss = kl_loss_batch.sum()/num_non_empty_sequences
+            loss = loss_batch.sum()/num_non_empty_sequences
             output_dict['loss'] = loss
 
             return output_dict
