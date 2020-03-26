@@ -63,7 +63,7 @@ def rollout_cost_function_configs(cost_func, mixing_coeff):
           "oracle": {
             "type": "gpt2_oracle",
             "model_name": "gpt2",
-            "batch_size": 4,
+            "batch_size": 2,
             "cuda_device": -2,
           },
         }
