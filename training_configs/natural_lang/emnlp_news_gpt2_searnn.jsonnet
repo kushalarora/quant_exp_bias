@@ -59,17 +59,11 @@
           "model_name": "gpt2"
         },
         "rollout_cost_function": {
-          "type": "noisy_oracle",
-          "oracle": {
-            "type": "gpt2_oracle",
-            "model_name": "gpt2",
-            "batch_size": 5,
-            "cuda_device": 0,
-          },
+          "type": "bleu",
         },
         "temperature": 1000,
-        "num_neighbors_to_add": 5,
-        "num_tokens_to_rollout": 10,
+        "num_neighbors_to_add": 4,
+        "num_tokens_to_rollout": 8,
         "rollout_ratio": 0.10,
 
       }
@@ -82,7 +76,7 @@
       "max_instances_in_memory": 500000
   },
   "trainer": {
-    "num_epochs": 20,
+    "num_epochs": 10,
     "validation_metric": "-perplexity",
     "cuda_device" : 0,
     "optimizer": {
