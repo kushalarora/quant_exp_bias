@@ -40,7 +40,6 @@ main_args, serialization_dir, param_path, experiment_id, experiment = initialize
                                                                                              debug=args.debug,
                                                                                              experiment_text=args.exp_msg,
                                                                                             )
-generate_grammar_file(serialization_dir)
 
 rollin_rollout_configs = [x for x in itertools.product(args.rollins, args.rollouts)]
 

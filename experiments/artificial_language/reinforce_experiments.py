@@ -81,14 +81,14 @@ def reinforce_experiments(main_args,
     serialization_dir = os.path.join(orig_serialization_dir)
     for num_run in range(num_runs):
         run_metrics = one_exp_run(serialization_dir=serialization_dir,
-                                  num_samples=num_samples,
-                                  run=num_run,
-                                  param_path=param_path,
-                                  shall_generate_grammar_file=False,
-                                  grammar_file_epsilon_0=os.path.join(
-                                      pretrained_model, 'epsilon_0_grammar.txt'),
-                                  grammar_file_epsilon=os.path.join(
-                                      pretrained_model, 'epsilon_0.0001_grammar.txt'),
+                                   num_samples=num_samples,
+                                   run=num_run,
+                                   param_path=param_path,
+                                   shall_generate_grammar_file=False,
+                                   grammar_file_epsilon_0=os.path.join(
+                                   pretrained_model, 'epsilon_0_grammar.txt'),
+                                   grammar_file_epsilon=os.path.join(
+                                   pretrained_model, 'epsilon_0.0001_grammar.txt'),
                                   )
 
         assert len(run_metrics) == 1, \
