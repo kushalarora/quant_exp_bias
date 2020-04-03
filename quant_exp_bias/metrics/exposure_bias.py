@@ -90,10 +90,10 @@ class ExposureBias(Metric):
 
                     value, prev_p_q = self._Df(P, Q, prev_p_q, j+1)
                     df_p_q_seq += 0.5 * value
-
+                    df_p_q_count += 1
                 df_p_q += df_p_q_seq
                 df_p_qs.append(df_p_q_seq/seq_len)
-                df_p_q_count += seq_len
+                
             else:
                 P = model_sampled_oracle_probs_and_seq_probs[i][0]
                 Q = model_sampled_model_probs[i].item()
@@ -121,19 +121,19 @@ class ExposureBias(Metric):
             seq_len = len(oracle_sampled_predictions[i])
             if self._at_prefix_level:
                 df_q_p_seq = 0
-                prev_p_q = 1.0
+                prev_q_p = 1.0
                 for j in range(1, seq_len):
                     # Here oracle_sampled_oracle_probs is Q because the samples
                     # come from the oracle.
                     P = oracle_sampled_oracle_probs_and_seq_probs[i][1][j]
                     Q = oracle_sampled_model_seq_probs[i][j].item()
 
-                    value, prev_p_q = self._Df(Q, P, prev_p_q, j+1)
+                    value, prev_q_p = self._Df(Q, P, prev_q_p, j+1)
                     df_q_p_seq += 0.5 * value
+                    df_q_p_count += 1
 
                 df_q_p += df_q_p_seq
                 df_q_ps.append(df_q_p_seq/seq_len)
-                df_q_p_count += seq_len
             else:
                 P = oracle_sampled_oracle_probs_and_seq_probs[i][0]
                 Q = oracle_sampled_model_probs[i].item()
