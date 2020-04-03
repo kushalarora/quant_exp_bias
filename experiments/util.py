@@ -100,10 +100,11 @@ def default_exp_bias_epochs_func(train_model_serialization_dir):
     return [(epoch, qeb_suffix, metrics_filename)]
 
 
-def one_exp_run(serialization_dir: str,
-                num_samples: int,
-                run: int,
-                param_path: str,
+def one_exp_run(serialization_dir: str = None,
+                num_samples: int = 10000,
+                run: int = 0,
+                param_path: str = None,
+                cuda_device:int = 0,
                 overides_func: OverrideFuncType = default_overides_func,
                 exp_bias_epochs_func: ExpBiasEpochsFuncType = default_exp_bias_epochs_func,
                 sample_from_file=False,
@@ -118,56 +119,62 @@ def one_exp_run(serialization_dir: str,
                 num_samples_per_length: int = None,
                 grammar_file_epsilon_0: str = None,
                 grammar_file_epsilon: str = None,
+                only_quantify: bool = False,
+                run_serialization_dir:str = None,
+                train_model_serialization_dir: str = None,
+                oracle_test_filename:str = None,
                 ):
-    run_serialization_dir = os.path.join(serialization_dir, 
-                                         str(num_samples), 
-                                         str(run))
+    
+    overrides = default_overides_func()
+    run_serialization_dir = run_serialization_dir or \
+                                os.path.join(serialization_dir, 
+                                            str(num_samples), 
+                                            str(run))
+    if not only_quantify:
+        # This is grammar with epsilon 0 to sample correct sequence.
+        if shall_generate_grammar_file:
+            generate_grammar_file(run_serialization_dir, grammar_template,
+                                vocabulary_size, vocabulary_distribution, epsilon=0)
+        elif grammar_file_epsilon_0:
+            os.environ["FSA_GRAMMAR_FILENAME"] = grammar_file_epsilon_0
 
-    # This is grammar with epsilon 0 to sample correct sequence.
-    if shall_generate_grammar_file:
-        generate_grammar_file(run_serialization_dir, grammar_template,
-                              vocabulary_size, vocabulary_distribution, epsilon=0)
-    elif grammar_file_epsilon_0:
-        os.environ["FSA_GRAMMAR_FILENAME"] = grammar_file_epsilon_0
+        overrides = overides_func()
+        sample_oracle_args = ['sample-oracle',
+                            param_path,
+                            '-s', run_serialization_dir,
+                            '-n', str(num_samples),
+                            '-o',  overrides]
 
-    overrides = overides_func()
-    sample_oracle_args = ['sample-oracle',
-                          param_path,
-                          '-s', run_serialization_dir,
-                          '-n', str(num_samples),
-                          '-o',  overrides]
+        # We might want to sample from file, for example, in cases,
+        # where dataset is fixed. This is the case with natural language
+        # experiments.
+        if sample_from_file:
+            sample_oracle_args += ['-f', dataset_filename]
 
-    # We might want to sample from file, for example, in cases,
-    # where dataset is fixed. This is the case with natural language
-    # experiments.
-    if sample_from_file:
-        sample_oracle_args += ['-f', dataset_filename]
+        sample_oracle_args = get_args(args=sample_oracle_args)
+        oracle_train_filename, oracle_dev_filename, oracle_test_filename = \
+            sample_oracle_runner(sample_oracle_args,
+                                run_serialization_dir)
 
-    sample_oracle_args = get_args(args=sample_oracle_args)
-    oracle_train_filename, oracle_dev_filename, oracle_test_filename = \
-        sample_oracle_runner(sample_oracle_args,
-                             run_serialization_dir)
+        os.environ['TRAIN_FILE'] = oracle_train_filename
+        os.environ['DEV_FILE'] = oracle_dev_filename
 
-    os.environ['TRAIN_FILE'] = oracle_train_filename
-    os.environ['DEV_FILE'] = oracle_dev_filename
+        # This is grammar with epsilon 1e-4 to smoothened probability distribution
+        # so that we can assign some prob. to incorrect sequences.
+        if shall_generate_grammar_file:
+            generate_grammar_file(run_serialization_dir, grammar_template,
+                                vocabulary_size, vocabulary_distribution, epsilon=0)
+        elif grammar_file_epsilon_0 or grammar_file_epsilon:
+            os.environ["FSA_GRAMMAR_FILENAME"] = grammar_file_epsilon or grammar_file_epsilon_0
 
-    # This is grammar with epsilon 1e-4 to smoothened probability distribution
-    # so that we can assign some prob. to incorrect sequences.
-    if shall_generate_grammar_file:
-        generate_grammar_file(run_serialization_dir, grammar_template,
-                              vocabulary_size, vocabulary_distribution, epsilon=0)
-    elif grammar_file_epsilon_0 or grammar_file_epsilon:
-        os.environ["FSA_GRAMMAR_FILENAME"] = grammar_file_epsilon or grammar_file_epsilon_0
+        train_args = get_args(args=['train',
+                                    param_path,
+                                    '-s', run_serialization_dir,
+                                    '-o',  overrides])
+        trainer_params = Params.from_file(train_args.param_path, train_args.overrides)
 
-    train_args = get_args(args=['train',
-                                param_path,
-                                '-s', run_serialization_dir,
-                                '-o',  overrides])
-    trainer_params = Params.from_file(train_args.param_path, train_args.overrides)
-    cuda_device = trainer_params['trainer']['cuda_device']
-
-    train_model_serialization_dir = train_runner(train_args,
-                                                 run_serialization_dir)
+        train_model_serialization_dir = train_runner(train_args,
+                                                    run_serialization_dir)
 
     archive_file = os.path.join(train_model_serialization_dir, 'model.tar.gz')
     metric_list = []
@@ -195,7 +202,9 @@ def one_exp_run(serialization_dir: str,
 
         exp_biases, exp_bias_mean, exp_bias_std, \
             df_p_qs, df_p_q_mean, df_p_q_std, \
-            df_q_ps, df_q_p_mean, df_q_p_std = quantify_exposure_bias_runner(qeb_args,
+            df_q_ps, df_q_p_mean, df_q_p_std, \
+            h_m_m_mean, h_m_m_std, h_m_o_mean, h_m_o_std, \
+            h_o_m_mean, h_o_m_std, h_o_o_mean, h_o_o_std  = quantify_exposure_bias_runner(qeb_args,
                                                                              archive_file,
                                                                              oracle_test_filename,
                                                                              qeb_output_dir,
@@ -217,6 +226,18 @@ def one_exp_run(serialization_dir: str,
         metrics['df_q_p_mean'] = df_q_p_mean
         metrics['df_q_p_std'] = df_q_p_std
 
+        metrics['H_m_m_mean'] = h_m_m_mean
+        metrics['H_m_m_std'] =  h_m_m_std
+
+        metrics['H_m_o_mean'] = h_m_o_mean
+        metrics['H_m_o_std'] = h_m_o_std
+
+        metrics['H_o_m_mean'] = h_o_m_mean
+        metrics['H_o_m_std'] = h_o_m_std
+
+        metrics['H_o_o_mean'] = h_o_o_mean
+        metrics['H_o_o_std'] = h_o_o_std
+
         metric_list.append(metrics)
 
     for key, value, qeb_overides in exp_bias_inference_funcs():
@@ -236,7 +257,9 @@ def one_exp_run(serialization_dir: str,
 
         exp_biases, exp_bias_mean, exp_bias_std, \
             df_p_qs, df_p_q_mean, df_p_q_std, \
-            df_q_ps, df_q_p_mean, df_q_p_std = quantify_exposure_bias_runner(qeb_args,
+            df_q_ps, df_q_p_mean, df_q_p_std, \
+            h_m_m_mean, h_m_m_std, h_m_o_mean, h_m_o_std, \
+            h_o_m_mean, h_o_m_std, h_o_o_mean, h_o_o_std  = quantify_exposure_bias_runner(qeb_args,
                                                                              archive_file,
                                                                              oracle_test_filename,
                                                                              qeb_output_dir,
@@ -257,7 +280,18 @@ def one_exp_run(serialization_dir: str,
         metrics['df_q_p_mean'] = df_q_p_mean
         metrics['df_q_p_std'] = df_q_p_std
 
+        metrics['H_m_m_mean'] = h_m_m_mean
+        metrics['H_m_m_std'] =  h_m_m_std
+
+        metrics['H_m_o_mean'] = h_m_o_mean
+        metrics['H_m_o_std'] = h_m_o_std
+
+        metrics['H_o_m_mean'] = h_o_m_mean
+        metrics['H_o_m_std'] = h_o_m_std
+        
+        metrics['H_o_o_mean'] = h_o_o_mean
+        metrics['H_o_o_std'] = h_o_o_std
+
         metrics[key] = value
         metric_list.append(metrics)
-
     return metric_list

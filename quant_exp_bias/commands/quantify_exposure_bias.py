@@ -192,6 +192,10 @@ def quantify_exposure_bias(archive_file: str,
     exp_biases = []
     df_p_qs = []
     df_q_ps = []
+    H_m_o = []
+    H_m_m = []
+    H_o_m = []
+    H_o_o = []
 
     input_dict = { "compute_exposure_bias": True }
     input_dict['generation_batch_size'] = generation_batch_size
@@ -235,14 +239,18 @@ def quantify_exposure_bias(archive_file: str,
                                                                     output_dict['model_sampled_model_probs'],
                                                                     output_dict['model_sampled_oracle_probs'],
                                                                     output_dict['model_sampled_scores']):
-                        print(f'{seq} P={model_prob:.4f} Q={oracle_prob:.4f} Df_p_q={value:.4f}', file=file)
+                        print(f'{seq} P={model_prob:.4f} O={oracle_prob:.4f} Df_p_q={value:.4f}', file=file)
+                        H_m_m.append(float(model_prob))
+                        H_m_o.append(float(oracle_prob))
 
                 with open(os.path.join(output_dir_trail, 'oracle_sampled_generated.txt'), "a+") as file:
                     for seq, model_prob, oracle_prob, value in zip(output_dict['oracle_sampled_predicted_tokens'],
                                                                     output_dict['oracle_sampled_model_probs'],
                                                                     output_dict['oracle_sampled_oracle_probs'],
                                                                     output_dict['oracle_sampled_scores']):
-                        print(f'{seq} P={model_prob:.4f} Q={oracle_prob:.4f} Df_q_p={value:.4f}', file=file)
+                        print(f'{seq} P={model_prob:.4f} O={oracle_prob:.4f} Df_q_p={value:.4f}', file=file)
+                        H_o_o.append(float(oracle_prob))
+                        H_o_m.append(float(model_prob))
 
     metrics = {
         'exposure_bias_mean': np.mean(exp_biases),
@@ -251,6 +259,14 @@ def quantify_exposure_bias(archive_file: str,
         'df_p_q_std': np.std(df_p_qs),
         'df_q_p_mean': np.mean(df_q_ps),
         'df_q_p_std': np.std(df_q_ps),
+        'H_m_m_mean': np.mean(H_m_m),
+        'H_m_m_std': np.std(H_m_m),
+        'H_m_o_mean': np.mean(H_m_o),
+        'H_m_o_std': np.std(H_m_o),
+        'H_o_m_mean': np.mean(H_o_m),
+        'H_o_m_std': np.std(H_o_m),
+        'H_o_o_mean': np.mean(H_o_o),
+        'H_o_o_std': np.std(H_o_o),
     }
 
     with open(os.path.join(output_dir, 'metrics.json'), "w") as file:
@@ -272,4 +288,8 @@ def quantify_exposure_bias(archive_file: str,
     logger.info("Done!!")
     return exp_biases, metrics['exposure_bias_mean'], metrics['exposure_bias_std'], \
         df_p_qs, metrics['df_p_q_mean'], metrics['df_p_q_std'], \
-        df_q_ps, metrics['df_q_p_mean'], metrics['df_q_p_std']
+        df_q_ps, metrics['df_q_p_mean'], metrics['df_q_p_std'], \
+        metrics['H_m_m_mean'], metrics['H_m_m_std'], \
+        metrics['H_m_o_mean'], metrics['H_m_o_std'], \
+        metrics['H_o_m_mean'], metrics['H_o_m_std'], \
+        metrics['H_o_o_mean'], metrics['H_o_o_std']
