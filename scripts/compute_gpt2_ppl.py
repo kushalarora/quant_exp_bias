@@ -25,7 +25,7 @@ count = 0
 sequences = []
 with open(sys.argv[1]) as f:
     for i, line in enumerate(f):
-        tokens = tokenizer.tokenize('@@@@ '  + line + ' ####')
+        tokens = tokenizer.tokenize(line)
         if len(tokens) < 2:
             continue
         
