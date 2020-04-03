@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
 def rfn_prefix(p, q, prev_p_q, n): 
-    return np.exp(1.0/n * ((n-1)*np.log(prev_p_q) + np.log(p) - np.log(q)))
+    return np.exp(np.log(prev_p_q) + np.log(p) - np.log(q))
 
 def rfn_sequence(p, q, prev_p_q, n): 
     return np.exp(n * (np.log(p) - np.log(q)))
@@ -33,8 +33,8 @@ class ExposureBias(Metric):
 
     def __init__(self,
                  oracle: Oracle,
-                 type: str = 'kl',
-                 at_prefix_level: bool = False,
+                 type: str = 'js',
+                 at_prefix_level: bool = True,
                  ) -> None:
         self._total_value = 0.0
         self._df_p_q = 0.0
@@ -70,7 +70,7 @@ class ExposureBias(Metric):
         df_p_q = 0
         df_p_q_count = 0
         df_p_qs = []
-
+        
         model_sampled_oracle_probs = []
         model_sampled_oracle_probs_and_seq_probs = self._oracle.compute_sent_probs(model_sampled_predictions)
         for i in range(model_sampled_batch_size):
@@ -82,7 +82,7 @@ class ExposureBias(Metric):
             if self._at_prefix_level:
                 df_p_q_seq = 0
                 prev_p_q = 1.0
-                for j in range(seq_len):
+                for j in range(1, seq_len):
                     # Here model_sampled_model_prob is Q because the samples
                     # come from the model.
                     P = model_sampled_oracle_probs_and_seq_probs[i][1][j]
@@ -122,7 +122,7 @@ class ExposureBias(Metric):
             if self._at_prefix_level:
                 df_q_p_seq = 0
                 prev_p_q = 1.0
-                for j in range(seq_len):
+                for j in range(1, seq_len):
                     # Here oracle_sampled_oracle_probs is Q because the samples
                     # come from the oracle.
                     P = oracle_sampled_oracle_probs_and_seq_probs[i][1][j]
