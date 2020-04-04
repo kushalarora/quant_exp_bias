@@ -163,7 +163,7 @@ def one_exp_run(serialization_dir: str = None,
         # so that we can assign some prob. to incorrect sequences.
         if shall_generate_grammar_file:
             generate_grammar_file(run_serialization_dir, grammar_template,
-                                vocabulary_size, vocabulary_distribution, epsilon=0)
+                                vocabulary_size, vocabulary_distribution, epsilon=1e-4)
         elif grammar_file_epsilon_0 or grammar_file_epsilon:
             os.environ["FSA_GRAMMAR_FILENAME"] = grammar_file_epsilon or grammar_file_epsilon_0
 
