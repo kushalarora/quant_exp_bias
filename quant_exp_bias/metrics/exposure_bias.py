@@ -10,16 +10,16 @@ import torch
 import numpy as np
 import random
 import math
-from functools import reduce
+from functools import reduce, partial
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
-def rfn_prefix(p, q, prev_p_q, n): 
-    return np.exp(np.log(prev_p_q) + np.log(p) - np.log(q))
+def rfn_prefix(p, q, prev_p_q, n, clipping_ratio_max=2.0, clipping_ratio_min=0.01): 
+    return max(min(clipping_ratio_max, np.exp(np.log(prev_p_q) + np.log(p) - np.log(q))), clipping_ratio_min)
 
-def rfn_sequence(p, q, prev_p_q, n): 
-    return np.exp(n * (np.log(p) - np.log(q)))
+def rfn_sequence(p, q, prev_p_q, n, clipping_ratio_max=2.0, clipping_ratio_min=0.5): 
+    return max(min(clipping_ratio_max, np.exp(n * (np.log(p) - np.log(q)))), clipping_ratio_min)
 
 
 @Metric.register("exp_bias")
@@ -33,9 +33,10 @@ class ExposureBias(Metric):
 
     def __init__(self,
                  oracle: Oracle,
-                 type: str = 'js',
+                 type: str = 'tv',
                  at_prefix_level: bool = True,
-                 ) -> None:
+                 clipping_ratio_max=2.0,
+                 clipping_ratio_min=0.00) -> None:
         self._total_value = 0.0
         self._df_p_q = 0.0
         self._df_q_p = 0.0
@@ -46,7 +47,13 @@ class ExposureBias(Metric):
 
         # D_f(P||Q) = \sum_{x in X} f(p(X)/q(x))q(x)
         self._Df = ExposureBias.DfBuilder(type,
-                                          rfn_prefix if at_prefix_level else rfn_sequence)
+                        partial(rfn_prefix, 
+                                clipping_ratio_max=clipping_ratio_max,
+                                clipping_ratio_min=clipping_ratio_min) \
+                            if at_prefix_level else \
+                                partial(rfn_sequence,
+                                        clipping_ratio_max=clipping_ratio_max,
+                                        clipping_ratio_min=clipping_ratio_min))
 
     @overrides
     def __call__(self,
@@ -78,7 +85,11 @@ class ExposureBias(Metric):
             if len(model_sampled_predictions[i]) == 0:
                 continue
 
-            seq_len = len(model_sampled_predictions[i])
+            values = []
+            prev_p_qs = []
+            seq_len = min(len(model_sampled_oracle_probs_and_seq_probs[i][1]),
+                                len(model_sampled_model_seq_probs[i]))
+
             if self._at_prefix_level:
                 df_p_q_seq = 0
                 prev_p_q = 1.0
@@ -89,6 +100,8 @@ class ExposureBias(Metric):
                     Q = model_sampled_model_seq_probs[i][j].item()
 
                     value, prev_p_q = self._Df(P, Q, prev_p_q, j+1)
+                    values.append(value)
+                    prev_p_qs.append(prev_p_q)
                     df_p_q_seq += 0.5 * value
                     df_p_q_count += 1
                 df_p_q += df_p_q_seq
@@ -117,8 +130,12 @@ class ExposureBias(Metric):
 
             if len(oracle_sampled_predictions[i]) == 0:
                 continue
+            
+            values = []
+            prev_q_ps = []
+            seq_len = min(len(oracle_sampled_oracle_probs_and_seq_probs[i][1]),
+                            len(oracle_sampled_model_seq_probs[i]))
 
-            seq_len = len(oracle_sampled_predictions[i])
             if self._at_prefix_level:
                 df_q_p_seq = 0
                 prev_q_p = 1.0
@@ -131,6 +148,8 @@ class ExposureBias(Metric):
                     value, prev_q_p = self._Df(Q, P, prev_q_p, j+1)
                     df_q_p_seq += 0.5 * value
                     df_q_p_count += 1
+                    values.append(value)
+                    prev_q_ps.append(prev_q_p)
 
                 df_q_p += df_q_p_seq
                 df_q_ps.append(df_q_p_seq/seq_len)
@@ -182,10 +201,10 @@ class ExposureBias(Metric):
         if type == 'abs_kl':
             return lambda p, q, prev_p_q, n: (np.abs(np.log(rfn(q, p, prev_p_q, n))), rfn(q, p, prev_p_q, n))
         if type == 'kl':
-            return lambda p, q, prev_p_q, n: (np.log(rfn(q, p, prev_p_q, n)), rfn(q, p, prev_p_q, n))
+            return lambda p, q, prev_p_q, n: (np.log2(rfn(q, p, prev_p_q, n)), rfn(q, p, prev_p_q, n))
         elif type == 'hellinger_squared':
             return lambda p, q, prev_p_q, n: ((np.sqrt(rfn(p, q, prev_p_q, n)) - 1)**2, rfn(p, q, prev_p_q, n))
         elif type == 'tv':
             return lambda p, q, prev_p_q, n: (np.abs(rfn(p, q, prev_p_q, n) - 1), rfn(p, q, prev_p_q, n))
         elif type == 'js':
-            return lambda p, q, prev_p_q, n: (np.log(2/(rfn(p, q, prev_p_q, n) + 1)), rfn(p, q, prev_p_q, n))
+            return lambda p, q, prev_p_q, n: (np.log2(2/(rfn(p, q, prev_p_q, n) + 1)), rfn(p, q, prev_p_q, n))
