@@ -33,10 +33,10 @@ class ExposureBias(Metric):
 
     def __init__(self,
                  oracle: Oracle,
-                 type: str = 'tv',
+                 type: str = 'js',
                  at_prefix_level: bool = True,
                  clipping_ratio_max=2.0,
-                 clipping_ratio_min=0.00) -> None:
+                 clipping_ratio_min=0.5) -> None:
         self._total_value = 0.0
         self._df_p_q = 0.0
         self._df_q_p = 0.0
@@ -77,7 +77,7 @@ class ExposureBias(Metric):
         df_p_q = 0
         df_p_q_count = 0
         df_p_qs = []
-        
+       
         model_sampled_oracle_probs = []
         model_sampled_oracle_probs_and_seq_probs = self._oracle.compute_sent_probs(model_sampled_predictions)
         for i in range(model_sampled_batch_size):
@@ -87,7 +87,8 @@ class ExposureBias(Metric):
 
             values = []
             prev_p_qs = []
-            seq_len = min(len(model_sampled_oracle_probs_and_seq_probs[i][1]),
+            seq_len = min(len(model_sampled_predictions[i]) + 2, 
+                            len(model_sampled_oracle_probs_and_seq_probs[i][1]),
                                 len(model_sampled_model_seq_probs[i]))
 
             if self._at_prefix_level:
@@ -133,8 +134,9 @@ class ExposureBias(Metric):
             
             values = []
             prev_q_ps = []
-            seq_len = min(len(oracle_sampled_oracle_probs_and_seq_probs[i][1]),
-                            len(oracle_sampled_model_seq_probs[i]))
+            seq_len = min(len(oracle_sampled_predictions[i]) + 2, 
+                            len(oracle_sampled_oracle_probs_and_seq_probs[i][1]),
+                                len(oracle_sampled_model_seq_probs[i]))
 
             if self._at_prefix_level:
                 df_q_p_seq = 0
