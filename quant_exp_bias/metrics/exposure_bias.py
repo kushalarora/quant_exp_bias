@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
 def rfn_prefix(p, q, prev_p_q, n, clipping_ratio_max=2.0, clipping_ratio_min=0.01): 
+    # return np.exp(np.log(prev_p_q) + np.log(max(min(clipping_ratio_max, p/q), clipping_ratio_min)))
     return max(min(clipping_ratio_max, np.exp(np.log(prev_p_q) + np.log(p) - np.log(q))), clipping_ratio_min)
 
 def rfn_sequence(p, q, prev_p_q, n, clipping_ratio_max=2.0, clipping_ratio_min=0.5): 
@@ -33,10 +34,10 @@ class ExposureBias(Metric):
 
     def __init__(self,
                  oracle: Oracle,
-                 type: str = 'js',
+                 type: str = 'tv',
                  at_prefix_level: bool = True,
                  clipping_ratio_max=2.0,
-                 clipping_ratio_min=0.5) -> None:
+                 clipping_ratio_min=0.001) -> None:
         self._total_value = 0.0
         self._df_p_q = 0.0
         self._df_q_p = 0.0
@@ -77,7 +78,7 @@ class ExposureBias(Metric):
         df_p_q = 0
         df_p_q_count = 0
         df_p_qs = []
-       
+
         model_sampled_oracle_probs = []
         model_sampled_oracle_probs_and_seq_probs = self._oracle.compute_sent_probs(model_sampled_predictions)
         for i in range(model_sampled_batch_size):
@@ -87,7 +88,7 @@ class ExposureBias(Metric):
 
             values = []
             prev_p_qs = []
-            seq_len = min(len(model_sampled_predictions[i]) + 2, 
+            seq_len = min(len(model_sampled_predictions[i]) + 1, 
                             len(model_sampled_oracle_probs_and_seq_probs[i][1]),
                                 len(model_sampled_model_seq_probs[i]))
 
@@ -105,6 +106,7 @@ class ExposureBias(Metric):
                     prev_p_qs.append(prev_p_q)
                     df_p_q_seq += 0.5 * value
                     df_p_q_count += 1
+
                 df_p_q += df_p_q_seq
                 df_p_qs.append(df_p_q_seq/seq_len)
                 
@@ -134,7 +136,7 @@ class ExposureBias(Metric):
             
             values = []
             prev_q_ps = []
-            seq_len = min(len(oracle_sampled_predictions[i]) + 2, 
+            seq_len = min(len(oracle_sampled_predictions[i]) + 1, 
                             len(oracle_sampled_oracle_probs_and_seq_probs[i][1]),
                                 len(oracle_sampled_model_seq_probs[i]))
 
@@ -152,7 +154,7 @@ class ExposureBias(Metric):
                     df_q_p_count += 1
                     values.append(value)
                     prev_q_ps.append(prev_q_p)
-
+                
                 df_q_p += df_q_p_seq
                 df_q_ps.append(df_q_p_seq/seq_len)
             else:
