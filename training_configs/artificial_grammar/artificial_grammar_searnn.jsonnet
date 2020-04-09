@@ -50,7 +50,7 @@
         "rollout_cost_function": {
           "type": "bleu",
         },
-        "temperature": 1000,
+        "temperature": 10,
         "rollout_ratio": 0.30,
       }
     },
@@ -68,7 +68,7 @@
     },
     "trainer": {
       "num_epochs": 50,
-       "validation_metric": "-perplexity",
+      // "validation_metric": "-perplexity",
       "cuda_device" : 0,
       "optimizer": {
         "type": "adam",
