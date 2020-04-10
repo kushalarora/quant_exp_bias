@@ -97,7 +97,7 @@ class ArtificialLanguageOracle(Oracle):
         grammar_template = open(grammar_template_file)
         grammar_rules = []
 
-        group_set = set([])
+        groupidx2name = {} 
         for template in grammar_template:
             states_and_inputs = template.strip().split()
             current_state, arrow, next_states = states_and_inputs[0], states_and_inputs[1], states_and_inputs[2:]
@@ -106,16 +106,19 @@ class ArtificialLanguageOracle(Oracle):
             elif len(next_states) == 3:
                 inp, next_state, prob = next_states
 
-            if re.match("'<G[0-9]+>'", inp):
-                group_set.add(inp)
+            match = re.match("'<G([0-9])+>'", inp)
+            if match:
+                group_id = int(match.groups()[0])
+                groupidx2name[group_id] = inp
+
             elif inp not in extended_vocab:
                 extended_vocab.append(inp)
 
         group2idx = {}
-        for i, g in enumerate(group_set):
+        for i, g in groupidx2name.items():
             group2idx[g] = i
 
-        num_groups = len(group_set)
+        num_groups = len(groupidx2name)
         group_vocab_size = vocabulary_size//num_groups
 
         current_state_offset = {}
