@@ -42,7 +42,7 @@
         "mask_pad_and_oov": true,
         "oracle": {
           "type": "artificial_lang_oracle",
-          "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME"),
+          "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME_SMOOTHED"),
           "parallelize": true,
           //"max_len": 30,
           "max_len": 50,
@@ -68,7 +68,7 @@
     },
     "trainer": {
       "num_epochs": 50,
-      // "validation_metric": "-perplexity",
+      "validation_metric": "-perplexity",
       "cuda_device" : 0,
       "optimizer": {
         "type": "adam",

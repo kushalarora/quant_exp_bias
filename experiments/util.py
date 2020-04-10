@@ -35,7 +35,9 @@ def generate_grammar_file(serialization_dir: str,
     grammar_filename = os.path.join(serialization_dir, f'epsilon_{epsilon}_grammar.txt')
     with open(grammar_filename, 'w') as f:
         f.write(grammar_string)
-    os.environ["FSA_GRAMMAR_FILENAME"] = grammar_filename
+    
+    grammar_env_var = "FSA_GRAMMAR_FILENAME" if epsilon==0 else "FSA_GRAMMAR_FILENAME_SMOOTHED"
+    os.environ[grammar_env_var] = grammar_filename
     return grammar_filename
 
 
@@ -165,7 +167,7 @@ def one_exp_run(serialization_dir: str = None,
             generate_grammar_file(run_serialization_dir, grammar_template,
                                 vocabulary_size, vocabulary_distribution, epsilon=1e-4)
         elif grammar_file_epsilon_0 or grammar_file_epsilon:
-            os.environ["FSA_GRAMMAR_FILENAME"] = grammar_file_epsilon or grammar_file_epsilon_0
+            os.environ["FSA_GRAMMAR_FILENAME_SMOOTHED"] = grammar_file_epsilon or grammar_file_epsilon_0
 
         train_args = get_args(args=['train',
                                     param_path,
