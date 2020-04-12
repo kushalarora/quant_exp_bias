@@ -39,7 +39,7 @@
         "mask_pad_and_oov": true,
         "oracle": {
           "type": "artificial_lang_oracle",
-          "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME_SMOOTHED"),
+          "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME"),
           "parallelize": true,
           "num_threads": 32,
           //"max_len": 30,

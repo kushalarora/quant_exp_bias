@@ -24,7 +24,8 @@ def generate_grammar_file(serialization_dir: str,
                           grammar_template: str='grammar_templates/grammar_2.template',
                           vocabulary_size: int=6,
                           vocabulary_distribution: str='zipf',
-                          epsilon=0,
+                          epsilon:float = 0,
+                          cost_func_grammar:bool = False,
                           ):
     grammar_string = ArtificialLanguageOracle.generate_grammar_string(grammar_template_file=grammar_template,
                                                                       vocabulary_size=vocabulary_size,
@@ -36,8 +37,9 @@ def generate_grammar_file(serialization_dir: str,
     with open(grammar_filename, 'w') as f:
         f.write(grammar_string)
     
-    grammar_env_var = "FSA_GRAMMAR_FILENAME" if epsilon==0 else "FSA_GRAMMAR_FILENAME_SMOOTHED"
-    os.environ[grammar_env_var] = grammar_filename
+    os.environ["FSA_GRAMMAR_FILENAME"] = grammar_filename
+    if cost_func_grammar:
+        os.environ["FSA_GRAMMAR_FILENAME_COST_FUNC"] = grammar_filename
     return grammar_filename
 
 
@@ -136,9 +138,11 @@ def one_exp_run(serialization_dir: str = None,
         # This is grammar with epsilon 0 to sample correct sequence.
         if shall_generate_grammar_file:
             generate_grammar_file(run_serialization_dir, grammar_template,
-                                vocabulary_size, vocabulary_distribution, epsilon=0)
+                                    vocabulary_size, vocabulary_distribution, 
+                                    epsilon=0, cost_func_grammar=True)
         elif grammar_file_epsilon_0:
             os.environ["FSA_GRAMMAR_FILENAME"] = grammar_file_epsilon_0
+            os.environ["FSA_GRAMMAR_FILENAME_COST_FUNC"] = grammar_file_epsilon_0
 
         overrides = overides_func()
         sample_oracle_args = ['sample-oracle',
@@ -167,7 +171,7 @@ def one_exp_run(serialization_dir: str = None,
             generate_grammar_file(run_serialization_dir, grammar_template,
                                 vocabulary_size, vocabulary_distribution, epsilon=1e-4)
         elif grammar_file_epsilon_0 or grammar_file_epsilon:
-            os.environ["FSA_GRAMMAR_FILENAME_SMOOTHED"] = grammar_file_epsilon or grammar_file_epsilon_0
+            os.environ["FSA_GRAMMAR_FILENAME"] = grammar_file_epsilon or grammar_file_epsilon_0
 
         train_args = get_args(args=['train',
                                     param_path,

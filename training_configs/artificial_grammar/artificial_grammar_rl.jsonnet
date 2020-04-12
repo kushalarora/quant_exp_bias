@@ -41,7 +41,7 @@
         "end_token": "</S>",
         "oracle": {
           "type": "artificial_lang_oracle",
-          "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME_SMOOTHED"),
+          "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME"),
           "parallelize": true,
           "max_len": 50,
         },
@@ -49,7 +49,7 @@
           "type": "noisy_oracle",
           "oracle": {
             "type": "artificial_lang_oracle",
-            "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME"),
+            "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME_COST_FUNC"),
           },
         },
         // "rollout_cost_function": {

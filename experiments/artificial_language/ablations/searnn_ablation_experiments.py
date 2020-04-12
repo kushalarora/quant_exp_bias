@@ -63,7 +63,7 @@ def rollout_cost_function_configs(cost_func, mixing_coeff):
             "type": "noisy_oracle",
             "oracle": {
                 "type": "artificial_lang_oracle",
-                "grammar_file":  os.environ["FSA_GRAMMAR_FILENAME"],
+                "grammar_file":  os.environ["FSA_GRAMMAR_FILENAME_COST_FUNC"],
             }
         }
     overrides_dict = {
