@@ -35,7 +35,7 @@ parser.add_argument('--all', action='store_true', help='Run All configurations m
 parser.add_argument('--rollins', nargs='+', help='Rollins to use', type=str, default=['teacher_forcing', 'learned'])
 parser.add_argument('--rollouts', nargs='+', help='Rollouts to use', type=str, default=['reference', 'mixed', 'learned'])
 parser.add_argument('--rollout_cost_funcs', nargs='+', help='Type of Oracle to use', type=str, default=['noisy_oracle', 'bleu'])
-parser.add_argument('--mixing_coeff', nargs='+', help='Mixing coefficients for rollin and rollouts', type=float, default=[0.25, 0.5, 0,])
+parser.add_argument('--mixing_coeff', nargs='+', help='Mixing coefficients for rollin and rollouts', type=float, default=[0, 0.25, 0.5,])
 
 parser.add_argument('--debug', action='store_true', help='Run in debug mode.')
 parser.add_argument('--exp_msg', type=str, default=None, help='Debug(maybe) experiment message.')
