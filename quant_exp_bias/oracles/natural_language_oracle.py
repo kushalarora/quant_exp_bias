@@ -84,7 +84,7 @@ class NaturalLanguageOracle(Oracle):
                 loss_batch_seq *=attention_mask[:, 1:]
                 seq_sizes = attention_mask[:,1:].sum(dim=-1)
                 
-                loss_batch = loss_batch_seq.sum(dim=-1)/(seq_sizes + 1)
+                loss_batch = loss_batch_seq.sum(dim=-1)
 
                 seq_probs = torch.exp(-1 * loss_batch_seq)
                 # Dummy first token. This is ignored while computing exposure bias.
