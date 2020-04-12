@@ -251,7 +251,7 @@ class ArtificialLanguageOracle(Oracle):
     @staticmethod
     def _compute_one_sent_prob(sequence: List[str]):
         global parser
-        probs = 1e-6 * len(sequence)
+        probs = 1e-100 * len(sequence)
         cond_probs = []
         try:
             parses = list(parser.parse(sequence))
@@ -261,8 +261,7 @@ class ArtificialLanguageOracle(Oracle):
                 parse = parses[0]
 
                 # Marginalizing by seq_len + 1 because we assume it emits </S> symbol at the end with prob. 1.
-                probs = np.exp(np.log(parse.prob() + 1e-100) /
-                               (len(sequence) + 1))
+                probs = np.exp(np.log(parse.prob() + 1e-100))
 
                 st_probs = [st.prob() for st in parse.subtrees()]
                 for i in range(len(st_probs) - 1):
@@ -275,7 +274,7 @@ class ArtificialLanguageOracle(Oracle):
             pass
 
         if len(cond_probs) == 0:
-            cond_probs = [1e-6] * (len(sequence) + 1)
+            cond_probs = [1e-100] * (len(sequence) + 1)
         return probs, cond_probs
 
     def __del__(self):
