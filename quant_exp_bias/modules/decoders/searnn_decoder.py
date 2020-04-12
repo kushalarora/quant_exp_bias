@@ -212,14 +212,22 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
             # targets_plus_1 Shape: (batch_size, num_decoding_steps + 2)
             targets_plus_1 = torch.cat([targets, targets[:, -1].unsqueeze(1)], dim=-1)
 
+        rollout_steps = []
+        all_rollouts = []
         for step in self._rollout_iter_function(num_decoding_steps + 1):
-            
+            all_rollouts.append(step)
             # Always do rollout for first step. 
             # Do not rollout for (1 - self._rollout_ratio) steps.
-            if len(rollout_logits) > 0 and \
-                random.random() < (1 - self._rollout_ratio):
+            if random.random() < (1 - self._rollout_ratio):
                 continue
-            
+            rollout_steps.append(step)
+
+        if len(rollout_steps) < 2:
+            while len(rollout_steps) < 2:
+                rollout_idx = random.randint(0, len(all_rollouts)-1)
+                rollout_steps.append(all_rollouts[rollout_idx])
+
+        for step in rollout_steps:
             # There might be a case where max_decoding_steps < num_decoding_steps, in this 
             # case we want to rollout beyond max_decoding_steps
             rollout_steps = (max(self._max_decoding_steps, num_decoding_steps)  + 1 - step) if self._do_max_rollout_steps else \
