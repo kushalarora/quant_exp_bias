@@ -31,7 +31,7 @@
         "max_decoding_steps": 50,
         "decoder_net": {
           "type": "quant_exp_bias_lstm_cell",
-          "decoding_dim": 800, 
+          "decoding_dim": 300, 
           "target_embedding_dim": 300,
           "num_decoder_layers": 1,
         },
