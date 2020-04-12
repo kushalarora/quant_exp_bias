@@ -58,6 +58,7 @@ num_samples_and_runs = [(10000,4)]
 def rollout_cost_function_configs(cost_func, mixing_coeff):
     if cost_func == 'bleu':
         overrides_dict = { "type": "bleu",}
+        temperature = 10
     elif cost_func == 'noisy_oracle':
         overrides_dict=  {
             "type": "noisy_oracle",
@@ -66,11 +67,13 @@ def rollout_cost_function_configs(cost_func, mixing_coeff):
                 "grammar_file":  os.environ["FSA_GRAMMAR_FILENAME_COST_FUNC"],
             }
         }
+        temperature = 1
     overrides_dict = {
         "model": {
             "decoder": {
                 "rollout_cost_function": overrides_dict,
                 "rollin_rollout_mixing_coeff": mixing_coeff,
+                "temperature": temperature,
             }
         }
     }
