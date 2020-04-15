@@ -212,7 +212,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
             # targets_plus_1 Shape: (batch_size, num_decoding_steps + 2)
             targets_plus_1 = torch.cat([targets, targets[:, -1].unsqueeze(1)], dim=-1)
 
-        rollout_steps = []
+        rollout_contexts = []
         all_rollouts = []
         for step in self._rollout_iter_function(num_decoding_steps + 1):
             all_rollouts.append(step)
@@ -220,18 +220,19 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
             # Do not rollout for (1 - self._rollout_ratio) steps.
             if random.random() < (1 - self._rollout_ratio):
                 continue
-            rollout_steps.append(step)
+            rollout_contexts.append(step)
 
-        if len(rollout_steps) < 2:
-            while len(rollout_steps) < 2:
+        if len(rollout_contexts) < 2:
+            while len(rollout_contexts) < 2:
                 rollout_idx = random.randint(0, len(all_rollouts)-1)
-                rollout_steps.append(all_rollouts[rollout_idx])
+                rollout_contexts.append(all_rollouts[rollout_idx])
 
-        for step in rollout_steps:
+        for step in rollout_contexts:
             # There might be a case where max_decoding_steps < num_decoding_steps, in this 
             # case we want to rollout beyond max_decoding_steps
-            rollout_steps = (max(self._max_decoding_steps, num_decoding_steps)  + 1 - step) if self._do_max_rollout_steps else \
-                                (num_decoding_steps + 1 - step)
+            rollout_steps = (max(self._max_decoding_steps, num_decoding_steps)  + 1 - step) \
+                                if self._do_max_rollout_steps else \
+                                    (num_decoding_steps + 1 - step)
 
             # Do not select masked tokens and always select target token.
             # This will set masked tokens values to be really low and
@@ -272,12 +273,18 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
 
             # softmax of masked step logits + some noise to break ties while topk.
             masked_step_probabilities = F.softmax(masked_step_logits, dim=-1)  + \
-                                            1e-10 * masked_step_logits.new_zeros(masked_step_logits.shape).uniform_(0,1)
+                                            1e-10 * masked_step_logits \
+                                                        .new_zeros(masked_step_logits.shape) \
+                                                        .uniform_(0,1)
+
+            # _, searnn_next_step_tokens = torch.topk(masked_step_logits,
+            #                                         num_tokens_to_rollout,
+            #                                         dim=-1)
 
             # searnn_next_step_tokens: (batch_size, num_tokens_to_rollout)
-            _, searnn_next_step_tokens = torch.topk(masked_step_logits,
-                                                    num_tokens_to_rollout,
-                                                    dim=-1)
+            searnn_next_step_tokens = torch.multinomial(masked_step_probabilities, 
+                                                        num_tokens_to_rollout)
+
             next_tokens_list.append(searnn_next_step_tokens)
 
 
@@ -393,30 +400,48 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                                         target_tokens: Dict[str, torch.LongTensor]):
         # rollin_logits: (batch_size, num_rollin_steps, num_classes)
         logits = rollin_output_dict['logits'].squeeze(1)
+
+        # For whole batch we rollout only these contexts.  
+        # By default this will be for all, but in certain cases of
+        # filtering, we might only consider a select few.
+        # rollout_contexts: (num_rollout_contexts,)
+        rollout_contexts = rollout_output_dict['rollout_steps']
+
+        # next_tokens: (batch_size, num_rollout_contexts)
         next_tokens = rollout_output_dict['next_tokens']
 
         # Only consider those logits which you did rollout for.
-        # By default this will be for all, but in certain cases of
-        # filtering, we might only consider a select few.
-        rollout_steps = rollout_output_dict['rollout_steps']
-        rolled_out_logits = logits[:, rollout_steps, :]
+        # rolled_out_logits: (batch_size, num_rollout_contexts, num_classes)
+        rolled_out_logits = logits[:, rollout_contexts, :]
+
+        target_mask = util.get_text_field_mask(target_tokens)
 
         # Similarly, only update logits (or not mask logits) for steps
         # we rollout out for,
-        target_mask = util.get_text_field_mask(target_tokens)
-        target_mask = target_mask[:, 1:][:, rollout_steps].float()
+        target_mask = target_mask[:, 1:][:, rollout_contexts].float()
+
         non_batch_dims = tuple(range(1, len(target_mask.shape)))
 
+        # rolled_out_logits: (batch_size, num_rollout_contexts, num_next_tokens)
         scattered_logits = torch.gather(input=rolled_out_logits, dim=-1, index=next_tokens)
+
         predictions = rollin_output_dict['predictions'].squeeze(1)
-        loss_batch = rollout_output_dict['loss_batch']
         output_dict = {'predictions': predictions.data.cpu()}
+
+        # loss_batch: (batch_size, num_rollout_contexts, num_next_tokens)
+        loss_batch = rollout_output_dict['loss_batch']
         
         if self._combiner_mode == 'kl':
+            # x: (batch_size, num_rollout_contexts, num_next_tokens)
             x = F.log_softmax(scattered_logits, dim=-1)
-            y = F.softmax(-1 * self._temperature * loss_batch, dim=-1)
 
+            # y: (batch_size, num_rollout_contexts, num_next_tokens)
+            y = F.softmax(-1 * self._temperature * loss_batch, dim=-1)
+            
+            # kl_losses: (batch_size, num_rollout_contexts)
             kl_losses = self._combiner_loss(x, y).sum(dim=-1)
+
+            # kl_loss_batch: (batch_size,)
             kl_loss_batch = (kl_losses * target_mask).sum(dim=non_batch_dims)
 
             # Generate denominator for normalizing loss across batch.
