@@ -51,7 +51,7 @@ model_size_configs  = {
     'small': (50, 50, 1),
     'medium': (100, 100, 1),
     'large': (300, 300, 1),
-    'xlarge': (300, 1200, 1)
+    'xlarge': (1200, 300, 1)
     }
 num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
 # num_samples_and_runs = [(1000, 1), (10000,1), (100000,1)]
