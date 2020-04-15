@@ -26,13 +26,13 @@ class NaturalLanguageOracle(Oracle):
                 ):
         super(Oracle, self).__init__()
         # self._parallelize = parallelize
-
+        
         self._num_threads = num_threads
         # self._pool = Pool(self._num_threads)
 
         self.device = "cpu"
         if cuda_device > 0:
-            self.device = "cuda:{cuda_device}"
+            self.device = f"cuda:{cuda_device}"
         elif cuda_device == -2:
             self.device = torch.cuda.current_device()
         
