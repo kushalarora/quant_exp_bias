@@ -27,12 +27,13 @@
       "use_in_seq2seq_mode": false,
       "decoder": {
         "type": "quant_exp_searnn_decoder",
+        "generation_batch_size": 64,
         "max_decoding_steps": 50,
         "rollin_mode":  std.extVar("rollin_mode"),
         "rollout_mode": std.extVar("rollout_mode"),
         "decoder_net": {
           "type": "quant_exp_bias_lstm_cell",
-          "decoding_dim": 800, 
+          "decoding_dim": 300, 
           "target_embedding_dim": 300,
 
           "num_decoder_layers": 1,
@@ -53,6 +54,7 @@
           "type": "gpt2_oracle",
           "model_name": "gpt2",
           "batch_size": 10,
+          "cuda_device": -1,
         },
         "detokenizer": {
           "type": "gpt2_detokenizer",
@@ -62,8 +64,8 @@
           "type": "bleu",
         },
         "temperature": 1,
-        "num_neighbors_to_add": 4,
-        "num_tokens_to_rollout": 8,
+        "num_neighbors_to_add": 2,
+        "num_tokens_to_rollout": 10,
         "rollout_ratio": 0.10,
 
       }
@@ -76,20 +78,20 @@
       "max_instances_in_memory": 500000
   },
   "trainer": {
-    "num_epochs": 10,
+    "num_epochs": 20,
     "validation_metric": "-perplexity",
     "cuda_device" : 0,
     "optimizer": {
       "type": "adam",
-      "lr": 0.01,
+      "lr": 0.001,
     },
     "learning_rate_scheduler": {
         "type": "reduce_on_plateau",
         "factor": 0.5,
         "mode": "min",
-        "patience": 0
+        "patience": 2
     },
-    "patience": 5,
+    "patience": 10,
     "should_log_learning_rate": true,
     "log_batch_size_period": 500,
     "num_serialized_models_to_keep": -1
