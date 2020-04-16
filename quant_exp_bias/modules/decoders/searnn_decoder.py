@@ -371,17 +371,9 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
             loss_batch =  output['loss_batch'] \
                                 .reshape(batch_size, 1, num_tokens_to_rollout)
             rollout_loss_batch.append(loss_batch)
-
-            rollin_logits_prefix = rollin_logits[:, :step, :] \
-                                        .unsqueeze(1) \
-                                        .expand(batch_size, num_tokens_to_rollout, step, -1) \
-                                        .reshape(batch_size * num_tokens_to_rollout, 1, step, -1)
-
-            if self._detach_rollin_logits:
-                rollin_logits_prefix = rollin_logits_prefix.detach()
-
-            rollout_logits.append(torch.cat([rollin_logits_prefix,
-                                             output['logits']], dim=2))
+            
+            # output['logits'] shape: (batch_size * num_tokens_to_rollout, 1, num_rollin_steps - step, num_classes)
+            rollout_logits.append(output['logits'])
 
         rollout_output_dict['loss_batch'] = torch.cat(rollout_loss_batch, dim=1)
         rollout_output_dict['predictions'] = torch.cat(rollout_predictions, dim=1)
@@ -389,7 +381,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
         rollout_output_dict['rollout_steps'] = torch.tensor(rollout_steps_list,
                                                             device=self.current_device)
 
-        rollout_output_dict['logits'] = torch.stack(rollout_logits, dim=1)
+        rollout_output_dict['logits'] = rollout_logits
         return rollin_output_dict, rollout_output_dict
 
     @overrides

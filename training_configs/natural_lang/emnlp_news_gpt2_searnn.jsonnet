@@ -47,7 +47,7 @@
         "beam_size": 1,
         "use_bleu" : false,
         "sample_output": true,
-        "dropout": 0.2,
+        "dropout": 0.4,
         "start_token": "@@@@",
         "end_token": "####",
         "oracle": {
@@ -64,16 +64,16 @@
           "type": "bleu",
         },
         "temperature": 1,
-        "num_neighbors_to_add": 2,
-        "num_tokens_to_rollout": 6,
-        "rollout_ratio": 0.10,
+        "num_neighbors_to_add": 8,
+        "num_tokens_to_rollout": 30,
+        "rollout_ratio": 0.25,
 
       }
   },
   "iterator": {
       "type": "bucket",
       "sorting_keys": [["target_tokens", "num_tokens"]],
-      "batch_size": 4,
+      "batch_size": 8,
       // This is needed stupidly for bucket iterator to work.
       "max_instances_in_memory": 500000
   },
@@ -89,7 +89,7 @@
         "type": "reduce_on_plateau",
         "factor": 0.5,
         "mode": "min",
-        "patience": 2
+        "patience": 1
     },
     "patience": 10,
     "should_log_learning_rate": true,
