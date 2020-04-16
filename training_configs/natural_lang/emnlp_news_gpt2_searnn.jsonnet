@@ -65,7 +65,7 @@
         },
         "temperature": 1,
         "num_neighbors_to_add": 2,
-        "num_tokens_to_rollout": 10,
+        "num_tokens_to_rollout": 6,
         "rollout_ratio": 0.10,
 
       }
