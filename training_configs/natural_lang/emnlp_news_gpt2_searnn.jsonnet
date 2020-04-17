@@ -65,15 +65,15 @@
         },
         "temperature": 1,
         "num_neighbors_to_add": 8,
-        "num_tokens_to_rollout": 30,
-        "rollout_ratio": 0.25,
+        "num_tokens_to_rollout": 20,
+        "rollout_ratio": 0.20,
 
       }
   },
   "iterator": {
       "type": "bucket",
       "sorting_keys": [["target_tokens", "num_tokens"]],
-      "batch_size": 8,
+      "batch_size": 4,
       // This is needed stupidly for bucket iterator to work.
       "max_instances_in_memory": 500000
   },

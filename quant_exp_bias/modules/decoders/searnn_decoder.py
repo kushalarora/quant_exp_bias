@@ -372,7 +372,7 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
                                 .reshape(batch_size, 1, num_tokens_to_rollout)
             rollout_loss_batch.append(loss_batch)
             
-            # output['logits'] shape: (batch_size * num_tokens_to_rollout, 1, num_rollin_steps - step, num_classes)
+            # output['logits'] shape: (batch_size * num_tokens_to_rollout, 1, rollout_steps, num_classes)
             rollout_logits.append(output['logits'])
 
         rollout_output_dict['loss_batch'] = torch.cat(rollout_loss_batch, dim=1)
