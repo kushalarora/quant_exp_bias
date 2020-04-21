@@ -30,6 +30,10 @@ parser.add_argument('--num_runs', type=int, default=1,
 parser.add_argument('--all', action='store_true', help='Run All configurations mentioned below..')
 parser.add_argument('--debug', action='store_true', help='Run in debug mode.')
 parser.add_argument('--exp_msg', type=str, default=None, help='Debug(maybe) experiment message.')
+parser.add_argument('--num_batches', type=int, default=20,
+                    help='Number of batches for the experiment.')
+parser.add_argument('--batch_size', type=int, default=4,
+                    help='Batch size for this experiment.')
 args = parser.parse_args()
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
@@ -39,11 +43,29 @@ main_args, serialization_dir, param_path, experiment_id, experiment = initialize
                                                                                              debug=args.debug,
                                                                                              experiment_text=args.exp_msg,
                                                                                             )
+def calculate_k(num_samples, batch_size, num_batches):
+    high = 20000
+    low = 1
+    num_iteration_per_batch = num_samples/batch_size
+    half_iterations = num_iteration_per_batch * ((num_batches + 1)//2)
+    k_func = lambda k: k/(k + math.exp(half_iterations/k))
+    while low <= high:
+        mid = (high + low)//2
+        k_mid = k_func(mid)
+        if k_mid > 0.505:
+            high = mid
+        elif k_mid < 0.495:
+            low = mid
+        else:
+            return mid
+    return -1
+
+k = calculate_k(args.num_samples, args.batch_size, args.num_batches)
 
 scheduled_sampling_ratios  = [
         ('uniform', 0.0, -1), ('uniform', 0.1, -1), ('uniform', 0.25, -1), ('uniform', 0.5, -1), ('uniform', 1.0, -1),  # Fixed SS ratio
-        ('quantized', 1.0, 50), ('quantized', 1.0, 100), ('quantized', 1.0, 250), ('quantized', 1.0, 500), ('quantized', 1.0, 1000),  # Linearly increase ss ratio.
-        ('linear', 1.0, 50), ('linear', 1.0, 100), ('linear', 1.0, 250), ('linear', 1.0, 500), ('linear', 1.0, 1000),  # Linearly increase ss ratio.
+        ('quantized', 1.0, k),  # Quantizedly increase ss ratio.
+        ('linear', 1.0, k),  # Linearly increase ss ratio.
 ]
 
 num_samples_and_runs = [(100000,4)]
