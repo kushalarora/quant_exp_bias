@@ -251,7 +251,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             input_choices = targets[:, timestep]
         elif rollin_mode == 'mixed':
             if self.training and torch.rand(1).item() < self._scheduled_sampling_ratio:
-                # Use gold tokens at test time and at a rate of 1 - _scheduled_sampling_ratio
+                # Use gold tokens at test time and at a rate of 1 - self._scheduled_sampling_ratio
                 # during training.
                 # shape: (batch_size,)
                 input_choices = last_predictions
@@ -356,7 +356,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                   last_predictions: torch.Tensor,
                   state: Dict[str, torch.Tensor],
                   target_tokens: Dict[str, torch.LongTensor] = None,
-                  rollin_mode: str = 'mixed',
+                  rollin_mode: str = 'learned',
                   rollout_mode: str = 'learned',
                   rollout_mixing_func: RolloutMixingProbFuncType = None,
                  ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
@@ -639,7 +639,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         elif self._scheduled_sampling_type == 'quantized':
             self._scheduled_sampling_ratio =  1 -  k/(k + math.exp(self.training_iteration//k))
         elif self._scheduled_sampling_type == 'linear':
-            self.scheduled_sampling_ratio =  1 -  k/(k + math.exp(self.training_iteration/k))
+            self._scheduled_sampling_ratio =  1 -  k/(k + math.exp(self.training_iteration/k))
         else:
             raise ConfigurationError(f"{self._scheduled_sampling_type} is not a valid scheduled sampling type.")
 
