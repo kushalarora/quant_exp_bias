@@ -36,8 +36,8 @@ class ExposureBias(Metric):
                  oracle: Oracle,
                  type: str = 'tv',
                  at_prefix_level: bool = True,
-                 clipping_ratio_max=2.0,
-                 clipping_ratio_min=0.001) -> None:
+                 clipping_ratio_max=math.inf,
+                 clipping_ratio_min=0.0) -> None:
         self._total_value = 0.0
         self._df_p_q = 0.0
         self._df_q_p = 0.0
