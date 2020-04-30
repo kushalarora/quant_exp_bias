@@ -52,6 +52,7 @@ def generate_grammar_file(serialization_dir: str,
 
 
 def initialize_experiments(experiment_name: str,
+                           output_dir: str = None,
                            param_path: str = None,
                            debug: bool = False,
                            offline: bool = False,
@@ -68,7 +69,7 @@ def initialize_experiments(experiment_name: str,
     main_args = get_args(args=[])
 
     experiment_id = datetime.now().strftime("%m_%d_%Y_%H_%M_%S")
-    serialization_dir = os.path.join(main_args.output_dir, experiment_name, experiment_id)
+    serialization_dir = os.path.join(output_dir or main_args.output_dir, experiment_name, experiment_id)
     param_path = param_path or main_args.config
 
     os.makedirs(serialization_dir, exist_ok=True)
@@ -330,7 +331,8 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
     parser.add_argument('--debug', action='store_true', help='Run in debug mode.')
     parser.add_argument('--offline', action='store_true', help='Run in offline mode.')
     parser.add_argument('--exp_msg', type=str, default=None, help='Debug(maybe) experiment message.')
-
+    parser.add_argument('--output_dir', '-o', type=str, default='/scratch/karora/quant_exp_bias/', help='Output directory.')
+    
     if experiment_type == 'artificial_language':
         parser.add_argument('--vocab_distributions', nargs='+', type=str, default=['zipf', 'uniform'], 
                                 help='Distributions to use.')
@@ -405,18 +407,23 @@ def get_grammar_iterator(experiment: Union[Experiment, OfflineExperiment],
                             vocab_distributions: List[str], 
                             num_runs: int):
     grammars_and_vocabularies = [x for x in itertools.product(grammar_templates, vocab_distributions)]
-    for i, grammar_and_vocab_index in enumerate(np.random.choice(len(grammars_and_vocabularies), num_runs)):
-        grammar_template, vocab_dist = grammars_and_vocabularies[grammar_and_vocab_index]
-        grammar_template_file, shall_generate_grammar_file = \
-                                        get_grammar_template_path(grammar_template)
-        
-        params = {
-                'grammar_template': grammar_template,
-                'vocab_distribution': vocab_dist,
-                'grammar_template_file': grammar_template_file,
-                'shall_generate_grammar_file': shall_generate_grammar_file,
-                 }
-        yield (i, grammar_template_file, vocab_dist, shall_generate_grammar_file, params)
+    num_grammars = len(grammars_and_vocabularies)
+    for num_run in range(num_runs):
+        for i, (grammar_template, vocab_dist) in enumerate(grammars_and_vocabularies):
+            grammar_template_file, shall_generate_grammar_file = \
+                                            get_grammar_template_path(grammar_template)
+            
+            params = {
+                    'grammar_template': grammar_template,
+                    'vocab_distribution': vocab_dist,
+                    'grammar_template_file': grammar_template_file,
+                    'shall_generate_grammar_file': shall_generate_grammar_file,
+                    }
+            yield (num_run * num_grammars + i, 
+                    grammar_template_file, 
+                    vocab_dist, 
+                    shall_generate_grammar_file, 
+                    params)
 
 def get_result_iterator(run_metrics: Dict[str, Any]):
     for exp_bias_idx, (exp_bias, df_p_q, df_q_p) in enumerate(zip(run_metrics['exp_biases'],
