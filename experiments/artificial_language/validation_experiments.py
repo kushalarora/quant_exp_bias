@@ -1,57 +1,36 @@
 # coding: utf-8
 
-import os
-import sys
-
-from matplotlib import pyplot as plt
-
-from random import randint
-from time import sleep
-
-from typing import Dict, List
-
-from allennlp.common import Params
-from allennlp.common.util import import_submodules
-
-import_submodules("quant_exp_bias")
-from quant_exp_bias.utils import (get_args, quantify_exposure_bias_runner,
-                                  sample_oracle_runner, train_runner)
-from experiments.util import initialize_experiments, generate_grammar_file, one_exp_run
-
 import glob
 import json
-import numpy as np
+import os
+import re
+
+from experiments.util import initialize_experiments, get_experiment_args, \
+                             one_exp_run, get_grammar_iterator, \
+                             get_mean_std_results, get_result_iterator
 
 
-import argparse
-parser = argparse.ArgumentParser(
-    description='PyTorch Wikitext-2 RNN/LSTM Language Model')
-parser.add_argument('--num_samples', type=int, default=10000,
-                    help='Number of dataset samples to run this iteration for.')
-parser.add_argument('--num_runs', type=int, default=1,
-                    help='Number of runs for the given dataset size.')
-parser.add_argument('--all', action='store_true',
-                    help='Run All configurations mentioned below..')
-parser.add_argument('--debug', action='store_true', help='Run in debug mode.')
-parser.add_argument('--exp_msg', type=str, default=None, help='Debug(maybe) experiment message.')
-args = parser.parse_args()
+args = get_experiment_args("artificial_language", "validation_experiments")
 
-# ## Basic Setup of grammar and global variables like serialization directory and training config file
-
-main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/validation_experiments', 
-                                                                                             debug=args.debug,
-                                                                                             experiment_text=args.exp_msg,
-                                                                                             )
+main_args, serialization_dir, param_path, experiment_id, \
+    experiment = initialize_experiments('artificial_lang/validation_experiments', 
+                                        output_dir=args.output_dir,
+                                        debug=args.debug,
+                                        offline=args.offline,
+                                        experiment_text=args.exp_msg,
+                                       )
 
 num_samples_and_runs = [(1000, 8), (10000, 4), (100000, 2)]
-# num_samples_and_runs = [(1000, 1), (10000,1), (100000,1)]
 
-experiment.log_parameters({'serialization_dir': serialization_dir,
-                           'main_args': main_args,
-                           'param_path': param_path,
-                           'experiment_id': experiment_id})
+def validation_exp_bias_epochs_func(train_model_serialization_dir):
+    epoch_files = glob.glob(os.path.join(train_model_serialization_dir + '/model_state_epoch_*.th'))
+    epochs =[int(re.search('epoch_([0-9]+).th', fname).group(1)) for fname in epoch_files]
 
-
+    for epoch in epochs:
+        qeb_suffix = f'epoch_{epoch}'
+        metrics_filename = f'metrics_epoch_{epoch}.json'
+        yield (epoch, qeb_suffix, metrics_filename)
+        
 def validation_experiments(main_args,
                            serialization_dir,
                            param_path,
@@ -61,51 +40,36 @@ def validation_experiments(main_args,
     step = 0
     overrides = json.dumps({'trainer': {'num_epochs': 50, 'patience': None}})
 
-    def validation_exp_bias_epochs_func(train_model_serialization_dir):
-        for epoch in range(len(glob.glob(os.path.join(train_model_serialization_dir + '/model_state_epoch_*.th')))):
-            qeb_suffix = f'epoch_{epoch}'
-            metrics_filename = f'metrics_epoch_{epoch}.json'
-            yield (epoch, qeb_suffix, metrics_filename)
-
-    for run in range(num_runs):
+    for grammars_and_vocabularies in get_grammar_iterator(experiment,
+                                                          args.grammar_templates, 
+                                                          args.vocab_distributions,
+                                                          num_runs):
+        num_run, grammar_template_file, vocab_dist, \
+            shall_generate_grammar_file, grammar_params = grammars_and_vocabularies
         run_metrics_list = one_exp_run(serialization_dir=serialization_dir,
-                                       num_samples=num_samples,
-                                       run=run,
-                                       param_path=param_path,
-                                       overides_func=lambda: overrides,
-                                       exp_bias_epochs_func=validation_exp_bias_epochs_func,
-                                       shall_generate_grammar_file=True,
-                                       num_trials=5,
-                                       num_length_samples=5,
-                                       num_samples_per_length=100,
+                                        num_samples=num_samples,
+                                        run=num_run,
+                                        param_path=param_path,
+                                        overides_func=lambda: overrides,
+                                        exp_bias_epochs_func=validation_exp_bias_epochs_func,
+                                        num_trials=5,
+                                        num_length_samples=5,
+                                        num_samples_per_length=100,
+                                        grammar_template=grammar_template_file,
+                                        shall_generate_grammar_file=shall_generate_grammar_file,
+                                        vocabulary_distribution=vocab_dist,
+                                      )
         for run_metrics in run_metrics_list:
             epoch=run_metrics['epoch']
 
-            for exp_bias_idx, (exp_bias, df_p_q, df_q_p) in enumerate(zip(run_metrics['exp_biases'],
-                                                                          run_metrics['df_p_qs'],
-                                                                          run_metrics['df_q_ps'])):
-                result={
-                    'exp_bias': exp_bias,
-                    'Df_p_q': df_p_q,
-                    'Df_q_p': df_q_p,
-                    'exp_bias_idx': exp_bias_idx,
-                    'val_ppl': run_metrics['validation_perplexity'],
-                    'epoch': epoch,
-                    'num_run': run,
-                    'num_samples': num_samples
-                }
+            for result in get_result_iterator(run_metrics):
                 experiment.log_metrics(result, step=step)
                 step += 1
-                # This is added to avoid comet.ml's throttle
-                sleep(randint(1, 10)/10.0)
 
-            experiment.log_metric(
-                'exp_bias_mean', run_metrics['exp_bias_mean'], step=step)
-            experiment.log_metric(
-                'df_p_q_mean', run_metrics['df_p_q_mean'], step=step)
-            experiment.log_metric(
-                'df_q_p_mean', run_metrics['df_q_p_mean'], step=step)
-
+            mean_results = get_mean_std_results(num_run, num_samples, run_metrics)
+            mean_results.update(grammar_params)
+            mean_results['epoch'] = epoch
+            experiment.log_metrics(mean_results, step=step)
 
 if args.all:
     for num_samples, num_runs in num_samples_and_runs:

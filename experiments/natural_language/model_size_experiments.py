@@ -38,7 +38,7 @@ def model_size_experiments(model_sizes,
     # Setup variables needed later.
     orig_serialization_dir = serialization_dir
     for model_size in model_sizes:
-        model_overrides_func = get_model_overrides_func(*msz2config[model_size])
+        model_overrides_func = get_model_overrides_func(*msz2configs[model_size])
         serialization_dir = os.path.join(orig_serialization_dir, model_size)
 
         for num_run in range(num_runs):

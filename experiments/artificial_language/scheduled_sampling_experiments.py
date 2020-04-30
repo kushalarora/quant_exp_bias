@@ -1,64 +1,14 @@
-
 # coding: utf-8
-
 import os
-import sys
 
-from matplotlib import pyplot as plt
-from datetime import datetime
+from experiments.util import initialize_experiments, get_experiment_args, \
+                                calculate_k, one_exp_run, get_grammar_iterator, \
+                                get_mean_std_results, get_result_iterator, \
+                                get_scheduled_sampling_overrides_func
 
-from datetime import datetime
+args = get_experiment_args("artificial_language", "scheduled_sampling_experiments")
 
-from random import randint
-from time import sleep
-
-from typing import Dict, List
-
-from allennlp.common import Params
-from allennlp.common.util import import_submodules
-
-import_submodules("quant_exp_bias")
-from quant_exp_bias.utils import (get_args, quantify_exposure_bias_runner, 
-                  sample_oracle_runner, train_runner)
-from experiments.util import initialize_experiments, generate_grammar_file, one_exp_run
-
-import json
-
-
-import argparse
-parser = argparse.ArgumentParser(description='PyTorch Wikitext-2 RNN/LSTM Language Model')
-parser.add_argument('--num_samples', type=int, default=10000,
-                    help='Number of dataset samples to run this iteration for.')
-parser.add_argument('--num_runs', type=int, default=1,
-                    help='Number of runs for the given dataset size.')
-parser.add_argument('--all', action='store_true', help='Run All configurations mentioned below..')
-parser.add_argument('--debug', action='store_true', help='Run in debug mode.')
-parser.add_argument('--exp_msg', type=str, default=None, help='Debug(maybe) experiment message.')
-parser.add_argument('--num_batches', type=int, default=50,
-                    help='Number of batches for the experiment.')
-parser.add_argument('--batch_size', type=int, default=128,
-                    help='Batch size for this experiment.')
-args = parser.parse_args()
-
-# ## Basic Setup of grammar and global variables like serialization directory and training config file
-def calculate_k(num_samples, batch_size, num_batches):
-    high = 20000
-    low = 1
-    num_iteration_per_batch = num_samples/batch_size
-    half_iterations = num_iteration_per_batch * ((num_batches + 1)//2)
-    k_func = lambda k: k/(k + math.exp(half_iterations/k))
-    while low <= high:
-        mid = (high + low)//2
-        k_mid = k_func(mid)
-        if k_mid > 0.505:
-            high = mid
-        elif k_mid < 0.495:
-            low = mid
-        else:
-            return mid
-    return -1
-
-k = calculate_k(args.num_samples, args.batch_size, args.num_batches)
+k = calculate_k(args.num_samples, args.batch_size, args.num_epochs)
 
 scheduled_sampling_ratios  = [
         ('uniform', 0.0, -1), ('uniform', 0.1, -1), ('uniform', 0.25, -1), ('uniform', 0.5, -1), ('uniform', 1.0, -1),  # Fixed SS ratio
@@ -66,18 +16,15 @@ scheduled_sampling_ratios  = [
         ('linear', 1.0, k),  # Linearly increase ss ratio.
 ]
 
-main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/scheduled_sampling_experiments',
-                                                                                             debug=args.debug,
-                                                                                             experiment_text=args.exp_msg,
-                                                                                             )
+main_args, serialization_dir, param_path, experiment_id, \
+    experiment = initialize_experiments('artificial_lang/scheduled_sampling_experiments',
+                                        output_dir=args.output_dir,
+                                        debug=args.debug,
+                                        offline=args.offline,
+                                        experiment_text=args.exp_msg,
+                                       )
 
-# num_samples_and_runs = [(1000, 8), (10000,4), (100000,2)]
 num_samples_and_runs = [(1000, 1), (10000,1), (100000,1)]
-
-experiment.log_parameters({'serialization_dir': serialization_dir,
-                          'main_args': main_args,
-                          'param_path': param_path,
-                          'experiment_id': experiment_id})
 
 def scheduled_sampling_experiments(scheduled_sampling_ratios,
                                     main_args,
@@ -89,52 +36,43 @@ def scheduled_sampling_experiments(scheduled_sampling_ratios,
     step = 0
     orig_serialization_dir = serialization_dir
     for ss_type, ss_ratio, ss_k in scheduled_sampling_ratios:
-        ss_k = ss_k * (num_samples/1000.0)
         serialization_dir = os.path.join(orig_serialization_dir, f'{ss_type}_{ss_ratio}_{ss_k}')
-        overrides = json.dumps({'model': {
-                                    'decoder': {
-                                        'scheduled_sampling_ratio': ss_ratio,
-                                        'scheduled_sampling_k': ss_k,
-                                        'scheduled_sampling_type': ss_type},
-                                    }
-                                })
-        for run in range(num_runs):
+        overrides_func = get_scheduled_sampling_overrides_func(ss_type, ss_ratio, ss_k)
+        
+        for grammars_and_vocabularies in get_grammar_iterator(experiment,
+                                                        args.grammar_templates, 
+                                                        args.vocab_distributions,
+                                                        num_runs):
+            num_run, grammar_template_file, vocab_dist, \
+                shall_generate_grammar_file, grammar_params = grammars_and_vocabularies
             run_metrics = one_exp_run(serialization_dir=serialization_dir,
                                         num_samples=num_samples,
-                                        run=run,
+                                        run=num_run,
                                         param_path=param_path,
-                                        overides_func=lambda:overrides,
-                                        shall_generate_grammar_file=True,
+                                        grammar_template=grammar_template_file,
+                                        shall_generate_grammar_file=shall_generate_grammar_file,
+                                        vocabulary_distribution=vocab_dist,
+                                        overides_func=overrides_func,
                                      )
 
             assert len(run_metrics) == 1, \
                 'For this experiment, there should only be one final metric object for a run.'
             run_metrics = run_metrics[0]
-            for exp_bias_idx, (exp_bias, df_p_q, df_q_p) in enumerate(zip(run_metrics['exp_biases'],
-                                                                        run_metrics['df_p_qs'],
-                                                                        run_metrics['df_q_ps'])):
-                result= {
-                        'exp_bias': exp_bias,
-                        'Df_p_q': df_p_q,
-                        'Df_q_p': df_q_p,
-                        'exp_bias_idx': exp_bias_idx,
-                        'scheduled_sampling_ratio': ss_ratio,
-                        'scheduled_sampling_k': ss_k,
-                        'scheduled_sampling_type': ss_type,
-                        'num_run': run,
-                        'num_samples': num_samples,
-                        'val_ppl': run_metrics['best_validation_perplexity'],
-                        'best_val_epoch': run_metrics['best_epoch'],
-                        'final_ss_ratio': run_metrics['validation_ss_ratio'],
-                        'best_val_ss_ratio': run_metrics['best_validation_ss_ratio']
-                    }
+
+            for result in get_result_iterator(run_metrics):
                 experiment.log_metrics(result, step=step)
                 step += 1
-                sleep(randint(1,10)/10.0)
 
-            experiment.log_metric('exp_bias_mean', run_metrics['exp_bias_mean'], step=step)
-            experiment.log_metric('df_p_q_mean', run_metrics['df_p_q_mean'], step=step)
-            experiment.log_metric('df_q_p_mean', run_metrics['df_q_p_mean'], step=step)
+            mean_results = get_mean_std_results(num_run, num_samples, run_metrics)
+            mean_results.update(grammar_params)
+            mean_results.update({                        
+                    'scheduled_sampling_ratio': ss_ratio,
+                    'scheduled_sampling_k': ss_k,
+                    'scheduled_sampling_type': ss_type,
+                    'final_ss_ratio': run_metrics['validation_ss_ratio'],
+                    'best_val_ss_ratio': run_metrics['best_validation_ss_ratio'],
+            })
+            experiment.log_metrics(mean_results, step=step)
 
 if args.all:
     for num_samples, num_runs in num_samples_and_runs:
