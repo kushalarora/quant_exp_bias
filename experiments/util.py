@@ -1,14 +1,22 @@
+import itertools
 import json
+import math
+import numpy as np
 import os
 import sys
 
-from comet_ml import Experiment, OfflineExperiment
 from datetime import datetime
+from random import randint
+from time import sleep
+
+from allennlp.common.util import import_submodules
+import_submodules("quant_exp_bias")
+
+from comet_ml import Experiment, OfflineExperiment
 from typing import Dict, List, Callable, Tuple, Union, Any
 
 from allennlp.common import Params
-from allennlp.common.util import import_submodules
-import_submodules("quant_exp_bias")
+
 from quant_exp_bias.utils import (get_args, quantify_exposure_bias_runner,
                                   sample_oracle_runner, train_runner)
 
@@ -70,11 +78,13 @@ def initialize_experiments(experiment_name: str,
     
     if debug:
         experiment_name += '_debug'
+    
+    workspace_name = 'quantifying_exposure_bias'
     try:
         if offline:
             raise ValueError
         experiment = Experiment(api_key='2UIhYs7jRdE2DbJDAB5OysNqM',
-                                workspace='quantifying_exposure_bias',
+                                workspace=workspace_name,
                                 project_name=experiment_name,
                                 auto_metric_logging=False,
                                 auto_param_logging=False,
@@ -90,6 +100,11 @@ def initialize_experiments(experiment_name: str,
     
     if experiment_text:
         experiment.log_text(experiment_text)
+
+    experiment.log_parameters({'serialization_dir': serialization_dir,
+                                'main_args': main_args,
+                                'param_path': param_path,
+                                'experiment_id': experiment_id})
     return main_args, serialization_dir, param_path, experiment_id, experiment
 
 
@@ -210,15 +225,16 @@ def one_exp_run(serialization_dir: str = None,
             df_p_qs, df_p_q_mean, df_p_q_std, \
             df_q_ps, df_q_p_mean, df_q_p_std, \
             h_m_m_mean, h_m_m_std, h_m_o_mean, h_m_o_std, \
-            h_o_m_mean, h_o_m_std, h_o_o_mean, h_o_o_std  = quantify_exposure_bias_runner(qeb_args,
-                                                                             archive_file,
-                                                                             oracle_test_filename,
-                                                                             qeb_output_dir,
-                                                                             cuda_device=cuda_device,
-                                                                             weights_file=weights_file,
-                                                                             num_trials=num_trials,
-                                                                             num_length_samples=num_length_samples,
-                                                                             num_samples_per_length=num_samples_per_length)
+            h_o_m_mean, h_o_m_std, h_o_o_mean, h_o_o_std  = \
+                quantify_exposure_bias_runner(qeb_args,
+                                                archive_file,
+                                                oracle_test_filename,
+                                                qeb_output_dir,
+                                                cuda_device=cuda_device,
+                                                weights_file=weights_file,
+                                                num_trials=num_trials,
+                                                num_length_samples=num_length_samples,
+                                                num_samples_per_length=num_samples_per_length)
 
         metrics['exp_biases'] = exp_biases
         metrics['exp_bias_mean'] = exp_bias_mean
@@ -265,14 +281,15 @@ def one_exp_run(serialization_dir: str = None,
             df_p_qs, df_p_q_mean, df_p_q_std, \
             df_q_ps, df_q_p_mean, df_q_p_std, \
             h_m_m_mean, h_m_m_std, h_m_o_mean, h_m_o_std, \
-            h_o_m_mean, h_o_m_std, h_o_o_mean, h_o_o_std  = quantify_exposure_bias_runner(qeb_args,
-                                                                             archive_file,
-                                                                             oracle_test_filename,
-                                                                             qeb_output_dir,
-                                                                             cuda_device=cuda_device,
-                                                                             num_trials=num_trials,
-                                                                             num_length_samples=num_length_samples,
-                                                                             num_samples_per_length=num_samples_per_length)
+            h_o_m_mean, h_o_m_std, h_o_o_mean, h_o_o_std  = \
+                quantify_exposure_bias_runner(qeb_args,
+                                                archive_file,
+                                                oracle_test_filename,
+                                                qeb_output_dir,
+                                                cuda_device=cuda_device,
+                                                num_trials=num_trials,
+                                                num_length_samples=num_length_samples,
+                                                num_samples_per_length=num_samples_per_length)
 
         metrics['exp_biases'] = exp_biases
         metrics['exp_bias_mean'] = exp_bias_mean
@@ -301,3 +318,198 @@ def one_exp_run(serialization_dir: str = None,
         metrics[key] = value
         metric_list.append(metrics)
     return metric_list
+
+def get_experiment_args(experiment_type: str = 'artificial_language', 
+             experiment_name: str = 'dataset_experiments'):
+    
+    import argparse
+    parser = argparse.ArgumentParser(description=f'{experiment_type}/{experiment_name}.')
+    parser.add_argument('--num_samples', type=int, default=10000, help='Number of dataset samples to run this iteration for.')
+    parser.add_argument('--num_runs', type=int, default=1, help='Number of runs for the given dataset size.')
+    parser.add_argument('--all', action='store_true', help='Run All configurations mentioned below..')
+    parser.add_argument('--debug', action='store_true', help='Run in debug mode.')
+    parser.add_argument('--offline', action='store_true', help='Run in offline mode.')
+    parser.add_argument('--exp_msg', type=str, default=None, help='Debug(maybe) experiment message.')
+
+    if experiment_type == 'artificial_language':
+        parser.add_argument('--vocab_distributions', nargs='+', type=str, default=['zipf', 'uniform'], 
+                                help='Distributions to use.')
+        parser.add_argument('--grammar_templates', nargs='+',type=str, 
+                                default=['grammar_1', 'grammar_2', 'grammar_3'], 
+                                help='Grammar templates to use in this experiment')
+
+    if experiment_name == 'model_size_experiments':
+        parser.add_argument('--model_sizes', nargs='+', type=str, 
+                                 default=['xsmall', 'small', 'medium', 'large', 'xlarge'],
+                                 help='Model sizes to consider')
+
+    elif experiment_name == 'scheduled_sampling_experiments':
+        default_num_epochs = 50; default_batch_size = 128
+        if experiment_type == 'natural_language':
+            default_num_epochs = 20; default_batch_size = 4
+        parser.add_argument('--num_epochs', type=int, default=default_num_epochs,
+                                help='Number of batches for the experiment.')
+
+        parser.add_argument('--batch_size', type=int, default=default_batch_size,
+                                help='Batch size for this experiment.')
+
+    elif experiment_name == 'searnn_experiments':
+        parser.add_argument('--rollins', nargs='+', type=str,
+                                 default=['teacher_forcing', 'mixed', 'learned'],
+                                help='Rollins to use')
+
+        parser.add_argument('--rollouts', nargs='+', type=str, 
+                                default=['reference', 'mixed', 'learned'], 
+                                help='Rollouts to use')
+
+    elif experiment_name == 'vocabulary_experiments':
+        parser.add_argument('--vocabulary_sizes', nargs='+', type=int, default=[6, 12, 24, 48],
+                                help='Vocabulary Sizes to run.')
+
+    elif experiment_name == 'searnn_ablation_experiments' or \
+        experiment_name == 'reinforce_ablation_experiments':
+        parser.add_argument('--rollout_cost_funcs', nargs='+', type=str, 
+                                default=['noisy_oracle', 'bleu'], 
+                                help='Type of Oracle to use')
+
+        parser.add_argument('--mixing_coeff', nargs='+', type=float, default=[0, 0.25, 0.5,],
+                                help='Mixing coefficients for rollin and rollouts')
+
+    return parser.parse_args()
+
+def calculate_ss_k(num_samples, batch_size, num_epochs):
+    high = 20000; low = 1
+    num_iteration_per_batch = num_samples/batch_size
+    half_iterations = num_iteration_per_batch * ((num_epochs + 1)//2)
+    k_func = lambda k: k/(k + math.exp(half_iterations/k))
+    while low <= high:
+        mid = (high + low)//2
+        k_mid = k_func(mid)
+        if k_mid > 0.505:
+            high = mid
+        elif k_mid < 0.495:
+            low = mid
+        else:
+            return mid
+    return -1
+
+def get_grammar_template_path(grammar_template: str):
+    return {
+        'grammar_1': ('grammar_templates/grammar_1.template', True),
+        'grammar_2': ('grammar_templates/grammar_2.template', True),
+        'grammar_3': ('grammar_templates/grammar_3.template', True),
+    }[grammar_template]
+
+def get_grammar_iterator(experiment: Union[Experiment, OfflineExperiment], 
+                            grammar_templates: List[str], 
+                            vocab_distributions: List[str], 
+                            num_runs: int):
+    grammars_and_vocabularies = [x for x in itertools.product(grammar_templates, vocab_distributions)]
+    for i, grammar_and_vocab_index in enumerate(np.random.choice(len(grammars_and_vocabularies), num_runs)):
+        grammar_template, vocab_dist = grammars_and_vocabularies[grammar_and_vocab_index]
+        grammar_template_file, shall_generate_grammar_file = \
+                                        get_grammar_template_path(grammar_template)
+        
+        params = {
+                'grammar_template': grammar_template,
+                'vocab_distribution': vocab_dist,
+                'grammar_template_file': grammar_template_file,
+                'shall_generate_grammar_file': shall_generate_grammar_file,
+                 }
+        yield (i, grammar_template_file, vocab_dist, shall_generate_grammar_file, params)
+
+def get_result_iterator(run_metrics: Dict[str, Any]):
+    for exp_bias_idx, (exp_bias, df_p_q, df_q_p) in enumerate(zip(run_metrics['exp_biases'],
+                                                                      run_metrics['df_p_qs'],
+                                                                      run_metrics['df_q_ps'])):
+            sleep(randint(1, 10)/100.0)
+            yield {
+                'exp_bias': exp_bias,
+                'Df_p_q': df_p_q,
+                'Df_q_p': df_q_p,
+                'exp_bias_idx': exp_bias_idx,
+            }
+
+def get_mean_std_results(num_run:int,
+                         num_samples:int,
+                         run_metrics: Dict[str, Any]):
+    return {
+        'num_run': num_run,
+        'num_samples': num_samples,
+        'val_ppl': run_metrics['best_validation_perplexity'],
+        'best_val_epoch': run_metrics['best_epoch'],
+        'exp_bias_mean': run_metrics['exp_bias_mean'],
+        'exp_bias_std': run_metrics['exp_bias_std'],
+        'df_p_q_mean': run_metrics['df_p_q_mean'],
+        'df_p_q_std': run_metrics['df_p_q_std'],
+        'df_q_p_mean': run_metrics['df_q_p_mean'],
+        'df_q_p_std': run_metrics['df_q_p_std'],
+        'H_m_m_mean': run_metrics['H_m_m_mean'],
+        'H_m_m_std': run_metrics['H_m_m_std'],
+        'H_m_o_mean': run_metrics['H_m_o_mean'],
+        'H_m_o_std': run_metrics['H_m_o_std'],
+        'H_o_m_mean': run_metrics['H_o_m_mean'],
+        'H_o_m_std': run_metrics['H_o_m_std'],
+        'H_o_o_mean': run_metrics['H_o_o_mean'],
+        'H_o_o_std': run_metrics['H_o_o_std'],
+    }
+
+def get_model_overrides_func(embed_dim: int, hidden_dim: int, num_layers: int):
+    return lambda: json.dumps({
+        'model':{
+            'decoder': {
+                'decoder_net': {
+                    'target_embedding_dim': embed_dim,
+                    'decoding_dim': hidden_dim,
+                    'num_decoder_layers': num_layers,
+                },
+                'target_embedder': {
+                    'embedding_dim': embed_dim,
+                }
+            }
+        }
+    })
+
+def get_scheduled_sampling_overrides_func(ss_type:str, ss_ratio:float, ss_k:int):
+    return lambda: json.dumps({'model': {
+                                    'decoder': {
+                                        'scheduled_sampling_type': ss_type,
+                                        'scheduled_sampling_ratio': ss_ratio,
+                                        'scheduled_sampling_k': ss_k,
+                                    },
+                                }
+                            })
+
+def get_rollout_cost_function_configs(experiment_type, cost_func, mixing_coeff, temperature):
+    if cost_func == 'bleu':
+        rollout_cost_func_dict = { "type": "bleu",}
+        temperature = 100
+    elif cost_func == 'noisy_oracle':
+        if experiment_type == 'artificial_language':
+            oracle = {
+                    "type": "artificial_lang_oracle",
+                    "grammar_file":  os.environ["FSA_GRAMMAR_FILENAME_COST_FUNC"],
+                }
+            temperature = 1
+        elif experiment_type == 'natural_language':
+            oracle = {
+                    "type": "gpt2_oracle",
+                    "model_name": "gpt2",
+                    "batch_size": 4,
+                    "cuda_device": -2,
+                },
+            temperature = temperature
+        rollout_cost_func_dict = {
+          "type": "noisy_oracle",
+          "oracle": oracle,
+        }
+    overrides_dict = {
+        "model": {
+            "decoder": {
+                "rollout_cost_function": overrides_dict,
+                "rollin_rollout_mixing_coeff": mixing_coeff,
+                "temperature": temperature,
+            }, 
+        }
+    }
+    return json.dumps(overrides_dict)
