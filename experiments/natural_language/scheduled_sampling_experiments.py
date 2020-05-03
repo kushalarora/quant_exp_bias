@@ -9,8 +9,6 @@ from experiments.util import initialize_experiments, get_experiment_args, \
                              get_result_iterator, calculate_k,\
                              get_scheduled_sampling_overrides_func
 
-import json
-
 args = get_experiment_args("natural_language", "scheduled_sampling_experiments")
 
 k = calculate_k(args.num_samples, args.batch_size, args.num_batches)
@@ -21,10 +19,7 @@ scheduled_sampling_ratios  = [
         ('linear', 1.0, k),  # Linearly increase ss ratio.
 ]
 
-# ## Basic Setup of grammar and global variables like serialization directory and training config file
-
-main_args, serialization_dir, \
-    param_path, experiment_id, \
+main_args, serialization_dir, param_path, experiment_id, \
     experiment = initialize_experiments('natural_lang/scheduled_sampling_experiments',
                                         output_dir=args.output_dir,
                                         param_path = 'training_configs/natural_lang/emnlp_news_gpt2.jsonnet',
@@ -47,6 +42,7 @@ def scheduled_sampling_experiments(scheduled_sampling_ratios,
     for ss_type, ss_ratio, ss_k in scheduled_sampling_ratios:
         serialization_dir = os.path.join(orig_serialization_dir, f'{ss_type}_{ss_ratio}_{ss_k}')
         overrides_func = get_scheduled_sampling_overrides_func(ss_type, ss_ratio, ss_k)
+        
         for num_run in range(num_runs):
             run_metrics = one_exp_run(serialization_dir=serialization_dir, 
                                         num_samples=num_samples,

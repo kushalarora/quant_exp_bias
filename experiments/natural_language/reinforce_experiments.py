@@ -5,7 +5,6 @@ import os
 from experiments.util import initialize_experiments, get_experiment_args, \
                              one_exp_run, get_mean_std_results, \
                              get_result_iterator
-import json
 
 args = get_experiment_args("natural_language", "reinforce_experiments")
 

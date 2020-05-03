@@ -69,7 +69,6 @@ def searnn_experiments(rollin_rollout_configs,
             })
             experiment.log_metrics(mean_results, step=step)
 
-
 if args.all:
     for num_samples, num_runs in num_samples_and_runs:
         searnn_experiments(rollin_rollout_configs, main_args, serialization_dir, param_path, num_samples, num_runs)

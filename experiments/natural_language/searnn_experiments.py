@@ -9,8 +9,6 @@ from experiments.util import initialize_experiments, get_experiment_args, \
 
 args = get_experiment_args("natural_language", "searnn_experiments")
 
-# ## Basic Setup of grammar and global variables like serialization directory and training config file
-
 main_args, serialization_dir, param_path, experiment_id, \
     experiment = initialize_experiments('natural_lang/searnn_experiments',
                                         output_dir=args.output_dir,

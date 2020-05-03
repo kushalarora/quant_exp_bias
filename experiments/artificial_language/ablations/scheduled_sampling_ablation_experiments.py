@@ -51,13 +51,13 @@ def scheduled_sampling_ablation_experiments(scheduled_sampling_ratios,
                                         num_samples=num_samples,
                                         run=num_run,
                                         param_path=param_path,
-                                        num_trials=5,
-                                        num_length_samples=5,
-                                        num_samples_per_length=100,
                                         grammar_template=grammar_template_file,
                                         shall_generate_grammar_file=shall_generate_grammar_file,
                                         vocabulary_distribution=vocab_dist,
                                         overides_func=overrides_func,
+                                        num_trials=5,
+                                        num_length_samples=5,
+                                        num_samples_per_length=100,
                                      )
 
             assert len(run_metrics) == 1, \
