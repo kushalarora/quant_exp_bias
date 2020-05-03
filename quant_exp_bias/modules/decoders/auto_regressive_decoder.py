@@ -320,6 +320,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             # last token which is either _end_token or _pad_token.
             target_at_timesteps = targets[:, -1]
 
+        # TODO: Add support to allow other types of reference policies.
         # target_logits: (batch_size, num_classes).
         # This tensor has 0 at targets and (near) -inf at other places.
         target_logits = (target_at_timesteps.new_zeros(logits.shape) + 1e-45) \
