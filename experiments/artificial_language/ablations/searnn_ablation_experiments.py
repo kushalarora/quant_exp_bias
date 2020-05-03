@@ -71,6 +71,8 @@ def searnn_experiments(rollin_rollout_configs,
             mean_results.update({
                 'rollin_policy': rollin_policy,
                 'rollout_policy': rollout_policy,
+                'cost_func': cost_func,
+                'mixing_coeff': mixing_coeff,
             })
             experiment.log_metrics(mean_results, step=step)
 
