@@ -37,7 +37,9 @@ class ExposureBias(Metric):
                  type: str = 'tv',
                  at_prefix_level: bool = True,
                  clipping_ratio_max=math.inf,
-                 clipping_ratio_min=0.0) -> None:
+                 clipping_ratio_min=0.0,
+                 ctxt_size=-math.inf,
+                ) -> None:
         self._total_value = 0.0
         self._df_p_q = 0.0
         self._df_q_p = 0.0
@@ -45,6 +47,7 @@ class ExposureBias(Metric):
         self._oracle = oracle
         self._type = type
         self._at_prefix_level = at_prefix_level
+        self._ctxt_size = ctxt_size
 
         # D_f(P||Q) = \sum_{x in X} f(p(X)/q(x))q(x)
         self._Df = ExposureBias.DfBuilder(type,
@@ -102,6 +105,13 @@ class ExposureBias(Metric):
                     Q = model_sampled_model_seq_probs[i][j].item()
 
                     value, prev_p_q = self._Df(P, Q, prev_p_q, j+1)
+
+                    if j > self._ctxt_size:
+                        c = self._ctxt_size
+                        P_c = model_sampled_oracle_probs_and_seq_probs[i][1][j-c]
+                        Q_c = model_sampled_model_seq_probs[i][j-c].item()
+                        prev_p_q = rfn_prefix(prev_p_q, Q_c, P_c)
+
                     values.append(value)
                     prev_p_qs.append(prev_p_q)
                     df_p_q_seq += 0.5 * value
@@ -150,6 +160,13 @@ class ExposureBias(Metric):
                     Q = oracle_sampled_model_seq_probs[i][j].item()
 
                     value, prev_q_p = self._Df(Q, P, prev_q_p, j+1)
+
+                    if j > self._ctxt_size:
+                        c = self._ctxt_size
+                        P_c = oracle_sampled_oracle_probs_and_seq_probs[i][1][j-c]
+                        Q_c = oracle_sampled_oracle_probs_and_seq_probs[i][j-c].item()
+                        prev_p_q = rfn_prefix(prev_q_p, P_c, Q_c)
+
                     df_q_p_seq += 0.5 * value
                     df_q_p_count += 1
                     values.append(value)
