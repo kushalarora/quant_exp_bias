@@ -15,11 +15,11 @@ from functools import reduce, partial
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
-def rfn_prefix(p, q, prev_p_q, n, clipping_ratio_max=2.0, clipping_ratio_min=0.01): 
+def rfn_prefix(p, q, prev_p_q, n, clipping_ratio_max=math.inf, clipping_ratio_min=0): 
     # return np.exp(np.log(prev_p_q) + np.log(max(min(clipping_ratio_max, p/q), clipping_ratio_min)))
     return max(min(clipping_ratio_max, np.exp(np.log(prev_p_q) + np.log(p) - np.log(q))), clipping_ratio_min)
 
-def rfn_sequence(p, q, prev_p_q, n, clipping_ratio_max=2.0, clipping_ratio_min=0.5): 
+def rfn_sequence(p, q, prev_p_q, n, clipping_ratio_max=math.inf, clipping_ratio_min=0): 
     return max(min(clipping_ratio_max, np.exp(n * (np.log(p) - np.log(q)))), clipping_ratio_min)
 
 
@@ -34,11 +34,11 @@ class ExposureBias(Metric):
 
     def __init__(self,
                  oracle: Oracle,
-                 type: str = 'tv',
+                 type: str = 'js',
                  at_prefix_level: bool = True,
                  clipping_ratio_max=math.inf,
                  clipping_ratio_min=0.0,
-                 ctxt_size=-math.inf,
+                 ctxt_size=math.inf,
                 ) -> None:
         self._total_value = 0.0
         self._df_p_q = 0.0
@@ -99,19 +99,19 @@ class ExposureBias(Metric):
                 df_p_q_seq = 0
                 prev_p_q = 1.0
                 for j in range(1, seq_len):
+                    if self._ctxt_size < j:
+                        c = self._ctxt_size
+                        P_c = model_sampled_oracle_probs_and_seq_probs[i][1][j-c]
+                        Q_c = model_sampled_model_seq_probs[i][j-c].item()
+                        prev_p_q = rfn_prefix(Q_c, P_c, prev_p_q, 1)
+
                     # Here model_sampled_model_prob is Q because the samples
                     # come from the model.
                     P = model_sampled_oracle_probs_and_seq_probs[i][1][j]
                     Q = model_sampled_model_seq_probs[i][j].item()
-
+                    
                     value, prev_p_q = self._Df(P, Q, prev_p_q, j+1)
-
-                    if j > self._ctxt_size:
-                        c = self._ctxt_size
-                        P_c = model_sampled_oracle_probs_and_seq_probs[i][1][j-c]
-                        Q_c = model_sampled_model_seq_probs[i][j-c].item()
-                        prev_p_q = rfn_prefix(prev_p_q, Q_c, P_c)
-
+                    
                     values.append(value)
                     prev_p_qs.append(prev_p_q)
                     df_p_q_seq += 0.5 * value
@@ -154,18 +154,19 @@ class ExposureBias(Metric):
                 df_q_p_seq = 0
                 prev_q_p = 1.0
                 for j in range(1, seq_len):
+                    if self._ctxt_size < j:
+                        c = self._ctxt_size
+                        P_c = oracle_sampled_oracle_probs_and_seq_probs[i][1][j-c]
+                        Q_c = oracle_sampled_model_seq_probs[i][j-c].item()
+                        prev_q_p = rfn_prefix(P_c, Q_c, prev_q_p, 1.0)
+
                     # Here oracle_sampled_oracle_probs is Q because the samples
                     # come from the oracle.
                     P = oracle_sampled_oracle_probs_and_seq_probs[i][1][j]
                     Q = oracle_sampled_model_seq_probs[i][j].item()
-
+                    
                     value, prev_q_p = self._Df(Q, P, prev_q_p, j+1)
-
-                    if j > self._ctxt_size:
-                        c = self._ctxt_size
-                        P_c = oracle_sampled_oracle_probs_and_seq_probs[i][1][j-c]
-                        Q_c = oracle_sampled_oracle_probs_and_seq_probs[i][j-c].item()
-                        prev_p_q = rfn_prefix(prev_q_p, P_c, Q_c)
+                    
 
                     df_q_p_seq += 0.5 * value
                     df_q_p_count += 1
