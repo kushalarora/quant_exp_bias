@@ -15,9 +15,9 @@
         "do_lowercase": false,
       },
     },
-    "vocabulary": {
-        "directory_path": "training_configs/natural_lang/vocab/",
-    },
+    // "vocabulary": {
+    //    "directory_path": "training_configs/natural_lang/vocab/",
+    // },
     // "train_data_path": "data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered.2000000",
     "train_data_path": std.extVar("TRAIN_FILE"),
     "validation_data_path": std.extVar("DEV_FILE"),

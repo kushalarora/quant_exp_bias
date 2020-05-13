@@ -345,7 +345,7 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
                                  default=['xsmall', 'small', 'medium', 'large', 'xlarge'],
                                  help='Model sizes to consider')
 
-    elif experiment_name == 'scheduled_sampling_experiments':
+    if experiment_name == 'scheduled_sampling_experiments':
         default_num_epochs = 50; default_batch_size = 128
         if experiment_type == 'natural_language':
             default_num_epochs = 20; default_batch_size = 4
@@ -354,8 +354,9 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
 
         parser.add_argument('--batch_size', type=int, default=default_batch_size,
                                 help='Batch size for this experiment.')
-
-    elif experiment_name == 'searnn_experiments':
+    
+    if experiment_name == 'searnn_experiments' or \
+            experiment_name == 'searnn_ablation_experiments':
         parser.add_argument('--rollins', nargs='+', type=str,
                                  default=['teacher_forcing', 'mixed', 'learned'],
                                 help='Rollins to use')
@@ -363,12 +364,14 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
         parser.add_argument('--rollouts', nargs='+', type=str, 
                                 default=['reference', 'mixed', 'learned'], 
                                 help='Rollouts to use')
+        parser.add_argument('--temperature', type=float, default=1.0,
+                            help='temperature for SEARNN experiments')
 
-    elif experiment_name == 'vocabulary_experiments':
+    if experiment_name == 'vocabulary_experiments':
         parser.add_argument('--vocabulary_sizes', nargs='+', type=int, default=[6, 12, 24, 48],
                                 help='Vocabulary Sizes to run.')
 
-    elif experiment_name == 'searnn_ablation_experiments' or \
+    if experiment_name == 'searnn_ablation_experiments' or \
         experiment_name == 'reinforce_ablation_experiments':
         parser.add_argument('--rollout_cost_funcs', nargs='+', type=str, 
                                 default=['noisy_oracle', 'bleu'], 
@@ -501,10 +504,10 @@ def get_rollout_cost_function_configs(experiment_type, cost_func, mixing_coeff, 
         elif experiment_type == 'natural_language':
             oracle = {
                     "type": "gpt2_oracle",
-                    "model_name": "gpt2",
+                    "model_name": "distilgpt2",
                     "batch_size": 4,
                     "cuda_device": -2,
-                },
+                }
             temperature = temperature
         rollout_cost_func_dict = {
           "type": "noisy_oracle",
@@ -513,10 +516,10 @@ def get_rollout_cost_function_configs(experiment_type, cost_func, mixing_coeff, 
     overrides_dict = {
         "model": {
             "decoder": {
-                "rollout_cost_function": overrides_dict,
+                "rollout_cost_function": rollout_cost_func_dict,
                 "rollin_rollout_mixing_coeff": mixing_coeff,
-                "temperature": temperature,
+                "temperature": temperature
             }, 
         }
     }
-    return json.dumps(overrides_dict)
+    return lambda: json.dumps(overrides_dict)

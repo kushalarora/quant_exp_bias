@@ -34,7 +34,7 @@ class ExposureBias(Metric):
 
     def __init__(self,
                  oracle: Oracle,
-                 type: str = 'js',
+                 type: str = 'kl',
                  at_prefix_level: bool = True,
                  clipping_ratio_max=math.inf,
                  clipping_ratio_min=0.0,

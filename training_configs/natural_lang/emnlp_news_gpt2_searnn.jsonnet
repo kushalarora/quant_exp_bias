@@ -15,9 +15,9 @@
         "do_lowercase": false,
       },
     },
-    "vocabulary": {
-        "directory_path": "training_configs/natural_lang/vocab/",
-    },
+    // "vocabulary": {
+    //    "directory_path": "training_configs/natural_lang/vocab/",
+    // },
     // "train_data_path": "data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered.2000000",
     "train_data_path": std.extVar("TRAIN_FILE"),
     "validation_data_path": std.extVar("DEV_FILE"),
@@ -64,9 +64,9 @@
           "type": "bleu",
         },
         "temperature": 1,
-        "num_neighbors_to_add": 8,
-        "num_tokens_to_rollout": 20,
-        "rollout_ratio": 0.20,
+        "num_neighbors_to_add": 10,
+        "num_tokens_to_rollout": 30,
+        "rollout_ratio": 0.80,
 
       }
   },

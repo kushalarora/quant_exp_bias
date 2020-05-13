@@ -37,7 +37,7 @@ class NaturalLanguageOracle(Oracle):
             self.device = torch.cuda.current_device()
         
         # Load pre-trained model tokenizer (vocabulary)
-        self.tokenizer = GPT2Tokenizer.from_pretrained(model_name)
+        self.tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
 
         # Load pre-trained model (weights)
         self.model = GPT2LMHeadModel.from_pretrained(model_name).to(self.device)
