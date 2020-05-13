@@ -17,7 +17,7 @@ else:
 # tokenizer = OpenAIGPTTokenizer.from_pretrained(model_name)
 # model = OpenAIGPTLMHeadModel.from_pretrained(model_name).to(torch.cuda.current_device())
 
-tokenizer = GPT2Tokenizer.from_pretrained('gpt2-xl')
+tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
 model = GPT2LMHeadModel.from_pretrained(model_name).to(torch.cuda.current_device())
 model.eval()
 loss = 0.
