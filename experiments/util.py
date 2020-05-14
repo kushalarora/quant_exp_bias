@@ -331,7 +331,7 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
     parser.add_argument('--debug', action='store_true', help='Run in debug mode.')
     parser.add_argument('--offline', action='store_true', help='Run in offline mode.')
     parser.add_argument('--exp_msg', type=str, default=None, help='Debug(maybe) experiment message.')
-    parser.add_argument('--output_dir', '-o', type=str, default='/scratch/karora/quant_exp_bias/', help='Output directory.')
+    parser.add_argument('--output_dir', '-o', type=str, default=os.path.expanduser('~/scratch/quant_exp_bias/'), help='Output directory.')
     
     if experiment_type == 'artificial_language':
         parser.add_argument('--vocab_distributions', nargs='+', type=str, default=['zipf', 'uniform'], 
