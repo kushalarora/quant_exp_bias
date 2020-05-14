@@ -16,9 +16,11 @@ scheduled_sampling_ratios  = [
         ('quantized', 1.0, k(0.25)),  # Quantized increase ss ratio.
         ('quantized', 1.0, k(0.5)),  # Quantized increase ss ratio.
         ('quantized', 1.0, k(0.75)),  # Quantized increase ss ratio.
+        ('quantized', 1.0, k(0.90)),  # Quantized increase ss ratio.
         ('linear', 1.0, k(0.25)),  # Linearly increase ss ratio.
         ('linear', 1.0, k(0.5)),  # Linearly increase ss ratio.
         ('linear', 1.0, k(0.75)),  # Linearly increase ss ratio.
+        ('linear', 1.0, k(0.90)),  # Linearly increase ss ratio.
 ]
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
