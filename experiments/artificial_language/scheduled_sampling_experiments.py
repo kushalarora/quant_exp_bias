@@ -2,18 +2,23 @@
 import os
 
 from experiments.util import initialize_experiments, get_experiment_args, \
-                                calculate_k, one_exp_run, get_grammar_iterator, \
+                                calculate_ss_k, one_exp_run, get_grammar_iterator, \
                                 get_mean_std_results, get_result_iterator, \
                                 get_scheduled_sampling_overrides_func
 
 args = get_experiment_args("artificial_language", "scheduled_sampling_experiments")
 
-k = calculate_k(args.num_samples, args.batch_size, args.num_epochs)
+k = lambda ratio_level: calculate_ss_k(args.num_samples, args.batch_size, 
+                                        args.num_batches, ratio_level=ratio_level)
 
 scheduled_sampling_ratios  = [
-        ('uniform', 0.0, -1), ('uniform', 0.1, -1), ('uniform', 0.25, -1), ('uniform', 0.5, -1), ('uniform', 1.0, -1),  # Fixed SS ratio
-        ('quantized', 1.0, k),  # Linearly increase ss ratio.
-        ('linear', 1.0, k),  # Linearly increase ss ratio.
+        ('uniform', 0.0, -1),('uniform', 0.05, -1), ('uniform', 0.1, -1), ('uniform', 0.25, -1), ('uniform', 0.5, -1),  # Fixed SS ratio
+        ('quantized', 1.0, k(0.25)),  # Quantized increase ss ratio.
+        ('quantized', 1.0, k(0.5)),  # Quantized increase ss ratio.
+        ('quantized', 1.0, k(0.75)),  # Quantized increase ss ratio.
+        ('linear', 1.0, k(0.25)),  # Linearly increase ss ratio.
+        ('linear', 1.0, k(0.5)),  # Linearly increase ss ratio.
+        ('linear', 1.0, k(0.75)),  # Linearly increase ss ratio.
 ]
 
 main_args, serialization_dir, param_path, experiment_id, \

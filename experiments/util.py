@@ -380,13 +380,19 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
         parser.add_argument('--mixing_coeff', nargs='+', type=float, default=[0, 0.25, 0.5,],
                                 help='Mixing coefficients for rollin and rollouts')
 
+    if experiment_name == 'scheduled_sampling_ablation_experiments':
+        parser.add_argument('--batch_size', type=int, 
+                                default=96, help='Scheduled Sampling experiment batch size for natural language experiments.')
+
+        parser.add_argument('--num_epochs', type=int, 
+                                default=20, help='Scheduled Sampling experiment batch size for natural language experiments.')
     return parser.parse_args()
 
-def calculate_ss_k(num_samples, batch_size, num_epochs):
+def calculate_ss_k(num_samples, batch_size, num_epochs, ratio_level=0.5):
     high = 20000; low = 1
     num_iteration_per_batch = num_samples/batch_size
-    half_iterations = num_iteration_per_batch * ((num_epochs + 1)//2)
-    k_func = lambda k: k/(k + math.exp(half_iterations/k))
+    iteration_to_ratio = num_iteration_per_batch * int((num_epochs + 1)*ratio_level)
+    k_func = lambda k: k/(k + math.exp(iteration_to_ratio/k))
     while low <= high:
         mid = (high + low)//2
         k_mid = k_func(mid)

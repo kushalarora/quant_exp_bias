@@ -6,7 +6,7 @@ import sys
 
 from experiments.util import initialize_experiments, get_experiment_args, \
                              one_exp_run, get_mean_std_results, \
-                             get_result_iterator, calculate_k,\
+                             get_result_iterator, calculate_ss_k,\
                              get_scheduled_sampling_overrides_func
 
 args = get_experiment_args("natural_language", "scheduled_sampling_ablation_experiments")
@@ -16,17 +16,23 @@ main_args, serialization_dir, param_path, experiment_id, \
                                         output_dir=args.output_dir,
                                         param_path = 'training_configs/natural_lang/emnlp_news_gpt2.jsonnet',
                                         debug=args.debug,
+                                        offline=args.offline,
                                         experiment_text=args.exp_msg,
                                     )
 
-k = calculate_k(args.num_samples, args.batch_size, args.num_batches)
+
+k = lambda ratio_level: calculate_ss_k(args.num_samples, args.batch_size, 
+                                        args.num_epochs, ratio_level=ratio_level)
 
 scheduled_sampling_ratios  = [
-        ('uniform', 0.0, -1), ('uniform', 0.1, -1), ('uniform', 0.25, -1), ('uniform', 0.5, -1), ('uniform', 1.0, -1),  # Fixed SS ratio
-        ('quantized', 1.0, k),  # Quantizedly increase ss ratio.
-        ('linear', 1.0, k),  # Linearly increase ss ratio.
+        ('uniform', 0.0, -1), ('uniform', 0.05, -1), ('uniform', 0.1, -1), ('uniform', 0.25, -1), ('uniform', 0.5, -1), # Fixed SS ratio
+        ('quantized', 1.0, k(0.25)),  # Quantized increase ss ratio.
+        ('quantized', 1.0, k(0.5)),  # Quantized increase ss ratio.
+        ('quantized', 1.0, k(0.75)),  # Quantized increase ss ratio.
+        ('linear', 1.0, k(0.25)),  # Linearly increase ss ratio.
+        ('linear', 1.0, k(0.5)),  # Linearly increase ss ratio.
+        ('linear', 1.0, k(0.75)),  # Linearly increase ss ratio.
 ]
-
 num_samples_and_runs = [(100000,4)]
 
 experiment.log_parameters({'serialization_dir': serialization_dir,
