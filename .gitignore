@@ -116,3 +116,4 @@ wandb/
 slurm-*
 */*logs/*
 */*results/*
+comet_exp/
