@@ -30,6 +30,8 @@ import argparse
 import logging
 import os
 import random
+from datetime import datetime
+import time
 
 from allennlp.commands.subcommand import Subcommand
 from allennlp.common.checks import ConfigurationError
@@ -117,16 +119,19 @@ def sample_oracle(params: Params,
                 if len(line.strip()) > 0:
                     filesize += 1
 
-            sampling_prob = float(num_samples + 100)/float(filesize)
-
+            random.seed(datetime.now())
+            sample_idxs = sorted(random.sample(range(filesize), num_samples))
             oracle_sample_iterator = []
             sample_count = 0
             dataset_file.seek(0)
-            for line in dataset_file:
-                if random.random() < sampling_prob and \
-                    sample_count < num_samples:
+            for i, line in enumerate(dataset_file):
+                if sample_idxs[0] == i:
                     oracle_sample_iterator.append(line.strip())
                     sample_count += 1
+                    del sample_idxs[0]
+
+                if sample_count == num_samples:
+                    break
     else:
         model_oracle_params = params.get('model', {})
         assert model_oracle_params is not None, \
