@@ -142,9 +142,11 @@ def one_exp_run(serialization_dir: str = None,
                 only_quantify: bool = False,
                 run_serialization_dir:str = None,
                 train_model_serialization_dir: str = None,
+                oracle_train_filename:str = None, 
+                oracle_dev_filename:str = None,
                 oracle_test_filename:str = None,
                 ):
-    
+
     overrides = default_overides_func()
     run_serialization_dir = run_serialization_dir or \
                                 os.path.join(serialization_dir, 
@@ -161,22 +163,24 @@ def one_exp_run(serialization_dir: str = None,
             os.environ["FSA_GRAMMAR_FILENAME_COST_FUNC"] = grammar_file_epsilon_0
 
         overrides = overides_func()
-        sample_oracle_args = ['sample-oracle',
-                            param_path,
-                            '-s', run_serialization_dir,
-                            '-n', str(num_samples),
-                            '-o',  overrides]
 
-        # We might want to sample from file, for example, in cases,
-        # where dataset is fixed. This is the case with natural language
-        # experiments.
-        if sample_from_file:
-            sample_oracle_args += ['-f', dataset_filename]
+        if oracle_train_filename is None and oracle_dev_filename is None:
+            # We might want to sample from file, for example, in cases,
+            # where dataset is fixed. This is the case with natural language
+            # experiments.
+            sample_oracle_args = ['sample-oracle',
+                                    param_path,
+                                    '-s', run_serialization_dir,
+                                    '-n', str(num_samples),
+                                    '-o',  overrides]
 
-        sample_oracle_args = get_args(args=sample_oracle_args)
-        oracle_train_filename, oracle_dev_filename, oracle_test_filename = \
-            sample_oracle_runner(sample_oracle_args,
-                                run_serialization_dir)
+            if sample_from_file:
+                sample_oracle_args += ['-f', dataset_filename]
+
+            sample_oracle_args = get_args(args=sample_oracle_args)
+            oracle_train_filename, oracle_dev_filename, oracle_test_filename = \
+                sample_oracle_runner(sample_oracle_args,
+                                    run_serialization_dir)
 
         os.environ['TRAIN_FILE'] = oracle_train_filename
         os.environ['DEV_FILE'] = oracle_dev_filename
@@ -364,8 +368,6 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
         parser.add_argument('--rollouts', nargs='+', type=str, 
                                 default=['reference', 'mixed', 'learned'], 
                                 help='Rollouts to use')
-        parser.add_argument('--temperature', type=float, default=1.0,
-                            help='temperature for SEARNN experiments')
 
     if experiment_name == 'vocabulary_experiments':
         parser.add_argument('--vocabulary_sizes', nargs='+', type=int, default=[6, 12, 24, 48],
@@ -374,11 +376,13 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
     if experiment_name == 'searnn_ablation_experiments' or \
         experiment_name == 'reinforce_ablation_experiments':
         parser.add_argument('--rollout_cost_funcs', nargs='+', type=str, 
-                                default=['noisy_oracle', 'bleu'], 
+                                default=['noisy_oracle'], 
                                 help='Type of Oracle to use')
 
-        parser.add_argument('--mixing_coeff', nargs='+', type=float, default=[0, 0.25, 0.5,],
+        parser.add_argument('--mixing_coeffs', nargs='+', type=float, default=[0, 0.25, 0.5,],
                                 help='Mixing coefficients for rollin and rollouts')
+        parser.add_argument('--temperature', type=float, default=1.0,
+                            help='temperature for SEARNN experiments')
 
     if experiment_name == 'scheduled_sampling_ablation_experiments':
         parser.add_argument('--batch_size', type=int, 
@@ -511,7 +515,7 @@ def get_rollout_cost_function_configs(experiment_type, cost_func, mixing_coeff, 
             oracle = {
                     "type": "gpt2_oracle",
                     "model_name": "distilgpt2",
-                    "batch_size": 4,
+                    "batch_size": 8,
                     "cuda_device": -2,
                 }
             temperature = temperature
