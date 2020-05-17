@@ -261,7 +261,7 @@ class ArtificialLanguageOracle(Oracle):
                 parse = parses[0]
 
                 # Marginalizing by seq_len + 1 because we assume it emits </S> symbol at the end with prob. 1.
-                probs = np.exp(np.log(parse.prob() + 1e-100))
+                probs = np.exp(np.log(parse.prob() + 1e-100)/(len(sequence) + 1))
 
                 st_probs = [st.prob() for st in parse.subtrees()]
                 for i in range(len(st_probs) - 1):
