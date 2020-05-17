@@ -29,9 +29,11 @@ scheduled_sampling_ratios  = [
         ('quantized', 1.0, k(0.25)),  # Quantized increase ss ratio.
         ('quantized', 1.0, k(0.5)),  # Quantized increase ss ratio.
         ('quantized', 1.0, k(0.75)),  # Quantized increase ss ratio.
+        ('quantized', 1.0, k(0.90)),  # Quantized increase ss ratio.
         ('linear', 1.0, k(0.25)),  # Linearly increase ss ratio.
         ('linear', 1.0, k(0.5)),  # Linearly increase ss ratio.
         ('linear', 1.0, k(0.75)),  # Linearly increase ss ratio.
+        ('linear', 1.0, k(0.90)),  # Linearly increase ss ratio.
 ]
 num_samples_and_runs = [(100000,4)]
 
