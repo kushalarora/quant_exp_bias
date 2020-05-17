@@ -20,7 +20,7 @@ main_args, serialization_dir, param_path, experiment_id, \
                                         experiment_text=args.exp_msg,
                                        )
 
-rollin_rollout_cost_func_configs = [x for x in itertools.product(args.rollins, args.rollouts, args.rollout_cost_funcs, args.mixing_coeff)]
+rollin_rollout_cost_func_configs = [x for x in itertools.product(args.rollins, args.rollouts, args.rollout_cost_funcs, args.mixing_coeffs)]
 
 num_samples_and_runs = [(50000,2)]
 
@@ -63,6 +63,8 @@ def searnn_ablation_experiments(rollin_rollout_configs,
             mean_results.update({
                 'rollin_policy': rollin_policy,
                 'rollout_policy': rollout_policy,
+                'cost_func': cost_func,
+                'mixing_coeff': mixing_coeff,
             })
             experiment.log_metrics(mean_results, step=step)
 
