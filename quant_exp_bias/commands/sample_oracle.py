@@ -32,6 +32,7 @@ import os
 import random
 from datetime import datetime
 import time
+import math
 
 from allennlp.commands.subcommand import Subcommand
 from allennlp.common.checks import ConfigurationError
@@ -119,6 +120,10 @@ def sample_oracle(params: Params,
                 if len(line.strip()) > 0:
                     filesize += 1
 
+
+            # 1.2 to get 10% test and valid sets.
+            num_samples = math.ceil(1.2 * num_samples)
+            
             random.seed(datetime.now())
             sample_idxs = sorted(random.sample(range(filesize), num_samples))
             oracle_sample_iterator = []
