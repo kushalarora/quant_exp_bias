@@ -20,7 +20,7 @@ main_args, serialization_dir, param_path, experiment_id, \
                                         experiment_text=args.exp_msg,
                                        )
 
-rollin_rollout_cost_func_configs = [x for x in itertools.product(args.rollins, args.rollouts, args.rollout_cost_funcs, args.mixing_coeff)]
+rollin_rollout_cost_func_configs = [x for x in itertools.product(args.rollins, args.rollouts, args.rollout_cost_funcs, args.mixing_coeffs)]
 
 num_samples_and_runs = [(10000,4)]
 
