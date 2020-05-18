@@ -57,11 +57,10 @@ class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
                  rollout_mixing_prob: float = 0.5,
                  detokenizer: DeTokenizer = default_tokenizer,
                  temperature: int = 1,
-                 num_neighbors_to_add: int = 0,
                  do_max_rollout_steps: bool = True,
                  num_mle_iters: int = 0,
-                 rollin_rollout_mixing_coeff: float = 0.33,
-                 detach_rollin_logits: bool = True,
+                 rollin_rollout_mixing_coeff: float = 0.5,
+                 detach_rollin_logits: bool = False,
                  rollout_ratio: float = 1.0,
                  ) -> None:
 
@@ -101,10 +100,7 @@ class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
                          rollout_ratio=rollout_ratio,
                          detach_rollin_logits=detach_rollin_logits,
                          )
-
         self._rollin_steps = rollin_steps
-        self._combiner_loss = None
-
         self._num_mle_iters = num_mle_iters
         self._rollin_rollout_mixing_coeff = rollin_rollout_mixing_coeff
 
@@ -134,6 +130,26 @@ class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
 
         if self._combiner_mode == 'rl':
 
+            # rollin_logits: (batch_size, num_rollin_steps, num_classes)
+            rollin_logits = rollin_output_dict['logits'].squeeze(1)
+            batch_size, num_rollin_steps, num_classes = rollin_logits.shape
+            num_tokens_to_rollout = len(rollout_output_dict['rollout_steps'])
+            rollin_rollout_logits = []
+            for i, step in enumerate(rollout_output_dict['rollout_steps']):
+                rollin_logits_prefix = rollin_logits[:, :step + 1, :] \
+                                            .unsqueeze(1) 
+
+                if self._detach_rollin_logits:
+                    rollin_logits_prefix = rollin_logits_prefix.detach()
+
+                rollout_output_logits = rollout_output_dict['logits'][i]
+
+                rollin_rollout_logits.append(torch.cat([rollin_logits_prefix, 
+                                                        rollout_output_logits],
+                                                       dim=2))
+                
+            rollin_rollout_logits = torch.stack(rollin_rollout_logits, dim=1)
+                        
             # rollout_output_dict['baseline_rewards'] = self._baseline_regressor(state['decoder_hiddens'].detach()).squeeze(-1)
             output_dict = {'predictions': rollin_output_dict['predictions']}
             if target_tokens:
@@ -144,14 +160,14 @@ class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
                     loss_batch = rollin_output_dict['loss_batch']
                 else:
                     rewards = rollout_reward_batch.detach()
-                    rewards = (rewards - rewards.mean())/rewards.std()
+                    rewards = F.softmax(rewards, dim=1) #torch.exp(rewards) # (rewards - rewards.mean())/rewards.std()
 
                     # predictions: (batch_size, rollout_steps, rollout_steps - 1)
                     predictions = rollout_output_dict["predictions"].squeeze(dim=2)
                     predictions = predictions[:, :, 1:]
 
                     # rollout_logits: (batch_size, rollout_steps, rollout_steps - 1)
-                    rollout_logits = F.log_softmax(rollout_output_dict["logits"].squeeze(dim=2),
+                    rollout_logits = F.log_softmax(rollin_rollout_logits.squeeze(dim=2),
                                                    dim=-1)
 
                     log_probs = torch.gather(rollout_logits, -1,
@@ -173,7 +189,7 @@ class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
                     summed_reward_log_probs = (-1 * log_probs * rewards).sum(dim=-1)
                     num_tokens_per_seq = log_prob_mask.sum(dim=-1)
 
-                    rollout_rl_loss_batch = (summed_reward_log_probs/num_tokens_per_seq).mean(dim=-1)
+                    rollout_rl_loss_batch = (summed_reward_log_probs/num_tokens_per_seq).sum(dim=-1)
 
                     loss_batch = self._rollin_rollout_mixing_coeff * rollin_output_dict['loss_batch'] + \
                                   (1 - self._rollin_rollout_mixing_coeff) * rollout_rl_loss_batch

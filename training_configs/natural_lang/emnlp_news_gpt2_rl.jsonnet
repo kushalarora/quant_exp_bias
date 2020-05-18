@@ -58,6 +58,7 @@
         },
         "rollout_cost_function": {
           "type": "noisy_oracle",
+          "add_brevity_penalty": true,
           "oracle": {
             "type": "gpt2_oracle",
             "model_name": "gpt2",
@@ -65,8 +66,8 @@
             "cuda_device": -2,
           },
         },
-        "rollout_ratio": 0.25,
-
+        "rollout_ratio": 0.40,
+        "rollin_rollout_mixing_coeff": 0.5,
       },
       "initializer": [
           ["_decoder._decoder_net.*|_decoder._output_projection*|_decoder.target_embedder*|_decoder._dropout",
@@ -81,17 +82,17 @@
   "iterator": {
       "type": "bucket",
       "sorting_keys": [["target_tokens", "num_tokens"]],
-      "batch_size": 12,
+      "batch_size": 16,
       // This is needed stupidly for bucket iterator to work.
       "max_instances_in_memory": 2000000
   },
   "validation_iterator": {
       "type": "basic",
-      "batch_size": 12
+      "batch_size": 16
   },
   "trainer": {
     "num_epochs": 20,
-    "validation_metric": "-perplexity",
+    //"validation_metric": "-perplexity",
     "cuda_device" : 0,
     "optimizer": {
       "type": "adam",
