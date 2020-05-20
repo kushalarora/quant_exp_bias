@@ -185,7 +185,14 @@ class SampledBeamSearch:
         log_probs_after_end[:, self._end_index] = 0.
 
         # Set the same state for each element in the beam.
-        for key, state_tensor in state.items():
+        # Ignoring all the values that are not tensors.
+        # These stateful information is to be used by others
+        # and shouldn't be touched.
+        for key, value in state.items():
+            if type(value) != torch.Tensor:
+                continue
+            state_tensor = value
+
             _, *last_dims = state_tensor.size()
             # shape: (batch_size * beam_size, *)
             state[key] = state_tensor.\
@@ -284,7 +291,11 @@ class SampledBeamSearch:
 
             # Keep only the pieces of the state tensors corresponding to the
             # ancestors created this iteration.
-            for key, state_tensor in state.items():
+            for key, value in state.items():
+                if type(value) != torch.Tensor:
+                    continue
+
+                state_tensor = value
                 _, *last_dims = state_tensor.size()
                 # shape: (batch_size, beam_size, *)
                 expanded_backpointer = backpointer.\
