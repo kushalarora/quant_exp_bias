@@ -514,7 +514,7 @@ def get_rollout_cost_function_configs(experiment_type, cost_func, mixing_coeff, 
         elif experiment_type == 'natural_language':
             oracle = {
                     "type": "gpt2_oracle",
-                    "model_name": "distilgpt2",
+                    "model_name": "gpt2",
                     "batch_size": 8,
                     "cuda_device": -2,
                 }
