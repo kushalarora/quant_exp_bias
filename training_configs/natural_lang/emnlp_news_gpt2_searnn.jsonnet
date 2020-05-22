@@ -63,17 +63,17 @@
         "rollout_cost_function": {
           "type": "bleu",
         },
-        "temperature": 1,
-        "num_neighbors_to_add": 10,
-        "num_tokens_to_rollout": 25,
-        "rollout_ratio": 0.50,
+        "temperature": 10,
+        "num_neighbors_to_add": 4,
+        "num_tokens_to_rollout": 15,
+        "rollout_ratio": 0.40,
 
       }
   },
   "iterator": {
       "type": "bucket",
       "sorting_keys": [["target_tokens", "num_tokens"]],
-      "batch_size": 4,
+      "batch_size": 8,
       // This is needed stupidly for bucket iterator to work.
       "max_instances_in_memory": 500000
   },
@@ -81,6 +81,7 @@
     "num_epochs": 20,
     "validation_metric": "-perplexity",
     "cuda_device" : 0,
+    "grad_clipping": 5.0,
     "optimizer": {
       "type": "adam",
       "lr": 0.001,

@@ -8,6 +8,7 @@ import math
 import numpy
 import torch
 import torch.nn.functional as F
+import time
 from torch.nn import Linear
 
 from allennlp.common.checks import ConfigurationError
@@ -31,10 +32,18 @@ from quant_exp_bias.metrics.hamming_loss import HammingLoss
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
-RollinPolicyType = Callable[[int, torch.LongTensor, Optional[torch.LongTensor]], torch.LongTensor]
-RolloutPolicyType = Callable[[torch.LongTensor, torch.LongTensor, Optional[torch.LongTensor]], torch.LongTensor]
 RolloutMixingProbFuncType = Callable[[], torch.Tensor]
 DeTokenizerType = Callable[[List[List[str]]], List[str]]
+
+RollinPolicyType = Callable[[int, torch.LongTensor, Dict[str, torch.Tensor]], torch.LongTensor]
+# By default, if no rollin_policy is specified, just return the last prediction.
+default_rollin_policy = lambda x,y,z: y
+
+RolloutPolicyType = Callable[[int, torch.LongTensor, Dict[str, torch.Tensor], torch.FloatTensor], torch.FloatTensor]
+# By default, if no rollout_policy is specified, just return the same class logits.
+default_rollout_policy = lambda u,v,w,x: (x,w)
+
+ReferencePolicyType = Callable[[int, torch.LongTensor,Dict[str, torch.Tensor]], torch.FloatTensor]
 
 @SeqDecoder.register("quant_exp_auto_regressive_seq_decoder")
 class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
@@ -209,7 +218,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
     def rollin_policy(self,
                       timestep: int,
                       last_predictions: torch.LongTensor,
-                      target_tokens: Dict[str, torch.LongTensor] = None,
+                      state: Dict[str, torch.Tensor],
                       rollin_mode = 'mixed') -> torch.LongTensor:
         """ Roll-in policy to use.
             This takes in targets, timestep and last_predictions, and decide
@@ -237,6 +246,8 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         Returns:
             torch.LongTensor -- The method returns input token for predicting next token.
         """
+        target_tokens = state['rollin_params'].get('target_tokens', None)
+
         # For first timestep, you are passing start token, so don't do anything smart.
         if (timestep == 0 or
            # If no targets, no way to do teacher_forcing, so use your own predictions.
@@ -262,13 +273,71 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             raise ConfigurationError(f"invalid configuration for rollin policy: {rollin_mode}")
         return input_choices
 
+    def copy_reference_policy(self,
+                                timestep,
+                                last_predictions: torch.LongTensor,
+                                state: Dict[str, torch.Tensor],
+                              ) -> torch.FloatTensor:
+        targets = state['rollout_params']['target_tokens']['tokens']
+        seq_len = targets.size(1)
+        
+        batch_size = last_predictions.shape[0]
+        # So this must be prediction of last step,
+        # where there are no more
+        if seq_len > timestep + 1:  # + 1 because timestep is an index, indexed at 0.
+            # As we might be overriding  the next/predicted token/
+            # We have to use the value corresponding to {t+1}^{th}
+            # timestep.
+            target_at_timesteps = targets[:, timestep + 1]
+        else:
+            # We have overshot the seq_len, so just repeat the
+            # last token which is either _end_token or _pad_token.
+            target_at_timesteps = targets[:, -1]
+
+        # TODO: Add support to allow other types of reference policies.
+        # target_logits: (batch_size, num_classes).
+        # This tensor has 0 at targets and (near) -inf at other places.
+        target_logits = (target_at_timesteps.new_zeros((batch_size, self._num_classes)) + 1e-45) \
+                            .scatter_(dim=1,
+                                      index=target_at_timesteps.unsqueeze(1),
+                                      value=1.0).log()
+        return target_logits, state
+    
+
+    def oracle_reference_policy(self, 
+                                timestep: int,
+                                last_predictions: torch.LongTensor,
+                                state: Dict[str, torch.Tensor],
+                                token_to_idx: Dict[str, int],
+                                idx_to_token: Dict[int, str],
+                               ) -> torch.FloatTensor:
+        # TODO(Kushal): This is a temporary fix. Ideally, we should have
+        # an individual oracle for this which is different from cost function.
+        assert hasattr(self._rollout_cost_function, "_oracle"), \
+                "For oracle reference policy, we will need noisy oracle loss function"
+
+        start_time = time.time()
+        target_logits, state = self._rollout_cost_function \
+                                    ._oracle \
+                                    .reference_step_rollout(
+                                        step=timestep,
+                                        last_predictions=last_predictions,
+                                        state=state,
+                                        token_to_idx=token_to_idx,
+                                        idx_to_token=idx_to_token)
+        end_time = time.time()
+        logger.info(f"Oracle Reference time: {end_time - start_time} s")
+        return target_logits, state
+    
     def rollout_policy(self,
                        timestep: int,
-                       logits: torch.LongTensor,
-                       target_tokens: Dict[str, torch.LongTensor] = None,
+                       last_predictions: torch.LongTensor, 
+                       state: Dict[str, torch.Tensor],
+                       logits: torch.FloatTensor,
+                       reference_policy:ReferencePolicyType,
                        rollout_mode: str = 'learned',
                        rollout_mixing_func: RolloutMixingProbFuncType = None,
-                      ) -> torch.LongTensor:
+                      ) -> torch.FloatTensor:
         """Rollout policy to use.
            This takes in predicted logits at timestep {t}^{th} and
            depending upon the rollout_mode replaces some of the predictions
@@ -298,35 +367,18 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             torch.LongTensor -- The method returns logits with rollout policy applied.
         """
         output_logits = logits
-        assert rollout_mode == 'learned' or target_tokens is not None, \
+        targets = state['rollout_params']['target_tokens'].get('tokens', None)
+        assert rollout_mode == 'learned' or targets is not None, \
             f"Rollout mode {rollout_mode} needs targets to be specified."
 
-        if rollout_mode == 'learned' or target_tokens is None:
+        if rollout_mode == 'learned' or targets is None:
             # For learned rollout policy, just return the same logits.
-            return output_logits
+            return output_logits, state
 
-        targets = target_tokens['tokens']
-        seq_len = targets.size(1)
+        target_logits, state = reference_policy(timestep, 
+                                         last_predictions, 
+                                         state,)
 
-        # So this must be prediction of last step,
-        # where there are no more
-        if seq_len > timestep + 1:  # + 1 because timestep is an index, indexed at 0.
-            # As we might be overriding  the next/predicted token/
-            # We have to use the value corresponding to {t+1}^{th}
-            # timestep.
-            target_at_timesteps = targets[:, timestep + 1]
-        else:
-            # We have overshot the seq_len, so just repeat the
-            # last token which is either _end_token or _pad_token.
-            target_at_timesteps = targets[:, -1]
-
-        # TODO: Add support to allow other types of reference policies.
-        # target_logits: (batch_size, num_classes).
-        # This tensor has 0 at targets and (near) -inf at other places.
-        target_logits = (target_at_timesteps.new_zeros(logits.shape) + 1e-45) \
-                            .scatter_(dim=1,
-                                      index=target_at_timesteps.unsqueeze(1),
-                                      value=1.0).log()
         batch_size = logits.size(0)
         if rollout_mode == 'reference':
              output_logits += target_logits
@@ -350,16 +402,14 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             output_logits += rollout_mixing_mask * target_logits
         else:
             raise ConfigurationError(f"Incompatible rollout mode: {rollout_mode}")
-        return output_logits
+        return output_logits, state
 
     def take_step(self,
                   timestep: int,
                   last_predictions: torch.Tensor,
                   state: Dict[str, torch.Tensor],
-                  target_tokens: Dict[str, torch.LongTensor] = None,
-                  rollin_mode: str = 'learned',
-                  rollout_mode: str = 'learned',
-                  rollout_mixing_func: RolloutMixingProbFuncType = None,
+                  rollin_policy:RollinPolicyType=default_rollin_policy,
+                  rollout_policy:RolloutPolicyType=default_rollout_policy,
                  ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         """
         Take a decoding step. This is called by the beam search class.
@@ -391,12 +441,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             equal to ``batch_size``, since the group may contain multiple states
             for each source sentence in the batch.
         """
-
-        input_choices = self.rollin_policy(timestep,
-                                           last_predictions,
-                                            target_tokens,
-                                            rollin_mode=rollin_mode)
-
+        input_choices = rollin_policy(timestep, last_predictions, state)
         # shape: (group_size, num_classes)
         class_logits, state = self._prepare_output_projections(input_choices, state)
 
@@ -406,11 +451,8 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             # shape: (group_size, num_classes)
             class_logits = class_logits + mask
 
-        class_logits = self.rollout_policy(timestep,
-                                            class_logits,
-                                            target_tokens,
-                                            rollout_mode=rollout_mode, 
-                                            rollout_mixing_func=rollout_mixing_func)
+        # shape: (group_size, num_classes)
+        class_logits, state = rollout_policy(timestep, last_predictions, state, class_logits)
         return class_logits, state
 
     @overrides
@@ -689,9 +731,13 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         if self.training:
             self._apply_scheduled_sampling()
 
-        rolling_policy=partial(self.take_step,
-                                target_tokens=target_tokens,
+        state['rollin_params'] = {}
+        state['rollin_params']['target_tokens'] = target_tokens
+        rollin_policy = partial(self.rollin_policy,
                                 rollin_mode=rollin_mode)
+
+        rolling_policy=partial(self.take_step,
+                               rollin_policy=rollin_policy)
 
         # shape (step_predictions): (batch_size, beam_size, num_decoding_steps)
         # shape (log_probabilities): (batch_size, beam_size)
@@ -761,12 +807,34 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 prediction_prefixes: torch.LongTensor = None,
                 target_prefixes: torch.LongTensor = None,
                 rollout_mixing_func: RolloutMixingProbFuncType = None,
+                reference_policy_type:str = "copy",
                ):
 
+        state['rollout_params'] = {}
+        if reference_policy_type == 'oracle':
+            reference_policy = partial(self.oracle_reference_policy,
+                                        token_to_idx=self._vocab._token_to_index['target_tokens'],
+                                        idx_to_token=self._vocab._index_to_token['target_tokens'],
+                                       )
+            num_steps_to_take = rollout_steps
+            state['rollout_params']['rollout_prefixes'] = prediction_prefixes
+        else:
+            reference_policy = self.copy_reference_policy            
+            num_steps_to_take = rollout_steps
+            state['rollout_params']['target_tokens'] = target_tokens or {}
+
+        rollout_policy = partial(self.rollout_policy,
+                                    rollout_mode=rollout_mode,
+                                    rollout_mixing_func=rollout_mixing_func,
+                                    reference_policy=reference_policy,
+                                )
         rolling_policy=partial(self.take_step,
-                               target_tokens=target_tokens,
-                               rollout_mode=rollout_mode,
-                               rollout_mixing_func=rollout_mixing_func)
+                               rollout_policy=rollout_policy)
+
+        # This is a hack to speed up performance
+        if rollout_mode == 'reference':
+            rolling_policy = lambda ts,lp,st,pp=None: reference_policy(ts, lp, st)
+
 
         # shape (step_predictions): (batch_size, beam_size, num_decoding_steps)
         # shape (log_probabilities): (batch_size, beam_size)
@@ -775,7 +843,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                     self._beam_search.search(start_predictions,
                                                 state,
                                                 rolling_policy,
-                                                max_steps=rollout_steps,
+                                                max_steps=num_steps_to_take,
                                                 beam_size=beam_size,
                                                 per_node_beam_size=per_node_beam_size,
                                                 sampled=sampled,

@@ -1,4 +1,6 @@
 from allennlp.common.registrable import Registrable
+from allennlp.data.vocabulary import Vocabulary
+import torch
 
 class Oracle(Registrable):
     def __init__(self, 
@@ -11,4 +13,10 @@ class Oracle(Registrable):
     def compute_sent_probs(self, sentences):
         return NotImplementedError
 
+    def reference_rollout(self, 
+                            prediction_prefixes: torch.LongTensor, 
+                            rollout_steps: int,
+                            vocab: Vocabulary,
+                            ):
+        return NotImplementedError
 
