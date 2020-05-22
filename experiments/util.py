@@ -381,7 +381,7 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
 
         parser.add_argument('--mixing_coeffs', nargs='+', type=float, default=[0, 0.25, 0.5,],
                                 help='Mixing coefficients for rollin and rollouts')
-        parser.add_argument('--temperature', type=float, default=1.0,
+        parser.add_argument('--temperature', type=float, default=10.0,
                             help='temperature for SEARNN experiments')
 
     if experiment_name == 'scheduled_sampling_ablation_experiments':
