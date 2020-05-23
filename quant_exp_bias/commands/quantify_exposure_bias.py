@@ -214,7 +214,7 @@ def quantify_exposure_bias(archive_file: str,
             os.makedirs(output_dir_trail, exist_ok=True)
             # Delete all the previous context of the file. SO/2769061.
             open(os.path.join(output_dir_trail, 'model_sampled_generated.txt'), "w").close()
-            open(os.path.join(output_dir_trail, 'oracle_sampled_generated.txt'), "w").close()
+            # open(os.path.join(output_dir_trail, 'oracle_sampled_generated.txt'), "w").close()
 
         for sample_num in range(num_length_samples):
             # sample sentence length
@@ -286,6 +286,14 @@ def quantify_exposure_bias(archive_file: str,
 
 
     logger.info("Done!!")
+    # return exp_biases, metrics['exposure_bias_mean'], metrics['exposure_bias_std'], \
+    #     df_p_qs, metrics['df_p_q_mean'], metrics['df_p_q_std'], \
+    #     df_q_ps, metrics['df_q_p_mean'], metrics['df_q_p_std'], \
+    #     metrics['H_m_m_mean'], metrics['H_m_m_std'], \
+    #     metrics['H_m_o_mean'], metrics['H_m_o_std'], \
+    #     metrics['H_o_m_mean'], metrics['H_o_m_std'], \
+    #     metrics['H_o_o_mean'], metrics['H_o_o_std']
+
     return exp_biases, metrics['exposure_bias_mean'], metrics['exposure_bias_std'], \
         df_p_qs, metrics['df_p_q_mean'], metrics['df_p_q_std'], \
         metrics['H_m_m_mean'], metrics['H_m_m_std'], \
