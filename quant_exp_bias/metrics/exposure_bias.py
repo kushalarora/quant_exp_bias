@@ -132,69 +132,74 @@ class ExposureBias(Metric):
 
             model_sampled_oracle_probs.append(model_sampled_oracle_probs_and_seq_probs[i][0])
         
-        oracle_sampled_batch_size = len(oracle_sampled_predictions)
-        df_q_ps = []
-        df_q_p = 0
-        df_q_p_count = 0
+        # oracle_sampled_batch_size = len(oracle_sampled_predictions)
+        # df_q_ps = []
+        # df_q_p = 0
+        # df_q_p_count = 0
         
-        # Compute DL(Q||M)
-        oracle_sampled_oracle_probs = []
-        oracle_sampled_oracle_probs_and_seq_probs = self._oracle.compute_sent_probs(oracle_sampled_predictions)
-        for i in range(oracle_sampled_batch_size):
-            if len(oracle_sampled_predictions[i]) == 0:
-                continue
+        # # Compute DL(Q||M)
+        # oracle_sampled_oracle_probs = []
+        # oracle_sampled_oracle_probs_and_seq_probs = self._oracle.compute_sent_probs(oracle_sampled_predictions)
+        # for i in range(oracle_sampled_batch_size):
+        #     if len(oracle_sampled_predictions[i]) == 0:
+        #         continue
             
-            values = []
-            prev_q_ps = []
-            seq_len = min(len(oracle_sampled_predictions[i]) + 1, 
-                            len(oracle_sampled_oracle_probs_and_seq_probs[i][1]),
-                                len(oracle_sampled_model_seq_probs[i]))
+        #     values = []
+        #     prev_q_ps = []
+        #     seq_len = min(len(oracle_sampled_predictions[i]) + 1, 
+        #                     len(oracle_sampled_oracle_probs_and_seq_probs[i][1]),
+        #                         len(oracle_sampled_model_seq_probs[i]))
 
-            if self._at_prefix_level:
-                df_q_p_seq = 0
-                prev_q_p = 1.0
-                for j in range(1, seq_len):
-                    if self._ctxt_size < j:
-                        c = self._ctxt_size
-                        P_c = oracle_sampled_oracle_probs_and_seq_probs[i][1][j-c]
-                        Q_c = oracle_sampled_model_seq_probs[i][j-c].item()
-                        prev_q_p = rfn_prefix(P_c, Q_c, prev_q_p, 1.0)
+        #     if self._at_prefix_level:
+        #         df_q_p_seq = 0
+        #         prev_q_p = 1.0
+        #         for j in range(1, seq_len):
+        #             if self._ctxt_size < j:
+        #                 c = self._ctxt_size
+        #                 P_c = oracle_sampled_oracle_probs_and_seq_probs[i][1][j-c]
+        #                 Q_c = oracle_sampled_model_seq_probs[i][j-c].item()
+        #                 prev_q_p = rfn_prefix(P_c, Q_c, prev_q_p, 1.0)
 
-                    # Here oracle_sampled_oracle_probs is Q because the samples
-                    # come from the oracle.
-                    P = oracle_sampled_oracle_probs_and_seq_probs[i][1][j]
-                    Q = oracle_sampled_model_seq_probs[i][j].item()
+        #             # Here oracle_sampled_oracle_probs is Q because the samples
+        #             # come from the oracle.
+        #             P = oracle_sampled_oracle_probs_and_seq_probs[i][1][j]
+        #             Q = oracle_sampled_model_seq_probs[i][j].item()
                     
-                    value, prev_q_p = self._Df(Q, P, prev_q_p, j+1)
+        #             value, prev_q_p = self._Df(Q, P, prev_q_p, j+1)
                     
 
-                    df_q_p_seq += 0.5 * value
-                    df_q_p_count += 1
-                    values.append(value)
-                    prev_q_ps.append(prev_q_p)
+        #             df_q_p_seq += 0.5 * value
+        #             df_q_p_count += 1
+        #             values.append(value)
+        #             prev_q_ps.append(prev_q_p)
                 
-                df_q_p += df_q_p_seq
-                df_q_ps.append(df_q_p_seq/seq_len)
-            else:
-                P = oracle_sampled_oracle_probs_and_seq_probs[i][0]
-                Q = oracle_sampled_model_probs[i].item()
+        #         df_q_p += df_q_p_seq
+        #         df_q_ps.append(df_q_p_seq/seq_len)
+        #     else:
+        #         P = oracle_sampled_oracle_probs_and_seq_probs[i][0]
+        #         Q = oracle_sampled_model_probs[i].item()
                 
-                value, _ = self._Df(Q, P, 1.0, seq_len)
-                df_q_p += value
+        #         value, _ = self._Df(Q, P, 1.0, seq_len)
+        #         df_q_p += value
 
-                df_q_ps.append(value)
-                df_q_p_count += seq_len
+        #         df_q_ps.append(value)
+        #         df_q_p_count += seq_len
 
-            oracle_sampled_oracle_probs.append(oracle_sampled_oracle_probs_and_seq_probs[i][0])
+        #     oracle_sampled_oracle_probs.append(oracle_sampled_oracle_probs_and_seq_probs[i][0])
 
-        self._total_value += df_p_q/df_p_q_count + df_q_p/df_q_p_count
+        self._total_value += df_p_q/df_p_q_count # + df_q_p/df_q_p_count
         self._df_p_q += df_p_q/df_p_q_count
-        self._df_q_p += df_q_p/df_q_p_count
+        # self._df_q_p += df_q_p/df_q_p_count
+        logging.info(f"KL(P || M) = {df_p_q/df_p_q_count:.4f}")
 
-        logging.info(f"KL(P || M) = {df_p_q/df_p_q_count:.4f} \t KL(Q || M) = {df_q_p/df_q_p_count:.4f}")
+        # logging.info(f"KL(P || M) = {df_p_q/df_p_q_count:.4f} \t KL(Q || M) = {df_q_p/df_q_p_count:.4f}")
 
-        return model_sampled_predictions, model_sampled_model_probs, model_sampled_oracle_probs, df_p_qs, \
-            oracle_sampled_predictions, oracle_sampled_model_probs, oracle_sampled_oracle_probs, df_q_ps
+        return { "model_sampled_predictions": model_sampled_predictions, 
+                 "model_sampled_model_probs": model_sampled_model_probs,
+                  "model_sampled_oracle_probs": model_sampled_oracle_probs, 
+                  "model_sampled_scores": df_p_qs,
+                } # \
+            # oracle_sampled_predictions, oracle_sampled_model_probs, oracle_sampled_oracle_probs, df_q_ps
 
     @overrides
     def get_metric(self, reset: bool = False):
@@ -205,18 +210,18 @@ class ExposureBias(Metric):
         """
         avg_exp_bias = self._total_value
         avg_df_p_q = self._df_p_q
-        avg_df_q_p = self._df_q_p
+        # avg_df_q_p = self._df_q_p
 
         if reset:
             self.reset()
 
-        return avg_exp_bias, avg_df_p_q, avg_df_q_p
+        return avg_exp_bias, avg_df_p_q #, avg_df_q_p
 
     @overrides
     def reset(self):
         self._total_value = 0.0
         self._df_p_q = 0.0
-        self._df_q_p = 0.0
+        # self._df_q_p = 0.0
 
     @staticmethod
     def DfBuilder(type='kl', rfn=rfn_sequence):
@@ -228,5 +233,5 @@ class ExposureBias(Metric):
             return lambda p, q, prev_p_q, n: ((np.sqrt(rfn(p, q, prev_p_q, n)) - 1)**2, rfn(p, q, prev_p_q, n))
         elif type == 'tv':
             return lambda p, q, prev_p_q, n: (np.abs(rfn(p, q, prev_p_q, n) - 1), rfn(p, q, prev_p_q, n))
-        elif type == 'js':
-            return lambda p, q, prev_p_q, n: (np.log10(2/(rfn(p, q, prev_p_q, n) + 1)), rfn(p, q, prev_p_q, n))
+        # elif type == 'js':
+        #     return lambda p, q, prev_p_q, n: (np.log10(2/(rfn(p, q, prev_p_q, n) + 1)), rfn(p, q, prev_p_q, n))

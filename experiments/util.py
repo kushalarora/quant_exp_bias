@@ -228,9 +228,7 @@ def one_exp_run(serialization_dir: str = None,
 
         exp_biases, exp_bias_mean, exp_bias_std, \
             df_p_qs, df_p_q_mean, df_p_q_std, \
-            df_q_ps, df_q_p_mean, df_q_p_std, \
-            h_m_m_mean, h_m_m_std, h_m_o_mean, h_m_o_std, \
-            h_o_m_mean, h_o_m_std, h_o_o_mean, h_o_o_std  = \
+            h_m_m_mean, h_m_m_std, h_m_o_mean, h_m_o_std, = \
                 quantify_exposure_bias_runner(qeb_args,
                                                 archive_file,
                                                 oracle_test_filename,
@@ -249,9 +247,9 @@ def one_exp_run(serialization_dir: str = None,
         metrics['df_p_q_mean'] = df_p_q_mean
         metrics['df_p_q_std'] = df_p_q_std
 
-        metrics['df_q_ps'] = df_q_ps
-        metrics['df_q_p_mean'] = df_q_p_mean
-        metrics['df_q_p_std'] = df_q_p_std
+        # metrics['df_q_ps'] = df_q_ps
+        # metrics['df_q_p_mean'] = df_q_p_mean
+        # metrics['df_q_p_std'] = df_q_p_std
 
         metrics['H_m_m_mean'] = h_m_m_mean
         metrics['H_m_m_std'] =  h_m_m_std
@@ -259,11 +257,11 @@ def one_exp_run(serialization_dir: str = None,
         metrics['H_m_o_mean'] = h_m_o_mean
         metrics['H_m_o_std'] = h_m_o_std
 
-        metrics['H_o_m_mean'] = h_o_m_mean
-        metrics['H_o_m_std'] = h_o_m_std
+        # metrics['H_o_m_mean'] = h_o_m_mean
+        # metrics['H_o_m_std'] = h_o_m_std
 
-        metrics['H_o_o_mean'] = h_o_o_mean
-        metrics['H_o_o_std'] = h_o_o_std
+        # metrics['H_o_o_mean'] = h_o_o_mean
+        # metrics['H_o_o_std'] = h_o_o_std
 
         metric_list.append(metrics)
 
@@ -284,9 +282,7 @@ def one_exp_run(serialization_dir: str = None,
 
         exp_biases, exp_bias_mean, exp_bias_std, \
             df_p_qs, df_p_q_mean, df_p_q_std, \
-            df_q_ps, df_q_p_mean, df_q_p_std, \
-            h_m_m_mean, h_m_m_std, h_m_o_mean, h_m_o_std, \
-            h_o_m_mean, h_o_m_std, h_o_o_mean, h_o_o_std  = \
+            h_m_m_mean, h_m_m_std, h_m_o_mean, h_m_o_std = \
                 quantify_exposure_bias_runner(qeb_args,
                                                 archive_file,
                                                 oracle_test_filename,
@@ -304,9 +300,9 @@ def one_exp_run(serialization_dir: str = None,
         metrics['df_p_q_mean'] = df_p_q_mean
         metrics['df_p_q_std'] = df_p_q_std
 
-        metrics['df_q_ps'] = df_q_ps
-        metrics['df_q_p_mean'] = df_q_p_mean
-        metrics['df_q_p_std'] = df_q_p_std
+        # metrics['df_q_ps'] = df_q_ps
+        # metrics['df_q_p_mean'] = df_q_p_mean
+        # metrics['df_q_p_std'] = df_q_p_std
 
         metrics['H_m_m_mean'] = h_m_m_mean
         metrics['H_m_m_std'] =  h_m_m_std
@@ -314,11 +310,11 @@ def one_exp_run(serialization_dir: str = None,
         metrics['H_m_o_mean'] = h_m_o_mean
         metrics['H_m_o_std'] = h_m_o_std
 
-        metrics['H_o_m_mean'] = h_o_m_mean
-        metrics['H_o_m_std'] = h_o_m_std
+        # metrics['H_o_m_mean'] = h_o_m_mean
+        # metrics['H_o_m_std'] = h_o_m_std
         
-        metrics['H_o_o_mean'] = h_o_o_mean
-        metrics['H_o_o_std'] = h_o_o_std
+        # metrics['H_o_o_mean'] = h_o_o_mean
+        # metrics['H_o_o_std'] = h_o_o_std
 
         metrics[key] = value
         metric_list.append(metrics)
@@ -439,14 +435,12 @@ def get_grammar_iterator(experiment: Union[Experiment, OfflineExperiment],
                     params)
 
 def get_result_iterator(run_metrics: Dict[str, Any]):
-    for exp_bias_idx, (exp_bias, df_p_q, df_q_p) in enumerate(zip(run_metrics['exp_biases'],
-                                                                      run_metrics['df_p_qs'],
-                                                                      run_metrics['df_q_ps'])):
+    for exp_bias_idx, (exp_bias, df_p_q) in enumerate(zip(run_metrics['exp_biases'],
+                                                          run_metrics['df_p_qs'])):
             sleep(randint(1, 10)/100.0)
             yield {
                 'exp_bias': exp_bias,
                 'Df_p_q': df_p_q,
-                'Df_q_p': df_q_p,
                 'exp_bias_idx': exp_bias_idx,
             }
 
@@ -462,16 +456,16 @@ def get_mean_std_results(num_run:int,
         'exp_bias_std': run_metrics['exp_bias_std'],
         'df_p_q_mean': run_metrics['df_p_q_mean'],
         'df_p_q_std': run_metrics['df_p_q_std'],
-        'df_q_p_mean': run_metrics['df_q_p_mean'],
-        'df_q_p_std': run_metrics['df_q_p_std'],
+        # 'df_q_p_mean': run_metrics['df_q_p_mean'],
+        # 'df_q_p_std': run_metrics['df_q_p_std'],
         'H_m_m_mean': run_metrics['H_m_m_mean'],
         'H_m_m_std': run_metrics['H_m_m_std'],
         'H_m_o_mean': run_metrics['H_m_o_mean'],
         'H_m_o_std': run_metrics['H_m_o_std'],
-        'H_o_m_mean': run_metrics['H_o_m_mean'],
-        'H_o_m_std': run_metrics['H_o_m_std'],
-        'H_o_o_mean': run_metrics['H_o_o_mean'],
-        'H_o_o_std': run_metrics['H_o_o_std'],
+        # 'H_o_m_mean': run_metrics['H_o_m_mean'],
+        # 'H_o_m_std': run_metrics['H_o_m_std'],
+        # 'H_o_o_mean': run_metrics['H_o_o_mean'],
+        # 'H_o_o_std': run_metrics['H_o_o_std'],
     }
 
 def get_model_overrides_func(embed_dim: int, hidden_dim: int, num_layers: int):

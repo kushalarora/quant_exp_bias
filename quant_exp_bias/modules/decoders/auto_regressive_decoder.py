@@ -606,9 +606,8 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                                                         best_predictions[:,1:].unsqueeze(2)) \
                                                                 .squeeze(2))
 
-                model_sampled_predicted_tokens, model_sampled_model_probs, model_sampled_oracle_probs, df_p_qs, \
-                    oracle_sampled_predicted_tokens, oracle_sampled_model_probs, oracle_sampled_oracle_probs, df_q_ps = \
-                            self._exposure_bias(model_sampled_model_probs=normalized_prediction_losses,
+                exp_bias_dict = self._exposure_bias(
+                                                model_sampled_model_probs=normalized_prediction_losses,
                                                 model_sampled_predictions=predicted_tokens,
                                                 model_sampled_model_seq_probs=model_sampled_model_seq_probs.data.cpu(),
                                                 use_js=True,
@@ -616,15 +615,9 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                                 oracle_sampled_predictions=oracle_sampled_predicted_tokens,
                                                 oracle_sampled_model_seq_probs=oracle_sampled_model_seq_probs.data.cpu())
 
-                output_dict['model_sampled_model_probs'] = model_sampled_model_probs
-                output_dict['model_sampled_oracle_probs'] = model_sampled_oracle_probs
-                output_dict['oracle_sampled_model_probs'] = oracle_sampled_model_probs
-                output_dict['oracle_sampled_oracle_probs'] = oracle_sampled_oracle_probs
-                output_dict['model_sampled_scores'] = df_p_qs
-                output_dict['oracle_sampled_scores'] = df_q_ps
-
+                output_dict.update(exp_bias_dict)
                 output_dict['prediction_loss'] = prediction_loss.data.cpu()
-                output_dict['model_sampled_predicted_tokens'] = self._detokenizer(model_sampled_predicted_tokens)
+                output_dict['model_sampled_predicted_tokens'] = self._detokenizer(predicted_tokens)
                 output_dict['oracle_sampled_predicted_tokens'] = self._detokenizer(oracle_sampled_predicted_tokens)
 
         return output_dict
@@ -1082,10 +1075,10 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         all_metrics: Dict[str, float] = {}
 
         if get_exposure_bias and self._exposure_bias and not self.training:
-            exposure_bias, df_p_q, df_q_p = self._exposure_bias.get_metric(reset=reset)
+            exposure_bias, df_p_q = self._exposure_bias.get_metric(reset=reset)
             all_metrics.update({'exposure_bias': exposure_bias,
                                 'df_p_q': df_p_q,
-                                'df_q_p': df_q_p,
+                                # 'df_q_p': df_q_p,
                                })
             return all_metrics
 
