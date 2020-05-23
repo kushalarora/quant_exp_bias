@@ -216,18 +216,19 @@ class QuantExpSEARNNDecoder(QuantExpAutoRegressiveSeqDecoder):
 
         rollout_contexts = []
         all_rollouts = []
-        for step in self._rollout_iter_function(num_decoding_steps + 1):
+
+        for i, step in enumerate(self._rollout_iter_function(num_decoding_steps + 1)):
             all_rollouts.append(step)
-            # Always do rollout for first step. 
+            # Always do rollout for first step and the last step. 
             # Do not rollout for (1 - self._rollout_ratio) steps.
-            if random.random() < (1 - self._rollout_ratio):
+            if i > 0 and step < num_decoding_steps and \
+                 random.random() < (1 - self._rollout_ratio):
                 continue
             rollout_contexts.append(step)
 
-        if len(rollout_contexts) < 2:
-            while len(rollout_contexts) < 2:
-                rollout_idx = random.randint(0, len(all_rollouts)-1)
-                rollout_contexts.append(all_rollouts[rollout_idx])
+        while len(rollout_contexts) < 2:
+            rollout_idx = random.randint(0, len(all_rollouts)-1)
+            rollout_contexts.append(all_rollouts[rollout_idx])
 
         for step in rollout_contexts:
             # There might be a case where max_decoding_steps < num_decoding_steps, in this 
