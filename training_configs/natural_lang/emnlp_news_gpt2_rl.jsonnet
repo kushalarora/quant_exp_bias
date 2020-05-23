@@ -27,7 +27,7 @@
       "use_in_seq2seq_mode": false,
       "decoder": {
         "type": "quant_exp_reinforce_decoder",
-        "generation_batch_size": 64,
+        "generation_batch_size": 128,
         "max_decoding_steps": 50,
         "decoder_net": {
           "type": "quant_exp_bias_lstm_cell",
@@ -62,11 +62,11 @@
           "oracle": {
             "type": "gpt2_oracle",
             "model_name": "gpt2",
-            "batch_size": 20,
+            "batch_size": 10,
             "cuda_device": -2,
           },
         },
-        "rollout_ratio": 0.40,
+        "rollout_ratio": 0.33,
         "rollin_rollout_mixing_coeff": 0.5,
       },
       "initializer": [
@@ -92,7 +92,7 @@
   },
   "trainer": {
     "num_epochs": 20,
-    //"validation_metric": "-perplexity",
+    // "validation_metric": "-perplexity",
     "cuda_device" : 0,
     "optimizer": {
       "type": "adam",

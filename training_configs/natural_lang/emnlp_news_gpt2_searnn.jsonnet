@@ -24,6 +24,7 @@
     // "validation_data_path": "data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered.dev",
     "model": {
       "type": "quant_exp_composed_lm",
+      "generation_batch_size": 128,
       "use_in_seq2seq_mode": false,
       "decoder": {
         "type": "quant_exp_searnn_decoder",
@@ -64,8 +65,8 @@
           "type": "bleu",
         },
         "temperature": 10,
-        "num_neighbors_to_add": 4,
-        "num_tokens_to_rollout": 15,
+        "num_neighbors_to_add": 6,
+        "num_tokens_to_rollout": 20,
         "rollout_ratio": 0.40,
 
       }
