@@ -4,6 +4,7 @@ import math
 import numpy as np
 import os
 import sys
+import uuid
 
 from datetime import datetime
 from random import randint
@@ -148,10 +149,12 @@ def one_exp_run(serialization_dir: str = None,
                 ):
 
     overrides = default_overides_func()
+    # UUID adds a random id at the end in case two or more runs start at the same time.
     run_serialization_dir = run_serialization_dir or \
                                 os.path.join(serialization_dir, 
                                             str(num_samples), 
-                                            str(run))
+                                            str(run), 
+                                            str(uuid.uuid4().fields[0])) 
     if not only_quantify:
         # This is grammar with epsilon 0 to sample correct sequence.
         if shall_generate_grammar_file:
