@@ -129,7 +129,6 @@ class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
                                        target_tokens: Dict[str, torch.LongTensor]):
 
         if self._combiner_mode == 'rl':
-
             # rollin_logits: (batch_size, num_rollin_steps, num_classes)
             rollin_logits = rollin_output_dict['logits'].squeeze(1)
             batch_size, num_rollin_steps, num_classes = rollin_logits.shape
@@ -159,9 +158,11 @@ class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
                 if self.training_iteration < self._num_mle_iters:
                     loss_batch = rollin_output_dict['loss_batch']
                 else:
-                    rewards = rollout_reward_batch.detach()
-                    rewards = F.softmax(rewards, dim=1) #torch.exp(rewards) # (rewards - rewards.mean())/rewards.std()
-
+                    # rewards = rollout_reward_batch.detach()
+                    # rewards = F.softmax(rewards * self._temperature, dim=1) 
+                    rewards = torch.exp(rollout_reward_batch.detach()) 
+                    # rewards = (rewards - rewards.min())/(rewards.max() - rewards.min())
+                
                     # predictions: (batch_size, rollout_steps, rollout_steps - 1)
                     predictions = rollout_output_dict["predictions"].squeeze(dim=2)
                     predictions = predictions[:, :, 1:]
@@ -190,6 +191,9 @@ class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
                     num_tokens_per_seq = log_prob_mask.sum(dim=-1)
 
                     rollout_rl_loss_batch = (summed_reward_log_probs/num_tokens_per_seq).sum(dim=-1)
+                    # if self.training_iteration % 20 == 1:
+                        # import pdb; pdb.set_trace()
+                        # for x in self._decode_tokens( predictions[2], vocab_namespace=self._target_namespace, truncate=True): print(' '.join(x))
 
                     loss_batch = self._rollin_rollout_mixing_coeff * rollin_output_dict['loss_batch'] + \
                                   (1 - self._rollin_rollout_mixing_coeff) * rollout_rl_loss_batch
