@@ -5,6 +5,9 @@ import os
 import sys
 
 import random
+# Ablation experiments will be done on 
+# a single run and hence we fix the seed
+# so that it uses the same dataset split.
 random.seed(220488)
 
 from experiments.util import initialize_experiments, get_experiment_args, \
