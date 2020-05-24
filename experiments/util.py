@@ -3,8 +3,10 @@ import json
 import math
 import numpy as np
 import os
+import random
 import sys
 import uuid
+
 
 from datetime import datetime
 from random import randint
@@ -80,7 +82,7 @@ def initialize_experiments(experiment_name: str,
     
     if debug:
         experiment_name += '_debug'
-    
+        random.seed(220488)
     workspace_name = 'quantifying_exposure_bias'
     try:
         if offline:
@@ -389,6 +391,12 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
 
         parser.add_argument('--num_epochs', type=int, 
                                 default=20, help='Scheduled Sampling experiment batch size for natural language experiments.')
+        parser.add_argument('--ss_configs', nargs='+', type=str, 
+                                default=['u_0.05', 'u_0.10', 'u_0.25',
+                                            'l_0.50', 'l_0.75', 'l_0.90',
+                                            'q_0.50', 'q_0.75', 'q_0.90'],
+                                help='Scheduled Sampling configs to try.')
+
     return parser.parse_args()
 
 def calculate_ss_k(num_samples, batch_size, num_epochs, ratio_level=0.5):
@@ -530,3 +538,19 @@ def get_rollout_cost_function_configs(experiment_type, cost_func, mixing_coeff, 
         }
     }
     return lambda: json.dumps(overrides_dict)
+
+def get_scheduled_sampling_configs(num_samples, batch_size, num_epochs):
+    k = lambda ratio_level: calculate_ss_k(num_samples, batch_size, 
+                                            num_epochs, ratio_level=ratio_level)
+    return {
+            'u_0': ('uniform', 0.0, -1),
+            'u_0.05':  ('uniform', 0.05, -1),
+            'u_0.10':  ('uniform', 0.1, -1),
+            'u_0.25':  ('uniform', 0.25, -1),
+            'q_0.50': ('quantized', 1.0, k(0.5)),  # Quantized increase ss ratio.
+            'q_0.75': ('quantized', 1.0, k(0.75)),  # Quantized increase ss ratio.
+            'q_0.90': ('quantized', 1.0, k(0.90)),  # Quantized increase ss ratio.
+            'l_0.50': ('linear', 1.0, k(0.5)),  # Linearly increase ss ratio.
+            'l_0.75': ('linear', 1.0, k(0.75)),  # Linearly increase ss ratio.
+            'l_0.90': ('linear', 1.0, k(0.90)),  # Linearly increase ss ratio.
+           }

@@ -4,10 +4,14 @@
 import os
 import sys
 
+import random
+random.seed(220488)
+
 from experiments.util import initialize_experiments, get_experiment_args, \
                              one_exp_run, get_mean_std_results, \
                              get_result_iterator, calculate_ss_k,\
-                             get_scheduled_sampling_overrides_func
+                             get_scheduled_sampling_overrides_func, \
+                             get_scheduled_sampling_configs
 
 args = get_experiment_args("natural_language", "scheduled_sampling_ablation_experiments")
 
@@ -21,20 +25,10 @@ main_args, serialization_dir, param_path, experiment_id, \
                                     )
 
 
-k = lambda ratio_level: calculate_ss_k(args.num_samples, args.batch_size, 
-                                        args.num_epochs, ratio_level=ratio_level)
+scheduled_sampling_dict = get_scheduled_sampling_configs(args.num_samples,
+                                                         args.batch_size, 
+                                                         args.num_epochs)
 
-scheduled_sampling_ratios  = [
-        ('uniform', 0.0, -1), ('uniform', 0.05, -1), ('uniform', 0.1, -1), ('uniform', 0.25, -1), ('uniform', 0.5, -1), # Fixed SS ratio
-        ('quantized', 1.0, k(0.25)),  # Quantized increase ss ratio.
-        ('quantized', 1.0, k(0.5)),  # Quantized increase ss ratio.
-        ('quantized', 1.0, k(0.75)),  # Quantized increase ss ratio.
-        ('quantized', 1.0, k(0.90)),  # Quantized increase ss ratio.
-        ('linear', 1.0, k(0.25)),  # Linearly increase ss ratio.
-        ('linear', 1.0, k(0.5)),  # Linearly increase ss ratio.
-        ('linear', 1.0, k(0.75)),  # Linearly increase ss ratio.
-        ('linear', 1.0, k(0.90)),  # Linearly increase ss ratio.
-]
 num_samples_and_runs = [(100000,4)]
 
 experiment.log_parameters({'serialization_dir': serialization_dir,
@@ -42,16 +36,18 @@ experiment.log_parameters({'serialization_dir': serialization_dir,
                           'param_path': param_path,
                           'experiment_id': experiment_id})
 
-def scheduled_sampling_ablation_experiments(scheduled_sampling_ratios, 
+def scheduled_sampling_ablation_experiments(scheduled_sampling_dict, 
                                     main_args, 
                                     serialization_dir, 
                                     param_path,
                                     num_samples,
                                     num_runs,
+                                    ss_configs,
                                   ):
     step = 0
     orig_serialization_dir = serialization_dir
-    for ss_type, ss_ratio, ss_k in scheduled_sampling_ratios:
+    for ss_config in ss_configs:
+        ss_type, ss_ratio, ss_k = scheduled_sampling_dict[ss_config]
         serialization_dir = os.path.join(orig_serialization_dir, f'{ss_type}_{ss_ratio}_{ss_k}')
         overrides_func = get_scheduled_sampling_overrides_func(ss_type, ss_ratio, ss_k)
 
@@ -87,16 +83,18 @@ def scheduled_sampling_ablation_experiments(scheduled_sampling_ratios,
 
 if args.all:
     for num_samples, num_runs in num_samples_and_runs:
-        scheduled_sampling_ablation_experiments(scheduled_sampling_ratios,
+        scheduled_sampling_ablation_experiments(scheduled_sampling_dict,
                                                 main_args,
                                                 serialization_dir,
                                                 param_path,
                                                 num_samples,
-                                                num_runs)
+                                                num_runs,
+                                                args.ss_configs)
 else:
-    scheduled_sampling_ablation_experiments(scheduled_sampling_ratios,
+    scheduled_sampling_ablation_experiments(scheduled_sampling_dict,
                                             main_args,
                                             serialization_dir,
                                             param_path,
                                             args.num_samples,
-                                            args.num_runs)
+                                            args.num_runs, 
+                                            args.ss_configs)
