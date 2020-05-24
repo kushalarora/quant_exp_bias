@@ -1,4 +1,5 @@
 {
+    "random_seed": null,
     "dataset_reader": {
       "type": "quant_exp_language_modeling",
       "token_indexers": {
@@ -24,11 +25,10 @@
     // "validation_data_path": "data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered.dev",
     "model": {
       "type": "quant_exp_composed_lm",
-      "generation_batch_size": 128,
       "use_in_seq2seq_mode": false,
       "decoder": {
         "type": "quant_exp_searnn_decoder",
-        "generation_batch_size": 64,
+        "generation_batch_size": 128,
         "max_decoding_steps": 50,
         "rollin_mode":  std.extVar("rollin_mode"),
         "rollout_mode": std.extVar("rollout_mode"),
@@ -65,9 +65,9 @@
           "type": "bleu",
         },
         "temperature": 10,
-        "num_neighbors_to_add": 6,
-        "num_tokens_to_rollout": 20,
-        "rollout_ratio": 0.40,
+        "num_neighbors_to_add": 0,
+        "num_tokens_to_rollout": 25,
+        "rollout_ratio": 0.25,
 
       }
   },
@@ -80,7 +80,7 @@
   },
   "trainer": {
     "num_epochs": 20,
-    "validation_metric": "-perplexity",
+    //"validation_metric": "-perplexity",
     "cuda_device" : 0,
     "grad_clipping": 5.0,
     "optimizer": {

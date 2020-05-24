@@ -380,11 +380,15 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
         parser.add_argument('--rollout_cost_funcs', nargs='+', type=str, 
                                 default=['noisy_oracle'], 
                                 help='Type of Oracle to use')
-
         parser.add_argument('--mixing_coeffs', nargs='+', type=float, default=[0, 0.25, 0.5,],
                                 help='Mixing coefficients for rollin and rollouts')
+
+    if experiment_name == 'searnn_ablation_experiments' or \
+        experiment_name == 'searnn':
         parser.add_argument('--temperature', type=float, default=10.0,
                             help='temperature for SEARNN experiments')
+        parser.add_argument('--neighbors', type=int, default=6,
+                            help='Number of neighbors to add for SEARNN experiments')
 
     if experiment_name == 'scheduled_sampling_ablation_experiments':
         parser.add_argument('--batch_size', type=int, 
@@ -509,7 +513,8 @@ def get_scheduled_sampling_overrides_func(ss_type:str, ss_ratio:float, ss_k:int)
                                 }
                             })
 
-def get_rollout_cost_function_configs(experiment_type, cost_func, mixing_coeff, temperature):
+def get_rollout_cost_function_configs(experiment_type, cost_func, mixing_coeff, 
+                                        temperature=1, num_neighbors_to_add=-1):
     if cost_func == 'bleu':
         rollout_cost_func_dict = { "type": "bleu",}
         temperature = 100
@@ -523,7 +528,7 @@ def get_rollout_cost_function_configs(experiment_type, cost_func, mixing_coeff, 
         elif experiment_type == 'natural_language':
             oracle = {
                     "type": "gpt2_oracle",
-                    "model_name": "gpt2",
+                    "model_name": "distilgpt2",
                     "batch_size": 8,
                     "cuda_device": -2,
                 }
@@ -537,10 +542,12 @@ def get_rollout_cost_function_configs(experiment_type, cost_func, mixing_coeff, 
             "decoder": {
                 "rollout_cost_function": rollout_cost_func_dict,
                 "rollin_rollout_mixing_coeff": mixing_coeff,
-                "temperature": temperature
+                "temperature": temperature,
             }, 
         }
     }
+    if num_neighbors_to_add > -1:
+        overrides_dict["model"]["decoder"]["num_neighbors_to_add"] = num_neighbors_to_add
     return lambda: json.dumps(overrides_dict)
 
 def get_scheduled_sampling_configs(num_samples, batch_size, num_epochs):

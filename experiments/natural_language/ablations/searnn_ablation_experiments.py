@@ -2,6 +2,13 @@
 # coding: utf-8
 import itertools
 import os
+
+import random
+# Ablation experiments will be done on 
+# a single run and hence we fix the seed
+# so that it uses the same dataset split.
+random.seed(220488)
+
 import sys
 
 from experiments.util import initialize_experiments, get_experiment_args, \
@@ -39,7 +46,8 @@ def searnn_ablation_experiments(rollin_rollout_configs,
 
         serialization_dir = os.path.join(orig_serialization_dir, f'{rollin_policy}_{rollout_policy}_{cost_func}_{mixing_coeff}')
         overrides_func=get_rollout_cost_function_configs("natural_language", cost_func, 
-                                                            mixing_coeff, args.temperature)
+                                                            mixing_coeff, args.temperature, 
+                                                            args.neighbors)
         
         for num_run in range(num_runs):
             run_metrics = one_exp_run(serialization_dir=serialization_dir, 
