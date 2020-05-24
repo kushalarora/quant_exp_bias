@@ -83,6 +83,7 @@ def initialize_experiments(experiment_name: str,
     if debug:
         experiment_name += '_debug'
         random.seed(220488)
+
     workspace_name = 'quantifying_exposure_bias'
     try:
         if offline:
@@ -404,8 +405,11 @@ def calculate_ss_k(num_samples, batch_size, num_epochs, ratio_level=0.5):
     num_iteration_per_batch = num_samples/batch_size
     iteration_to_ratio = num_iteration_per_batch * int((num_epochs + 1)*ratio_level)
     k_func = lambda k: k/(k + math.exp(iteration_to_ratio/k))
-    while low <= high:
+    while low < high:
         mid = (high + low)//2
+        if mid == high or mid == low:
+            return mid
+            
         k_mid = k_func(mid)
         if k_mid > 0.505:
             high = mid
