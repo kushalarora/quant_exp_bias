@@ -124,7 +124,6 @@ def sample_oracle(params: Params,
             # 1.2 to get 10% test and valid sets.
             num_samples = math.ceil(1.2 * num_samples)
             
-            random.seed(datetime.now())
             sample_idxs = sorted(random.sample(range(filesize), num_samples))
             oracle_sample_iterator = []
             sample_count = 0
