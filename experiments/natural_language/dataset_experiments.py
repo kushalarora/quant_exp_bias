@@ -3,26 +3,15 @@
 from experiments.util import initialize_experiments, get_experiment_args, \
                              one_exp_run, get_mean_std_results, get_result_iterator
 
-args = get_experiment_args("natural_language", "dataset_experiments")
-
-main_args, serialization_dir, param_path, experiment_id, \
-        experiment = initialize_experiments('natural_lang/dataset_experiments',
-                                            output_dir=args.output_dir,
-                                            param_path = 'training_configs/natural_lang/emnlp_news_gpt2.jsonnet',
-                                            debug=args.debug,
-                                            offline=args.offline,
-                                            experiment_text=args.exp_msg,
-                                           )
-
-dataset_experiments_params = [(10000, 8), (50000, 6) , (500000, 4), (2000000, 2), (5000000, 1)]
-
 def dataset_experiments(main_args,
                         serialization_dir,
                         param_path,
                         num_samples,
                         num_runs,
+                        experiment=None,
                        ):
     step = 0
+    run_metrics_lists = []
     for num_run in range(num_runs):
         run_metrics = one_exp_run(serialization_dir=serialization_dir,
                                     num_samples=num_samples,
@@ -36,14 +25,34 @@ def dataset_experiments(main_args,
         run_metrics = run_metrics[0]
 
         for result in get_result_iterator(run_metrics):
-            experiment.log_metrics(result, step=step)
+            if experiment:
+                experiment.log_metrics(result, step=step)
             step += 1
 
         mean_results = get_mean_std_results(num_run, num_samples, run_metrics)
-        experiment.log_metrics(mean_results, step=step)
+        if experiment:
+            experiment.log_metrics(mean_results, step=step)
 
-if args.all:
-    for num_samples, num_runs in dataset_experiments_params:
-        dataset_experiments(main_args, serialization_dir, param_path, num_samples, num_runs)
-else:
-    dataset_experiments(main_args, serialization_dir, param_path, args.num_samples, args.num_runs)
+        run_metrics_lists.append(run_metrics)
+    return run_metrics_lists
+
+if __name__ == '__main__':
+    args = get_experiment_args("natural_language", "dataset_experiments")
+
+    main_args, serialization_dir, param_path, experiment_id, \
+            experiment = initialize_experiments('natural_lang/dataset_experiments',
+                                                output_dir=args.output_dir,
+                                                param_path = 'training_configs/natural_lang/emnlp_news_gpt2.jsonnet',
+                                                debug=args.debug,
+                                                offline=args.offline,
+                                                experiment_text=args.exp_msg,
+                                            )
+
+    dataset_experiments_params = [(10000, 8), (50000, 6) , (500000, 4), (2000000, 2), (5000000, 1)]
+
+    if args.all:
+        for num_samples, num_runs in dataset_experiments_params:
+            dataset_experiments(main_args, serialization_dir, param_path, num_samples, num_runs, experiment)
+    else:
+        dataset_experiments(main_args, serialization_dir, 
+                            param_path, args.num_samples, args.num_runs, experiment)

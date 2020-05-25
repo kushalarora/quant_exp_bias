@@ -2,9 +2,17 @@
 import itertools
 import os
 
+import random
+# Ablation experiments will be done on 
+# a single run and hence we fix the seed
+# so that it uses the same dataset split.
+random.seed(220488)
+
 from experiments.util import initialize_experiments, get_experiment_args, \
                              one_exp_run, get_rollout_cost_function_configs, \
                              get_mean_std_results, get_result_iterator
+
+from experiments.natural_language.dataset_experiments import dataset_experiments
 
 args = get_experiment_args("natural_language", "reinforce_ablation_experiments")
 
@@ -22,6 +30,9 @@ num_samples_and_runs = [(10000, 4)]
 
 samples2pretrained_model = {
     10000: '/home/karora/scratch/quant_exp_bias/natural_lang/dataset_experiments/05_13_2020_01_36_02/10000/0/',
+    5000: '/home/karora/scratch/quant_exp_bias/natural_lang/dataset_experiments/05_22_2020_01_11_03/5000/0/',
+    1000: '/home/karora/scratch/quant_exp_bias/natural_lang/dataset_experiments/05_20_2020_22_39_35/1000/0',
+    25000: '/home/karora/scratch/quant_exp_bias/natural_lang/dataset_experiments/05_13_2020_01_36_02/10000/0/',
 }
 
 def reinforce_ablation_experiments(main_args,
@@ -32,8 +43,10 @@ def reinforce_ablation_experiments(main_args,
                           rollout_cost_funcs,
                           mixing_coeffs,
                         ):
-
-    pretrained_model = samples2pretrained_model[num_samples]
+    dataset_metrics = dataset_experiments(main_args, orig_serialization_dir, 
+                            'training_configs/natural_lang/emnlp_news_gpt2.jsonnet', 
+                            num_samples, 1)
+    pretrained_model = dataset_metrics[0]['run_serialization_dir']
     os.environ['VOCAB_PATH'] = os.path.join(pretrained_model, 'training/vocabulary')
     os.environ['WEIGHT_FILE_PATH'] = os.path.join(pretrained_model, 'training/best.th')
 
@@ -41,9 +54,10 @@ def reinforce_ablation_experiments(main_args,
     step = 0
     for cost_func, mixing_coeff in itertools.product(rollout_cost_funcs, mixing_coeffs):
         serialization_dir = os.path.join(orig_serialization_dir, f'{cost_func}_{mixing_coeff}')
-        overrides_func=get_rollout_cost_function_configs("natural_language", cost_func, 
-                                                            mixing_coeff, args.temperature)
-        
+        overrides_func=get_rollout_cost_function_configs("natural_language", 
+                                                            cost_func, 
+                                                            mixing_coeff)
+
         for num_run in range(num_runs):
             run_metrics = one_exp_run(serialization_dir=serialization_dir,
                                         num_samples=num_samples,
@@ -54,6 +68,7 @@ def reinforce_ablation_experiments(main_args,
                                         dataset_filename='data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered',
                                         oracle_train_filename=os.path.join(pretrained_model, 'data/oracle_samples-train.txt'),
                                         oracle_dev_filename=os.path.join(pretrained_model, 'data/oracle_samples-dev.txt'),
+                                        oracle_test_filename=os.path.join(pretrained_model, 'data/oracle_samples-test.txt'),
                                      )
 
             assert len(run_metrics) == 1, \
@@ -70,7 +85,7 @@ def reinforce_ablation_experiments(main_args,
                 'mixing_coeff': mixing_coeff,
             })
             experiment.log_metrics(mean_results, step=step)
-
+    return 
 
 if args.all:
     for num_samples, num_runs in num_samples_and_runs:

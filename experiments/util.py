@@ -268,6 +268,7 @@ def one_exp_run(serialization_dir: str = None,
 
         # metrics['H_o_o_mean'] = h_o_o_mean
         # metrics['H_o_o_std'] = h_o_o_std
+        metrics['run_serialization_dir'] = run_serialization_dir
 
         metric_list.append(metrics)
 
@@ -323,6 +324,7 @@ def one_exp_run(serialization_dir: str = None,
         # metrics['H_o_o_std'] = h_o_o_std
 
         metrics[key] = value
+        metrics['run_serialization_dir'] = run_serialization_dir
         metric_list.append(metrics)
     return metric_list
 
