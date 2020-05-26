@@ -79,7 +79,7 @@
       "max_instances_in_memory": 500000
   },
   "trainer": {
-    "num_epochs": 10,
+    "num_epochs": 20,
     //"validation_metric": "-perplexity",
     "cuda_device" : 0,
     "grad_clipping": 5.0,
