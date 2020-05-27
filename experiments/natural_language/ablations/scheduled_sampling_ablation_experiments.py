@@ -27,12 +27,11 @@ main_args, serialization_dir, param_path, experiment_id, \
                                         experiment_text=args.exp_msg,
                                     )
 
+num_samples_and_runs = [(100000,4)]
 
 scheduled_sampling_dict = get_scheduled_sampling_configs(args.num_samples,
                                                          args.batch_size, 
                                                          args.num_epochs)
-
-num_samples_and_runs = [(100000,4)]
 
 experiment.log_parameters({'serialization_dir': serialization_dir,
                           'main_args': main_args,
