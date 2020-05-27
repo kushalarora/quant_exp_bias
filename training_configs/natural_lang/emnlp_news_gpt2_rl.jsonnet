@@ -69,6 +69,7 @@
         },
         "rollout_ratio": 0.33,
         "rollin_rollout_mixing_coeff": 0.5,
+        "detach_rollin_logits": true,
       },
       "initializer": [
           ["_decoder._decoder_net.*|_decoder._output_projection*|_decoder.target_embedder*|_decoder._dropout",

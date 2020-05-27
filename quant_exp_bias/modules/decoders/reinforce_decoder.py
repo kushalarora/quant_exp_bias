@@ -60,7 +60,7 @@ class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
                  do_max_rollout_steps: bool = True,
                  num_mle_iters: int = 0,
                  rollin_rollout_mixing_coeff: float = 0.5,
-                 detach_rollin_logits: bool = False,
+                 detach_rollin_logits: bool = True,
                  rollout_ratio: float = 1.0,
                  ) -> None:
 
@@ -191,9 +191,9 @@ class QuantExpReinforceDecoder(QuantExpSEARNNDecoder):
                     num_tokens_per_seq = log_prob_mask.sum(dim=-1)
 
                     rollout_rl_loss_batch = (summed_reward_log_probs/num_tokens_per_seq).sum(dim=-1)
-                    # if self.training_iteration % 20 == 1:
+                    if self.training_iteration % 100 == 1:
                         # import pdb; pdb.set_trace()
-                        # for x in self._decode_tokens( predictions[2], vocab_namespace=self._target_namespace, truncate=True): print(' '.join(x))
+                        for x in self._decode_tokens( predictions[2], vocab_namespace=self._target_namespace, truncate=True): print(' '.join(x))
 
                     loss_batch = self._rollin_rollout_mixing_coeff * rollin_output_dict['loss_batch'] + \
                                   (1 - self._rollin_rollout_mixing_coeff) * rollout_rl_loss_batch

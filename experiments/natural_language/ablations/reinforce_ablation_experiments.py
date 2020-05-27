@@ -42,11 +42,16 @@ def reinforce_ablation_experiments(main_args,
                           num_runs,
                           rollout_cost_funcs,
                           mixing_coeffs,
+                          use_pretrained_model=False,
                         ):
-    dataset_metrics = dataset_experiments(main_args, orig_serialization_dir, 
-                            'training_configs/natural_lang/emnlp_news_gpt2.jsonnet', 
-                            num_samples, 1)
-    pretrained_model = dataset_metrics[0]['run_serialization_dir']
+    if use_pretrained_model:
+        pretrained_model = samples2pretrained_model[num_samples]
+    else:
+        dataset_metrics = dataset_experiments(main_args, orig_serialization_dir, 
+                                'training_configs/natural_lang/emnlp_news_gpt2.jsonnet', 
+                                num_samples, 1)
+        pretrained_model = dataset_metrics[0]['run_serialization_dir']
+        
     os.environ['VOCAB_PATH'] = os.path.join(pretrained_model, 'training/vocabulary')
     os.environ['WEIGHT_FILE_PATH'] = os.path.join(pretrained_model, 'training/best.th')
 
