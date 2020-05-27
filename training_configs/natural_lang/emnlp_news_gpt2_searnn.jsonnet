@@ -64,7 +64,7 @@
         "rollout_cost_function": {
           "type": "bleu",
         },
-        "temperature": 10,
+        "temperature": 50,
         "num_neighbors_to_add": 0,
         "num_tokens_to_rollout": 25,
         "rollout_ratio": 0.25,
