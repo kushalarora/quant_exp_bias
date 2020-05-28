@@ -84,7 +84,7 @@ if args.all:
                                         param_path,
                                         num_samples,
                                         num_runs,
-                                        ['u_0.05', 'l_0.90'])
+                                        args.ss_configs)
 else:
     scheduled_sampling_experiments(scheduled_sampling_dict,
                                 main_args,
@@ -92,4 +92,4 @@ else:
                                 param_path,
                                 args.num_samples,
                                 args.num_runs,
-                                ['u_0.05', 'l_0.90'])
+                                args.ss_configs)
