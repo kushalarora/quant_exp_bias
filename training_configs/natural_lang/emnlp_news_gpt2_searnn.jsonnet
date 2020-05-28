@@ -62,7 +62,14 @@
           "model_name": "gpt2"
         },
         "rollout_cost_function": {
-          "type": "bleu",
+          "type": "noisy_oracle",
+          "add_brevity_penalty": false,
+          "oracle": {
+            "type": "gpt2_oracle",
+            "model_name": "gpt2",
+            "batch_size": 10,
+            "cuda_device": -2,
+          },
         },
         "temperature": 50,
         "num_neighbors_to_add": 0,
