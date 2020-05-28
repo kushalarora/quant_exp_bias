@@ -353,16 +353,23 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
                                  default=['xsmall', 'small', 'medium', 'large', 'xlarge'],
                                  help='Model sizes to consider')
 
-    if experiment_name == 'scheduled_sampling_experiments':
+    if experiment_name == 'scheduled_sampling_experiments' or \
+            experiment_name == 'scheduled_sampling_ablation_experiments':
         default_num_epochs = 50; default_batch_size = 128
         if experiment_type == 'natural_language':
-            default_num_epochs = 20; default_batch_size = 4
+            default_num_epochs = 20; default_batch_size = 96
         parser.add_argument('--num_epochs', type=int, default=default_num_epochs,
                                 help='Number of batches for the experiment.')
 
         parser.add_argument('--batch_size', type=int, default=default_batch_size,
                                 help='Batch size for this experiment.')
-    
+            
+        parser.add_argument('--ss_configs', nargs='+', type=str, 
+                                default=['u_0.05', 'u_0.10', 'u_0.25',
+                                            'l_0.50', 'l_0.75', 'l_0.90',
+                                            'q_0.50', 'q_0.75', 'q_0.90'],
+                                help='Scheduled Sampling configs to try.')
+
     if experiment_name == 'searnn_experiments' or \
             experiment_name == 'searnn_ablation_experiments':
         parser.add_argument('--rollins', nargs='+', type=str,
@@ -391,19 +398,6 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
                             help='temperature for SEARNN experiments')
         parser.add_argument('--neighbors', type=int, default=6,
                             help='Number of neighbors to add for SEARNN experiments')
-
-    if experiment_name == 'scheduled_sampling_ablation_experiments':
-        parser.add_argument('--batch_size', type=int, 
-                                default=96, help='Scheduled Sampling experiment batch size for natural language experiments.')
-
-        parser.add_argument('--num_epochs', type=int, 
-                                default=20, help='Scheduled Sampling experiment batch size for natural language experiments.')
-        parser.add_argument('--ss_configs', nargs='+', type=str, 
-                                default=['u_0.05', 'u_0.10', 'u_0.25',
-                                            'l_0.50', 'l_0.75', 'l_0.90',
-                                            'q_0.50', 'q_0.75', 'q_0.90'],
-                                help='Scheduled Sampling configs to try.')
-
     return parser.parse_args()
 
 def calculate_ss_k(num_samples, batch_size, num_epochs, ratio_level=0.5):

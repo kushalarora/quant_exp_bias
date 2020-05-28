@@ -70,6 +70,7 @@ def scheduled_sampling_experiments(scheduled_sampling_ratios,
                     'scheduled_sampling_ratio': ss_ratio,
                     'scheduled_sampling_k': ss_k,
                     'scheduled_sampling_type': ss_type,
+                    'ss_config': ss_config,
                     'final_ss_ratio': run_metrics['validation_ss_ratio'],
                     'best_val_ss_ratio': run_metrics['best_validation_ss_ratio'],
             })

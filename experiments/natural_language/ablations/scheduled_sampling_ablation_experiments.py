@@ -77,6 +77,7 @@ def scheduled_sampling_ablation_experiments(scheduled_sampling_dict,
             mean_results.update({                        
                     'scheduled_sampling_ratio': ss_ratio,
                     'scheduled_sampling_k': ss_k,
+                    'ss_config': ss_config,
                     'scheduled_sampling_type': ss_type,
                     'final_ss_ratio': run_metrics['validation_ss_ratio'],
                     'best_val_ss_ratio': run_metrics['best_validation_ss_ratio'],
