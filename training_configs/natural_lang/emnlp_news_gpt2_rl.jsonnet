@@ -69,7 +69,7 @@
         },
         "rollout_ratio": 0.33,
         "rollin_rollout_mixing_coeff": 0.5,
-        "detach_rollin_logits": true,
+        "detach_rollin_logits": false,
       },
       "initializer": [
           ["_decoder._decoder_net.*|_decoder._output_projection*|_decoder.target_embedder*|_decoder._dropout",
@@ -84,13 +84,13 @@
   "iterator": {
       "type": "bucket",
       "sorting_keys": [["target_tokens", "num_tokens"]],
-      "batch_size": 16,
+      "batch_size": 32,
       // This is needed stupidly for bucket iterator to work.
       "max_instances_in_memory": 2000000
   },
   "validation_iterator": {
       "type": "basic",
-      "batch_size": 16
+      "batch_size": 32
   },
   "trainer": {
     "num_epochs": 20,
