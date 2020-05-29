@@ -585,7 +585,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 target_mask = util.get_text_field_mask(target_tokens)
                 self._hamming(best_predictions, target_tokens["tokens"], target_mask)
 
-            if compute_exposure_bias and target_tokens and self._exposure_bias:
+            if compute_exposure_bias and self._exposure_bias:
                 top_k_log_probabilities = rollout_output_dict["class_log_probabilities"]
                 prediction_loss = top_k_log_probabilities[:,0]
 
@@ -593,32 +593,20 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 # token before </S>.
                 normalized_prediction_losses = [torch.exp(pred_loss/(len(pred_tokens) + 1))
                                                     for pred_loss, pred_tokens in zip(prediction_loss.data.cpu(), predicted_tokens)]
-
-                oracle_sampled_predicted_tokens = self._decode_tokens(target_tokens['tokens'],
-                                    vocab_namespace=self._target_namespace,
-                                    truncate=True)
-
-                oracle_sampled_model_probs, seq_lens, oracle_sampled_model_seq_probs = \
-                                                self.compute_sentence_probs(target_tokens)
-
                 step_log_probs = F.log_softmax(rollout_output_dict['logits'].squeeze(1), dim=-1)
                 model_sampled_model_seq_probs = torch.exp(torch.gather(step_log_probs, 2,
                                                                         best_predictions[:,1:].unsqueeze(2)) \
                                                                 .squeeze(2))
 
                 exp_bias_dict = self._exposure_bias(
-                                                model_sampled_model_probs=normalized_prediction_losses,
-                                                model_sampled_predictions=predicted_tokens,
-                                                model_sampled_model_seq_probs=model_sampled_model_seq_probs.data.cpu(),
-                                                use_js=True,
-                                                oracle_sampled_model_probs=oracle_sampled_model_probs.data.cpu(),
-                                                oracle_sampled_predictions=oracle_sampled_predicted_tokens,
-                                                oracle_sampled_model_seq_probs=oracle_sampled_model_seq_probs.data.cpu())
+                                    model_sampled_model_probs=normalized_prediction_losses,
+                                    model_sampled_predictions=predicted_tokens,
+                                    model_sampled_model_seq_probs=model_sampled_model_seq_probs.data.cpu(),
+                                )
 
                 output_dict.update(exp_bias_dict)
                 output_dict['prediction_loss'] = prediction_loss.data.cpu()
                 output_dict['model_sampled_predicted_tokens'] = self._detokenizer(predicted_tokens)
-                output_dict['oracle_sampled_predicted_tokens'] = self._detokenizer(oracle_sampled_predicted_tokens)
 
         return output_dict
 

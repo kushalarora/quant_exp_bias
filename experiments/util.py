@@ -148,7 +148,6 @@ def one_exp_run(serialization_dir: str = None,
                 train_model_serialization_dir: str = None,
                 oracle_train_filename:str = None, 
                 oracle_dev_filename:str = None,
-                oracle_test_filename:str = None,
                 ):
 
     overrides = default_overides_func()
@@ -158,7 +157,9 @@ def one_exp_run(serialization_dir: str = None,
                                             str(num_samples), 
                                             str(run), 
                                             str(uuid.uuid4().fields[0])) 
-    if not only_quantify:
+    if only_quantify:
+        train_model_serialization_dir = os.path.join(run_serialization_dir, 'training')
+    else:
         # This is grammar with epsilon 0 to sample correct sequence.
         if shall_generate_grammar_file:
             generate_grammar_file(run_serialization_dir, grammar_template,
@@ -184,7 +185,7 @@ def one_exp_run(serialization_dir: str = None,
                 sample_oracle_args += ['-f', dataset_filename]
 
             sample_oracle_args = get_args(args=sample_oracle_args)
-            oracle_train_filename, oracle_dev_filename, oracle_test_filename = \
+            oracle_train_filename, oracle_dev_filename, _ = \
                 sample_oracle_runner(sample_oracle_args,
                                     run_serialization_dir)
 
@@ -227,7 +228,6 @@ def one_exp_run(serialization_dir: str = None,
 
         qeb_args = get_args(args=['quantify-exposure-bias',
                                   archive_file,
-                                  oracle_test_filename,
                                   '--output-dir', qeb_output_dir,
                                   '--weights-file', weights_file,
                                   '-o',  overrides])
@@ -237,7 +237,6 @@ def one_exp_run(serialization_dir: str = None,
             h_m_m_mean, h_m_m_std, h_m_o_mean, h_m_o_std, = \
                 quantify_exposure_bias_runner(qeb_args,
                                                 archive_file,
-                                                oracle_test_filename,
                                                 qeb_output_dir,
                                                 cuda_device=cuda_device,
                                                 weights_file=weights_file,
@@ -283,7 +282,6 @@ def one_exp_run(serialization_dir: str = None,
 
         qeb_args = get_args(args=['quantify-exposure-bias',
                                   archive_file,
-                                  oracle_test_filename,
                                   '--output-dir', qeb_output_dir,
                                   '-o', qeb_overides])
 
@@ -292,7 +290,6 @@ def one_exp_run(serialization_dir: str = None,
             h_m_m_mean, h_m_m_std, h_m_o_mean, h_m_o_std = \
                 quantify_exposure_bias_runner(qeb_args,
                                                 archive_file,
-                                                oracle_test_filename,
                                                 qeb_output_dir,
                                                 cuda_device=cuda_device,
                                                 num_trials=num_trials,
@@ -339,7 +336,11 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
     parser.add_argument('--debug', action='store_true', help='Run in debug mode.')
     parser.add_argument('--offline', action='store_true', help='Run in offline mode.')
     parser.add_argument('--exp_msg', type=str, default=None, help='Debug(maybe) experiment message.')
+    parser.add_argument('--only_quantify', action='store_true', help='Run in debug mode.')
+
     parser.add_argument('--output_dir', '-o', type=str, default=os.path.expanduser('~/scratch/quant_exp_bias/'), help='Output directory.')
+    parser.add_argument('--run_serialization_dir', type=str, default=None, help='Specify run serialization dir if only quantifying.')
+
     
     if experiment_type == 'artificial_language':
         parser.add_argument('--vocab_distributions', nargs='+', type=str, default=['zipf', 'uniform'], 

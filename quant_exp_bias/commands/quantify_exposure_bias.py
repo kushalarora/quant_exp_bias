@@ -88,10 +88,6 @@ class QuantifyExposureBias(Subcommand):
         subparser.add_argument('archive_file', 
                                type=str, 
                                help='path to an archived trained model')
-        
-        subparser.add_argument("input_file", 
-                               type=str, 
-                               help="Path to the test file used for samples from oracle part.")
 
         subparser.add_argument('--output-dir', 
                                required=True,
@@ -138,7 +134,6 @@ class QuantifyExposureBias(Subcommand):
 
 def quantify_exposure_bias_from_args(args: argparse.Namespace) -> Dict[str, Any]:
     return quantify_exposure_bias(archive_file=args.archive_file,
-                                 input_file=args.input_file,
                                  output_dir=args.output_dir,
                                  num_trials=args.num_trials,
                                  num_length_samples=args.num_length_samples,
@@ -148,7 +143,6 @@ def quantify_exposure_bias_from_args(args: argparse.Namespace) -> Dict[str, Any]
                                  weights_file=args.weights_file)
 
 def quantify_exposure_bias(archive_file: str,
-                           input_file: str,
                            output_dir: str,
                            num_trials: int = 5,
                            num_length_samples: int = 50,
@@ -178,16 +172,13 @@ def quantify_exposure_bias(archive_file: str,
     else:
         dataset_reader = DatasetReader.from_params(config.pop("dataset_reader"))
     
-    logger.info("Reading test data from %s", input_file)
-    instances = dataset_reader.read(input_file)
-    
     iterator_params = config.pop("validation_iterator", None)
     if iterator_params is None:
         iterator_params = config.pop("iterator")
     data_iterator = DataIterator.from_params(iterator_params)
     data_iterator.index_with(model.vocab)
     data_iterator._batch_size = generation_batch_size
-    instances = [instance for instance in instances.instance_generator()]
+
     output_dir_trail = None
     exp_biases = []
     df_p_qs = []
@@ -217,11 +208,7 @@ def quantify_exposure_bias(archive_file: str,
             # open(os.path.join(output_dir_trail, 'oracle_sampled_generated.txt'), "w").close()
 
         for sample_num in range(num_length_samples):
-            # sample sentence length
-            test_batch = data_iterator(instances, shuffle=True).__next__()
-            test_batch = nn_util.move_to_device(test_batch, cuda_device)
-            input_dict.update(test_batch)
-            
+
             output_dict = model(**input_dict)
 
             metric_trial = model.get_metrics(reset=True, get_exposure_bias=True)
@@ -242,6 +229,9 @@ def quantify_exposure_bias(archive_file: str,
                         print(f'{seq} P={model_prob:.4f} O={oracle_prob:.4f} Df_p_q={value:.4f}', file=file)
                         H_m_m.append(float(model_prob))
                         H_m_o.append(float(oracle_prob))
+                    logger.info("Trial: %3d-%-3d :: %s: %-5.4f", trail_num, sample_num, "H_m_m", np.mean(H_m_m))
+                    logger.info("Trial: %3d-%-3d :: %s: %-5.4f", trail_num, sample_num, "H_m_o", np.mean(H_m_o))
+
 
                 # with open(os.path.join(output_dir_trail, 'oracle_sampled_generated.txt'), "a+") as file:
                 #     for seq, model_prob, oracle_prob, value in zip(output_dict['oracle_sampled_predicted_tokens'],
@@ -276,14 +266,13 @@ def quantify_exposure_bias(archive_file: str,
     logger.info("\t mean: %5.3f", metrics['exposure_bias_mean'])
     logger.info("\t std:  %5.3f", metrics['exposure_bias_std'])
 
-    # logger.info("Df (P || Q):")
-    # logger.info("\t mean: %5.3f", metrics['df_p_q_mean'])
-    # logger.info("\t std: %5.3f", metrics['df_p_q_std'])
+    logger.info("H(M,O):")
+    logger.info("\t mean: %5.3f", metrics['H_m_o_mean'])
+    logger.info("\t std: %5.3f", metrics['H_m_o_std'])
 
-    # logger.info("Df (Q || P):")
-    # logger.info("\t mean: %5.3f", metrics['df_q_p_mean'])
-    # logger.info("\t std: %5.3f", metrics['df_q_p_std'])
-
+    logger.info("H(M,M):")
+    logger.info("\t mean: %5.3f", metrics['H_m_m_mean'])
+    logger.info("\t std: %5.3f", metrics['H_m_m_std']) 
 
     logger.info("Done!!")
     # return exp_biases, metrics['exposure_bias_mean'], metrics['exposure_bias_std'], \
