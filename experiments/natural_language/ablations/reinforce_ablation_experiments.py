@@ -47,7 +47,7 @@ def reinforce_ablation_experiments(main_args,
     if use_pretrained_model:
         pretrained_model = samples2pretrained_model[num_samples]
     elif args.only_quantify:
-        pretrained_model = run_serialization_dir
+        pretrained_model = args.run_serialization_dir
     else:
         dataset_metrics = dataset_experiments(main_args, orig_serialization_dir, 
                                 'training_configs/natural_lang/emnlp_news_gpt2.jsonnet', 
