@@ -1,9 +1,11 @@
+import glob
 import itertools
 import json
 import math
 import numpy as np
 import os
 import random
+import re
 import sys
 import uuid
 
@@ -123,6 +125,12 @@ def default_exp_bias_epochs_func(train_model_serialization_dir):
     metrics_filename = 'metrics.json'
     return [(epoch, qeb_suffix, metrics_filename)]
 
+def last_exp_bias_epoch_func(train_model_serialization_dir):
+    epoch_files = glob.glob(os.path.join(train_model_serialization_dir + '/model_state_epoch_*.th'))
+    epochs =[int(re.search('epoch_([0-9]+).th', fname).group(1)) for fname in epoch_files]
+    epoch = epochs[-1]
+    metrics_filename = f'metrics_epoch_{epoch}.json'
+    return [(-1, '', metrics_filename)]
 
 def one_exp_run(serialization_dir: str = None,
                 num_samples: int = 10000,
@@ -159,6 +167,9 @@ def one_exp_run(serialization_dir: str = None,
                                             str(uuid.uuid4().fields[0])) 
     if only_quantify:
         train_model_serialization_dir = os.path.join(run_serialization_dir, 'training')
+        # Doing this as the command might not have completed and metrics.json might not exist.
+        exp_bias_epochs_func: ExpBiasEpochsFuncType = last_exp_bias_epoch_func
+
     else:
         # This is grammar with epsilon 0 to sample correct sequence.
         if shall_generate_grammar_file:
