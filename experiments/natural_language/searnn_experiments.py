@@ -16,6 +16,8 @@ main_args, serialization_dir, param_path, experiment_id, \
                                         debug=args.debug,
                                         offline=args.offline,
                                         experiment_text=args.exp_msg,
+                                        run_serialization_dir=args.run_serialization_dir,
+                                        only_quantify=args.only_quantify,
                                     )
 
 rollin_rollout_configs = [x for x in itertools.product(args.rollins, args.rollouts)]

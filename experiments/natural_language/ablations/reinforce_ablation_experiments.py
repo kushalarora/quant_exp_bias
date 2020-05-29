@@ -46,6 +46,8 @@ def reinforce_ablation_experiments(main_args,
                         ):
     if use_pretrained_model:
         pretrained_model = samples2pretrained_model[num_samples]
+    elif args.only_quantify:
+        pretrained_model = run_serialization_dir
     else:
         dataset_metrics = dataset_experiments(main_args, orig_serialization_dir, 
                                 'training_configs/natural_lang/emnlp_news_gpt2.jsonnet', 
@@ -73,7 +75,8 @@ def reinforce_ablation_experiments(main_args,
                                         dataset_filename='data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered',
                                         oracle_train_filename=os.path.join(pretrained_model, 'data/oracle_samples-train.txt'),
                                         oracle_dev_filename=os.path.join(pretrained_model, 'data/oracle_samples-dev.txt'),
-                                        oracle_test_filename=os.path.join(pretrained_model, 'data/oracle_samples-test.txt'),
+                                        run_serialization_dir=args.run_serialization_dir,
+                                        only_quantify=args.only_quantify,
                                      )
 
             assert len(run_metrics) == 1, \

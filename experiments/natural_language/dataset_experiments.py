@@ -46,6 +46,8 @@ if __name__ == '__main__':
                                                 debug=args.debug,
                                                 offline=args.offline,
                                                 experiment_text=args.exp_msg,
+                                                run_serialization_dir=args.run_serialization_dir,
+                                                only_quantify=args.only_quantify,
                                             )
 
     dataset_experiments_params = [(10000, 8), (50000, 6) , (500000, 4), (2000000, 2), (5000000, 1)]

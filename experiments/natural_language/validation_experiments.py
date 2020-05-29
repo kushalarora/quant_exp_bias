@@ -52,6 +52,8 @@ def validation_experiments(main_args,
                                         num_trials=5,
                                         num_length_samples=5,
                                         num_samples_per_length=32,
+                                        run_serialization_dir=args.run_serialization_dir,
+                                        only_quantify=args.only_quantify,
                                       )
         for run_metrics in run_metrics_list:
             epoch = run_metrics['epoch']

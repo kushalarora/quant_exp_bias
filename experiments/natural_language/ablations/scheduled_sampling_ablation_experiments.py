@@ -63,6 +63,8 @@ def scheduled_sampling_ablation_experiments(scheduled_sampling_dict,
                                         dataset_filename='data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered',
                                         num_trials=5,
                                         num_length_samples=5,
+                                        run_serialization_dir=args.run_serialization_dir,
+                                        only_quantify=args.only_quantify,
                                       )
 
             assert len(run_metrics) == 1, \

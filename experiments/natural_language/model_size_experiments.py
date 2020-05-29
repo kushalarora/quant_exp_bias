@@ -49,6 +49,8 @@ def model_size_experiments(model_sizes,
                                         overides_func=model_overrides_func,
                                         sample_from_file=True,
                                         dataset_filename='data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered',
+                                        run_serialization_dir=args.run_serialization_dir,
+                                        only_quantify=args.only_quantify,
                                         )
 
             assert len(run_metrics) == 1, \

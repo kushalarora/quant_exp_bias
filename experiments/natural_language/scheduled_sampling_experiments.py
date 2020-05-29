@@ -55,7 +55,10 @@ def scheduled_sampling_experiments(scheduled_sampling_ratios,
                                         param_path=param_path, 
                                         overides_func=overrides_func,
                                         sample_from_file=True,
-                                        dataset_filename='data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered')
+                                        dataset_filename='data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered',
+                                        run_serialization_dir=args.run_serialization_dir,
+                                        only_quantify=args.only_quantify,
+                                    )
 
             assert len(run_metrics) == 1, \
                 'For this experiment, there should only be one final metric object for a run.'
