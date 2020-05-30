@@ -115,14 +115,18 @@ def sample_oracle_runner(args: argparse.Namespace,
     return oracle_train_filename, oracle_dev_filename, oracle_test_filename
 
 def train_runner(args: argparse.Namespace,
-                 serialization_dir: str):
+                 serialization_dir: str, 
+                 recover:bool=False,
+                 force:bool=False,
+                ):
 
     serialization_dir = os.path.join(serialization_dir, 'training')
     params = Params.from_file(args.param_path, args.overrides)
     model = train_model(params,
                         serialization_dir=serialization_dir,
                         file_friendly_logging=True,
-                        force=False)
+                        force=force,
+                        recover=recover)
 
     # HACK (Kushal): This is a hack to fix pool workers not dying
     # at the end of the train call. Somehow the __del__ method of the

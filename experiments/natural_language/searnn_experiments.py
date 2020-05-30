@@ -16,8 +16,6 @@ main_args, serialization_dir, param_path, experiment_id, \
                                         debug=args.debug,
                                         offline=args.offline,
                                         experiment_text=args.exp_msg,
-                                        run_serialization_dir=args.run_serialization_dir,
-                                        only_quantify=args.only_quantify,
                                     )
 
 rollin_rollout_configs = [x for x in itertools.product(args.rollins, args.rollouts)]
@@ -47,6 +45,9 @@ def searnn_experiments(rollin_rollout_configs,
                                         param_path=param_path,
                                         sample_from_file=True,
                                         dataset_filename='data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered',
+                                        run_serialization_dir=args.run_serialization_dir,
+                                        only_quantify=args.only_quantify,
+                                        recover=args.recover,
                                         )
 
             assert len(run_metrics) == 1, \
