@@ -156,6 +156,7 @@ def one_exp_run(serialization_dir: str = None,
                 train_model_serialization_dir: str = None,
                 oracle_train_filename:str = None, 
                 oracle_dev_filename:str = None,
+                recover:bool = False,
                 ):
 
     overrides = default_overides_func()
@@ -171,45 +172,48 @@ def one_exp_run(serialization_dir: str = None,
         exp_bias_epochs_func: ExpBiasEpochsFuncType = last_exp_bias_epoch_func
 
     else:
-        # This is grammar with epsilon 0 to sample correct sequence.
-        if shall_generate_grammar_file:
-            generate_grammar_file(run_serialization_dir, grammar_template,
-                                    vocabulary_size, vocabulary_distribution, 
-                                    epsilon=0, cost_func_grammar=True)
-        elif grammar_file_epsilon_0:
-            os.environ["FSA_GRAMMAR_FILENAME"] = grammar_file_epsilon_0
-            os.environ["FSA_GRAMMAR_FILENAME_COST_FUNC"] = grammar_file_epsilon_0
+        if recover:
+            param_path = os.path.join(run_serialization_dir, 'training/config.json')
+        else:
+            # This is grammar with epsilon 0 to sample correct sequence.
+            if shall_generate_grammar_file:
+                generate_grammar_file(run_serialization_dir, grammar_template,
+                                        vocabulary_size, vocabulary_distribution, 
+                                        epsilon=0, cost_func_grammar=True)
+            elif grammar_file_epsilon_0:
+                os.environ["FSA_GRAMMAR_FILENAME"] = grammar_file_epsilon_0
+                os.environ["FSA_GRAMMAR_FILENAME_COST_FUNC"] = grammar_file_epsilon_0
 
-        overrides = overides_func()
+            overrides = overides_func()
 
-        if oracle_train_filename is None and oracle_dev_filename is None:
-            # We might want to sample from file, for example, in cases,
-            # where dataset is fixed. This is the case with natural language
-            # experiments.
-            sample_oracle_args = ['sample-oracle',
-                                    param_path,
-                                    '-s', run_serialization_dir,
-                                    '-n', str(num_samples),
-                                    '-o',  overrides]
+            if oracle_train_filename is None and oracle_dev_filename is None:
+                # We might want to sample from file, for example, in cases,
+                # where dataset is fixed. This is the case with natural language
+                # experiments.
+                sample_oracle_args = ['sample-oracle',
+                                        param_path,
+                                        '-s', run_serialization_dir,
+                                        '-n', str(num_samples),
+                                        '-o',  overrides]
 
-            if sample_from_file:
-                sample_oracle_args += ['-f', dataset_filename]
+                if sample_from_file:
+                    sample_oracle_args += ['-f', dataset_filename]
 
-            sample_oracle_args = get_args(args=sample_oracle_args)
-            oracle_train_filename, oracle_dev_filename, _ = \
-                sample_oracle_runner(sample_oracle_args,
-                                    run_serialization_dir)
+                sample_oracle_args = get_args(args=sample_oracle_args)
+                oracle_train_filename, oracle_dev_filename, _ = \
+                    sample_oracle_runner(sample_oracle_args,
+                                        run_serialization_dir)
 
-        os.environ['TRAIN_FILE'] = oracle_train_filename
-        os.environ['DEV_FILE'] = oracle_dev_filename
+            os.environ['TRAIN_FILE'] = oracle_train_filename
+            os.environ['DEV_FILE'] = oracle_dev_filename
 
-        # This is grammar with epsilon 1e-4 to smoothened probability distribution
-        # so that we can assign some prob. to incorrect sequences.
-        if shall_generate_grammar_file:
-            generate_grammar_file(run_serialization_dir, grammar_template,
-                                vocabulary_size, vocabulary_distribution, epsilon=1e-4)
-        elif grammar_file_epsilon_0 or grammar_file_epsilon:
-            os.environ["FSA_GRAMMAR_FILENAME"] = grammar_file_epsilon or grammar_file_epsilon_0
+            # This is grammar with epsilon 1e-4 to smoothened probability distribution
+            # so that we can assign some prob. to incorrect sequences.
+            if shall_generate_grammar_file:
+                generate_grammar_file(run_serialization_dir, grammar_template,
+                                    vocabulary_size, vocabulary_distribution, epsilon=1e-4)
+            elif grammar_file_epsilon_0 or grammar_file_epsilon:
+                os.environ["FSA_GRAMMAR_FILENAME"] = grammar_file_epsilon or grammar_file_epsilon_0
 
         train_args = get_args(args=['train',
                                     param_path,
@@ -218,7 +222,8 @@ def one_exp_run(serialization_dir: str = None,
         trainer_params = Params.from_file(train_args.param_path, train_args.overrides)
 
         train_model_serialization_dir = train_runner(train_args,
-                                                    run_serialization_dir)
+                                                    run_serialization_dir, 
+                                                    recover=recover)
 
     archive_file = os.path.join(train_model_serialization_dir, 'model.tar.gz')
     metric_list = []
@@ -348,6 +353,7 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
     parser.add_argument('--offline', action='store_true', help='Run in offline mode.')
     parser.add_argument('--exp_msg', type=str, default=None, help='Debug(maybe) experiment message.')
     parser.add_argument('--only_quantify', action='store_true', help='Run in debug mode.')
+    parser.add_argument('--recover', action='store_true', help='Recover the run.')
 
     parser.add_argument('--output_dir', '-o', type=str, default=os.path.expanduser('~/scratch/quant_exp_bias/'), help='Output directory.')
     parser.add_argument('--run_serialization_dir', type=str, default=None, help='Specify run serialization dir if only quantifying.')

@@ -65,6 +65,7 @@ def scheduled_sampling_ablation_experiments(scheduled_sampling_dict,
                                         num_length_samples=5,
                                         run_serialization_dir=args.run_serialization_dir,
                                         only_quantify=args.only_quantify,
+                                        recover=args.recover,
                                       )
 
             assert len(run_metrics) == 1, \

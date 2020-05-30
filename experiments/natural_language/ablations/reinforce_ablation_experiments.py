@@ -77,6 +77,7 @@ def reinforce_ablation_experiments(main_args,
                                         oracle_dev_filename=os.path.join(pretrained_model, 'data/oracle_samples-dev.txt'),
                                         run_serialization_dir=args.run_serialization_dir,
                                         only_quantify=args.only_quantify,
+                                        recover=args.recover,
                                      )
 
             assert len(run_metrics) == 1, \
