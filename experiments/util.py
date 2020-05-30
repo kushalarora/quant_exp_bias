@@ -170,7 +170,7 @@ def one_exp_run(serialization_dir: str = None,
         train_model_serialization_dir = os.path.join(run_serialization_dir, 'training')
         # Doing this as the command might not have completed and metrics.json might not exist.
         exp_bias_epochs_func: ExpBiasEpochsFuncType = last_exp_bias_epoch_func
-
+        archive_file = train_model_serialization_dir
     else:
         if recover:
             param_path = os.path.join(run_serialization_dir, 'training/config.json')
@@ -225,7 +225,7 @@ def one_exp_run(serialization_dir: str = None,
                                                     run_serialization_dir, 
                                                     recover=recover)
 
-    archive_file = os.path.join(train_model_serialization_dir, 'model.tar.gz')
+        archive_file = os.path.join(train_model_serialization_dir, 'model.tar.gz')
     metric_list = []
 
     for epoch, qeb_suffix, metric_filename in exp_bias_epochs_func(train_model_serialization_dir):
