@@ -17,11 +17,11 @@ main_args, serialization_dir, param_path, experiment_id, \
                                        )
 
 msz2configs  = { # model_size_str => (embed_dim, hidden_dim, num_layers)
-    'xsmall' : (100, 100, 1),
+    'xsmall': (100, 100, 1),
     'small': (300, 300, 1),
-    'medium': (800, 300, 1),
-    'large': (2400, 300, 1),
-    'xlarge': (2400, 300, 2)
+    'medium': (300, 800, 1),
+    'large': (300, 2400,  1),
+    'xlarge': (300, 2400, 2)
     }
 experiment.log_parameters(msz2configs)
 
