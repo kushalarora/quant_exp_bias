@@ -210,7 +210,6 @@ def compute_nll_score(archive_file: str,
         for sample_num in range(num_length_samples):
             output_dict = model(**input_dict)
             predicted_tokens = output_dict['predicted_tokens']
-            import pdb; pdb.set_trace()
 
             model_sampled_oracle_probs_and_seq_probs = oracle.compute_sent_probs(predicted_tokens)
             model_sampled_oracle_probs = \
