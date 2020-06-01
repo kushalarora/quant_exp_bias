@@ -45,6 +45,36 @@ default_rollout_policy = lambda u,v,w,x: (x,w)
 
 ReferencePolicyType = Callable[[int, torch.LongTensor,Dict[str, torch.Tensor]], torch.FloatTensor]
 
+def top_k_top_p_filtering(logits, top_k=0, top_p=0.0, filter_value=-1e30):
+    """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
+        Args:
+            logits: logits distribution shape (vocabulary size)
+            top_k >0: keep only top k tokens with highest probability (top-k filtering).
+            top_p >0.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
+                Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
+    """
+    #assert logits.dim() == 1  # batch size 1 for now - could be updated for more but the code would be less clear
+    top_k = min(top_k, logits.size(-1))  # Safety check
+    if top_k > 0:
+        # Remove all tokens with a probability less than the last token of the top-k
+        indices_to_remove = logits < torch.topk(logits, top_k)[0][..., -1, None]
+        logits[indices_to_remove] = filter_value
+
+    if top_p > 0.0:
+        sorted_logits, sorted_indices = torch.sort(logits, descending=True, dim=-1)
+        cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+
+        # Remove tokens with cumulative probability above the threshold
+        sorted_indices_to_remove = cumulative_probs > top_p
+        # Shift the indices to the right to keep also the first token above the threshold
+        sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+        sorted_indices_to_remove[..., 0] = 0
+
+        indices_to_remove = sorted_indices[sorted_indices_to_remove]
+        sorted_logits += sorted_indices_to_remove.int() * filter_value
+        logits.scatter_(-1, sorted_indices, sorted_logits)
+    return logits
+
 @SeqDecoder.register("quant_exp_auto_regressive_seq_decoder")
 class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
     """
@@ -113,6 +143,8 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                  rollout_mixing_prob:float = 0.5,
                  detokenizer: DeTokenizer = default_tokenizer,
                  temperature: float = 1,
+                 top_k=0, 
+                 top_p=0,
                 ) -> None:
         super().__init__(target_embedder)
 
@@ -211,6 +243,9 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         self._combiner_mode = rollin_rollout_combination_mode
 
         self._detokenizer = detokenizer
+
+        self._top_k = top_k
+        self._top_p = top_p
 
     def get_output_dim(self):
         return self._decoder_net.get_output_dim()
@@ -453,6 +488,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
 
         # shape: (group_size, num_classes)
         class_logits, state = rollout_policy(timestep, last_predictions, state, class_logits)
+        class_logits = top_k_top_p_filtering(class_logits,  self._top_k, self._top_p, 1e-30)
         return class_logits, state
 
     @overrides
@@ -460,6 +496,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 encoder_out: Dict[str, torch.LongTensor] = {},
                 target_tokens: Dict[str, torch.LongTensor] = None,
                 compute_exposure_bias: bool = False,
+                sample_rollouts: bool = False,
                 generation_batch_size:int = 1024,
                 max_decoding_step: int = None,) -> Dict[str, torch.Tensor]:
         # pylint: disable=arguments-differ
@@ -542,7 +579,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                                 start_predictions,
                                                 rollout_steps=num_decoding_steps,
                                                 rollout_mode='learned',
-                                                sampled=compute_exposure_bias,
+                                                sampled=sample_rollouts,
                                                 # TODO (Kushal): Add a reason why truncate_at_end_all is False here.
                                                 truncate_at_end_all=False)
 
@@ -555,6 +592,12 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                                     vocab_namespace=self._target_namespace,
                                                     truncate=True)
             output_dict['predicted_tokens'] = predicted_tokens
+            
+            top_k_log_probabilities = rollout_output_dict["class_log_probabilities"]
+            prediction_loss = top_k_log_probabilities[:,0]
+            normalized_prediction_losses = [torch.exp(pred_loss/(len(pred_tokens) + 1))
+                                                for pred_loss, pred_tokens in zip(prediction_loss.data.cpu(), predicted_tokens)]
+            output_dict['model_sampled_model_probs'] =  normalized_prediction_losses
 
             if target_tokens and self._rollout_cost_function:
                 if self._rollout_cost_function.takes_decoded_input():
@@ -586,13 +629,10 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 self._hamming(best_predictions, target_tokens["tokens"], target_mask)
 
             if compute_exposure_bias and self._exposure_bias:
-                top_k_log_probabilities = rollout_output_dict["class_log_probabilities"]
-                prediction_loss = top_k_log_probabilities[:,0]
 
                 # This +1 takes care of </S> prediction as predicted token are limited to
                 # token before </S>.
-                normalized_prediction_losses = [torch.exp(pred_loss/(len(pred_tokens) + 1))
-                                                    for pred_loss, pred_tokens in zip(prediction_loss.data.cpu(), predicted_tokens)]
+
                 step_log_probs = F.log_softmax(rollout_output_dict['logits'].squeeze(1), dim=-1)
                 model_sampled_model_seq_probs = torch.exp(torch.gather(step_log_probs, 2,
                                                                         best_predictions[:,1:].unsqueeze(2)) \
@@ -605,8 +645,8 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                 )
 
                 output_dict.update(exp_bias_dict)
-                output_dict['prediction_loss'] = prediction_loss.data.cpu()
-                output_dict['model_sampled_predicted_tokens'] = self._detokenizer(predicted_tokens)
+            output_dict['prediction_loss'] = prediction_loss.data.cpu()
+            output_dict['model_sampled_predicted_tokens'] = self._detokenizer(predicted_tokens)
 
         return output_dict
 

@@ -78,7 +78,7 @@ from allennlp.nn import util as nn_util
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
-class QuantifyExposureBias(Subcommand):
+class ComputeNLLScore(Subcommand):
     def add_subparser(self, name: str, parser: argparse._SubParsersAction) -> argparse.ArgumentParser:
         # pylint: disable=protected-access
         description = '''Evaluate the specified model + dataset'''
@@ -128,12 +128,12 @@ class QuantifyExposureBias(Subcommand):
                                default="",
                                help='a JSON structure used to override the experiment configuration')
 
-        subparser.set_defaults(func=quantify_exposure_bias_from_args)
+        subparser.set_defaults(func=compute_nll_score_from_args)
 
         return subparser
 
-def quantify_exposure_bias_from_args(args: argparse.Namespace) -> Dict[str, Any]:
-    return quantify_exposure_bias(archive_file=args.archive_file,
+def compute_nll_score_from_args(args: argparse.Namespace) -> Dict[str, Any]:
+    return compute_nll_score(archive_file=args.archive_file,
                                  output_dir=args.output_dir,
                                  num_trials=args.num_trials,
                                  num_length_samples=args.num_length_samples,
@@ -142,7 +142,7 @@ def quantify_exposure_bias_from_args(args: argparse.Namespace) -> Dict[str, Any]
                                  overrides=args.overrides,
                                  weights_file=args.weights_file)
 
-def quantify_exposure_bias(archive_file: str,
+def compute_nll_score(archive_file: str,
                            output_dir: str,
                            num_trials: int = 5,
                            num_length_samples: int = 50,
@@ -161,6 +161,7 @@ def quantify_exposure_bias(archive_file: str,
     config = dict(config)
     model = archive.model
     model.eval()
+    model.training = False
 
     generation_batch_size = config['model']['decoder'].get('generation_batch_size', num_samples_per_length)
 
@@ -180,19 +181,12 @@ def quantify_exposure_bias(archive_file: str,
     data_iterator._batch_size = generation_batch_size
 
     output_dir_trail = None
-    exp_biases = []
-    df_p_qs = []
-    # df_q_ps = []
     H_m_o = []
     H_m_m = []
-    # H_o_m = []
-    # H_o_o = []
-
-    input_dict = {
-         "compute_exposure_bias": True,
-         "sample_rollouts": True,
-        }
-    input_dict['generation_batch_size'] = generation_batch_size
+    input_dict = { 
+        "generation_batch_size": generation_batch_size,
+        "sample_rollouts": True,
+    }
 
     logger.info(f'Num Trials: {num_trials}')
     logger.info(f'Num Length Samples: {num_length_samples}')
@@ -200,7 +194,10 @@ def quantify_exposure_bias(archive_file: str,
 
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
-
+    
+    oracle = model._decoder._oracle
+    model._decoder._top_p = 0.95
+    
     logger.info("Metrics:")
     for trail_num in range(1, num_trials + 1):
         if output_dir:
@@ -211,64 +208,37 @@ def quantify_exposure_bias(archive_file: str,
             # open(os.path.join(output_dir_trail, 'oracle_sampled_generated.txt'), "w").close()
 
         for sample_num in range(num_length_samples):
-
             output_dict = model(**input_dict)
+            predicted_tokens = output_dict['predicted_tokens']
+            import pdb; pdb.set_trace()
 
-            metric_trial = model.get_metrics(reset=True, get_exposure_bias=True)
-
-            for key, metric in metric_trial.items():
-                logger.info("Trial: %3d-%-3d :: %s: %-5.4f", trail_num, sample_num, key, metric)
-
-            exp_biases.append(metric_trial['exposure_bias'])
-            df_p_qs.append(metric_trial['df_p_q'])
-            # df_q_ps.append(metric_trial['df_q_p'])
+            model_sampled_oracle_probs_and_seq_probs = oracle.compute_sent_probs(predicted_tokens)
+            model_sampled_oracle_probs = \
+                    [oracle_prob for oracle_prob, _, _ in model_sampled_oracle_probs_and_seq_probs]
 
             if output_dir_trail:
                 with open(os.path.join(output_dir_trail, 'model_sampled_generated.txt'), "a+") as file:
-                    for seq, model_prob, oracle_prob, value in zip(output_dict['model_sampled_predicted_tokens'],
-                                                                    output_dict['model_sampled_model_probs'],
-                                                                    output_dict['model_sampled_oracle_probs'],
-                                                                    output_dict['model_sampled_scores']):
-                        print(f'{seq} P={model_prob:.4f} O={oracle_prob:.4f} Df_p_q={value:.4f}', file=file)
+                    for seq, model_prob, oracle_prob in zip(output_dict['model_sampled_predicted_tokens'],
+                                                                    output_dict['model_sampled_model_probs'], 
+                                                                    model_sampled_oracle_probs):
+                        print(f'{seq} P={model_prob:.4f} O={oracle_prob:.4f}', file=file)
                         H_m_m.append(float(model_prob))
                         H_m_o.append(float(oracle_prob))
+
                     logger.info("Trial: %3d-%-3d :: %s: %-5.4f", trail_num, sample_num, "H_m_m", np.mean(H_m_m))
                     logger.info("Trial: %3d-%-3d :: %s: %-5.4f", trail_num, sample_num, "H_m_o", np.mean(H_m_o))
 
-
-                # with open(os.path.join(output_dir_trail, 'oracle_sampled_generated.txt'), "a+") as file:
-                #     for seq, model_prob, oracle_prob, value in zip(output_dict['oracle_sampled_predicted_tokens'],
-                #                                                     output_dict['oracle_sampled_model_probs'],
-                #                                                     output_dict['oracle_sampled_oracle_probs'],
-                #                                                     output_dict['oracle_sampled_scores']):
-                #         print(f'{seq} P={model_prob:.4f} O={oracle_prob:.4f} Df_q_p={value:.4f}', file=file)
-                #         H_o_o.append(float(oracle_prob))
-                #         H_o_m.append(float(model_prob))
-
     metrics = {
-        'exposure_bias_mean': np.mean(exp_biases),
-        'exposure_bias_std': np.std(exp_biases),
-        'df_p_q_mean': np.mean(df_p_qs),
-        'df_p_q_std': np.std(df_p_qs),
-        # 'df_q_p_mean': np.mean(df_q_ps),
-        # 'df_q_p_std': np.std(df_q_ps),
         'H_m_m_mean': np.mean(H_m_m),
         'H_m_m_std': np.std(H_m_m),
         'H_m_o_mean': np.mean(H_m_o),
         'H_m_o_std': np.std(H_m_o),
-        # 'H_o_m_mean': np.mean(H_o_m),
-        # 'H_o_m_std': np.std(H_o_m),
-        # 'H_o_o_mean': np.mean(H_o_o),
-        # 'H_o_o_std': np.std(H_o_o),
     }
 
     with open(os.path.join(output_dir, 'metrics.json'), "w") as file:
         json.dump(metrics, file, indent=4)
 
     logger.info("Exposure Bias Average:")
-    logger.info("\t mean: %5.3f", metrics['exposure_bias_mean'])
-    logger.info("\t std:  %5.3f", metrics['exposure_bias_std'])
-
     logger.info("H(M,O):")
     logger.info("\t mean: %5.3f", metrics['H_m_o_mean'])
     logger.info("\t std: %5.3f", metrics['H_m_o_std'])
@@ -278,15 +248,6 @@ def quantify_exposure_bias(archive_file: str,
     logger.info("\t std: %5.3f", metrics['H_m_m_std']) 
 
     logger.info("Done!!")
-    # return exp_biases, metrics['exposure_bias_mean'], metrics['exposure_bias_std'], \
-    #     df_p_qs, metrics['df_p_q_mean'], metrics['df_p_q_std'], \
-    #     df_q_ps, metrics['df_q_p_mean'], metrics['df_q_p_std'], \
-    #     metrics['H_m_m_mean'], metrics['H_m_m_std'], \
-    #     metrics['H_m_o_mean'], metrics['H_m_o_std'], \
-    #     metrics['H_o_m_mean'], metrics['H_o_m_std'], \
-    #     metrics['H_o_o_mean'], metrics['H_o_o_std']
 
-    return exp_biases, metrics['exposure_bias_mean'], metrics['exposure_bias_std'], \
-        df_p_qs, metrics['df_p_q_mean'], metrics['df_p_q_std'], \
-        metrics['H_m_m_mean'], metrics['H_m_m_std'], \
-        metrics['H_m_o_mean'], metrics['H_m_o_std']
+    return metrics['H_m_m_mean'], metrics['H_m_m_std'], \
+                metrics['H_m_o_mean'], metrics['H_m_o_std']
