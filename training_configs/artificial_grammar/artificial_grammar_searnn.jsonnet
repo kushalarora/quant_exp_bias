@@ -48,10 +48,15 @@
           "max_len": 50,
         },
         "rollout_cost_function": {
-          "type": "bleu",
+          "type": "noisy_oracle",
+          "oracle": {
+            "type": "artificial_lang_oracle",
+            "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME_COST_FUNC"),
+          },
         },
         "temperature": 1,
-        "rollout_ratio": 0.30,
+        "rollout_ratio": 0.25,
+        "rollin_rollout_mixing_coeff": 0.0,
       }
     },
     "iterator": {
