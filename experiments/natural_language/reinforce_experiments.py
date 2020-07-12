@@ -42,14 +42,15 @@ def reinforce_experiments(main_args,
     serialization_dir = os.path.join(orig_serialization_dir)
     for num_run in range(num_runs):
         run_metrics = one_exp_run(serialization_dir=serialization_dir,
-                                  num_samples=num_samples,
-                                  run=num_run,
-                                  param_path=param_path,
-                                  sample_from_file=True,
-                                  dataset_filename='data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered',
-                                  run_serialization_dir=args.run_serialization_dir,
-                                  only_quantify=args.only_quantify,
-                                  )
+                                    num_samples=num_samples,
+                                    run=num_run,
+                                    param_path=param_path,
+                                    sample_from_file=True,
+                                    dataset_filename='data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered',
+                                    run_serialization_dir=args.run_serialization_dir,
+                                    only_quantify=args.only_quantify,
+                                    recover=args.recover,
+                               )
 
         assert len(run_metrics) == 1, \
             'For this experiment, there should only be one final metric object for a run.'

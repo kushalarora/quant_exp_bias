@@ -36,10 +36,13 @@ args = parser.parse_args()
 
 # ## Basic Setup of grammar and global variables like serialization directory and training config file
 
-main_args, serialization_dir, param_path, experiment_id, experiment = initialize_experiments('artificial_lang/beam_size_experiments', 
-                                                                                             debug=args.debug,
-                                                                                             experiment_text=args.exp_msg,
-                                                                                             )
+main_args, serialization_dir, param_path, experiment_id, \
+    experiment = initialize_experiments('artificial_lang/beam_size_experiments', 
+                                        output_dir=args.output_dir,
+                                        offline=args.offline,
+                                        debug=args.debug,
+                                        experiment_text=args.exp_msg,
+                                        )
 
 experiment.log_parameters({'serialization_dir': serialization_dir,
                           'main_args': main_args,
