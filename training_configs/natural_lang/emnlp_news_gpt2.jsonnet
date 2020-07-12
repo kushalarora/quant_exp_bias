@@ -1,5 +1,4 @@
 {
-    "random_seed": null,
     "dataset_reader": {
       "type": "quant_exp_language_modeling",
       "token_indexers": {

@@ -1,5 +1,4 @@
 {
-    "random_seed": null,
     "dataset_reader": {
       "type": "quant_exp_language_modeling",
       "token_indexers": {
@@ -62,8 +61,8 @@
           "add_brevity_penalty": true,
           "oracle": {
             "type": "gpt2_oracle",
-            "model_name": "gpt2",
-            "batch_size": 10,
+            "model_name": "distilgpt2",
+            "batch_size": 16,
             "cuda_device": -2,
           },
         },
@@ -84,7 +83,7 @@
   "iterator": {
       "type": "bucket",
       "sorting_keys": [["target_tokens", "num_tokens"]],
-      "batch_size": 32,
+      "batch_size": 16,
       // This is needed stupidly for bucket iterator to work.
       "max_instances_in_memory": 2000000
   },

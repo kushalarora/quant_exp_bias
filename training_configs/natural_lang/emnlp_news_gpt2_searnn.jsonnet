@@ -1,5 +1,4 @@
 {
-    "random_seed": null,
     "dataset_reader": {
       "type": "quant_exp_language_modeling",
       "token_indexers": {
@@ -66,12 +65,12 @@
           "add_brevity_penalty": false,
           "oracle": {
             "type": "gpt2_oracle",
-            "model_name": "gpt2",
+            "model_name": "distilgpt2",
             "batch_size": 10,
             "cuda_device": -2,
           },
         },
-        "temperature": 50,
+        "temperature": 5,
         "num_neighbors_to_add": 0,
         "num_tokens_to_rollout": 25,
         "rollout_ratio": 0.25,
