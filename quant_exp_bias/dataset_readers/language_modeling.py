@@ -3,15 +3,16 @@ import logging
 import math
 
 from overrides import overrides
-
 from allennlp.data.tokenizers import Token
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
 from allennlp.data.fields import TextField
 from allennlp.data.instance import Instance
 from allennlp.data.token_indexers import SingleIdTokenIndexer
 from allennlp.data.token_indexers.token_indexer import TokenIndexer
-from allennlp.data.tokenizers import WordTokenizer
+from allennlp.data.tokenizers.whitespace_tokenizer import WhitespaceTokenizer
 from allennlp.data.tokenizers.tokenizer import Tokenizer
+
+from transformers.tokenization_gpt2 import GPT2TokenizerFast
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -43,8 +44,12 @@ class LanguageModelingDatasetReader(DatasetReader):
                  max_sequence_length: int = None,
                  start_tokens: List[str] = None,
                  end_tokens: List[str] = None) -> None:
-        super().__init__(True)
-        self._tokenizer = tokenizer or WordTokenizer()
+        super().__init__()
+        self._tokenizer = tokenizer or WhitespaceTokenizer()
+        # HACK: Somehow pad_token is not set for GPT tokenizer:
+        if isinstance(self._tokenizer.tokenizer, GPT2TokenizerFast):
+            self._tokenizer.tokenizer.pad_token = self._tokenizer.tokenizer.eos_token
+
         self._token_indexers = token_indexers or {"tokens": SingleIdTokenIndexer()}
         if max_sequence_length is not None:
             self._max_sequence_length: Union[float, Optional[int]] = max_sequence_length
@@ -54,6 +59,7 @@ class LanguageModelingDatasetReader(DatasetReader):
         self._start_tokens = [Token(st) for st in (start_tokens or [])]
         self._end_tokens = [Token(et) for et in (end_tokens or [])]
 
+        
         logger.info("Creating SimpleLanguageModelingDatasetReader")
         logger.info("max_sequence_length=%s", max_sequence_length)
 
