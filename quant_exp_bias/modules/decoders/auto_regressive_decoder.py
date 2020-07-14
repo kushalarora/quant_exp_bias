@@ -291,7 +291,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             # shape: (batch_size,)
             return last_predictions
 
-        targets = target_tokens['tokens']
+        targets = util.get_token_ids_from_text_field_tensors(target_tokens)
         if rollin_mode == 'teacher_forcing':
             # shape: (batch_size,)
             input_choices = targets[:, timestep]
@@ -313,7 +313,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                 last_predictions: torch.LongTensor,
                                 state: Dict[str, torch.Tensor],
                               ) -> torch.FloatTensor:
-        targets = state['rollout_params']['target_tokens']['tokens']
+        targets = util.get_token_ids_from_text_field_tensors(state['rollout_params']['target_tokens'])
         seq_len = targets.size(1)
         
         batch_size = last_predictions.shape[0]
@@ -535,7 +535,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
         # `self._max_decoding_steps`.
         if (not compute_exposure_bias) and target_tokens:
             # shape: (batch_size, max_target_sequence_length)
-            targets = target_tokens["tokens"]
+            targets = util.get_token_ids_from_text_field_tensors(target_tokens)
 
             _, target_sequence_length = targets.size()
 
@@ -592,16 +592,18 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                                                     vocab_namespace=self._target_namespace,
                                                     truncate=True)
             output_dict['predicted_tokens'] = predicted_tokens
-            
+
             top_k_log_probabilities = rollout_output_dict["class_log_probabilities"]
-            prediction_loss = top_k_log_probabilities[:,0]
+            prediction_loss = top_k_log_probabilities[:,0].float().data.cpu()
             normalized_prediction_losses = [torch.exp(pred_loss/(len(pred_tokens) + 1))
-                                                for pred_loss, pred_tokens in zip(prediction_loss.data.cpu(), predicted_tokens)]
+                                                for pred_loss, pred_tokens in zip(prediction_loss, predicted_tokens)]
             output_dict['model_sampled_model_probs'] =  normalized_prediction_losses
 
             if target_tokens and self._rollout_cost_function:
                 if self._rollout_cost_function.takes_decoded_input():
-                    decoded_targets = self._decode_tokens(target_tokens['tokens'],
+                    targets = util.get_token_ids_from_text_field_tensors(target_tokens)
+
+                    decoded_targets = self._decode_tokens(targets,
                                                           vocab_namespace=self._target_namespace,
                                                           truncate=True)
 
@@ -610,7 +612,10 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 else:
                     # This is for rollout cost function like hamming loss for OCR.
                     target_mask = util.get_text_field_mask(target_tokens)
-                    loss_batch = self._rollout_cost_function(best_predictions, target_tokens['tokens'], target_mask)
+                    targets = util.get_token_ids_from_text_field_tensors(target_tokens)
+                    loss_batch = self._rollout_cost_function(best_predictions, 
+                                                             targets, 
+                                                             target_mask)
 
                 mask = util.get_text_field_mask({'predictions': best_predictions})
                 non_batch_dims = tuple(range(1, len(mask.shape)))
@@ -622,11 +627,13 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                 self._rollout_cf_avg(float(loss.cpu()))
 
             if target_tokens and self._bleu:
-                self._bleu(best_predictions, target_tokens["tokens"])
+                targets = util.get_token_ids_from_text_field_tensors(target_tokens)
+                self._bleu(best_predictions, targets)
 
             if target_tokens and self._hamming:
                 target_mask = util.get_text_field_mask(target_tokens)
-                self._hamming(best_predictions, target_tokens["tokens"], target_mask)
+                targets = util.get_token_ids_from_text_field_tensors(target_tokens)
+                self._hamming(best_predictions, targets, target_mask)
 
             if compute_exposure_bias and self._exposure_bias:
 
@@ -788,8 +795,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
                         "class_log_probabilities": log_probabilities,}
 
         if target_tokens:
-            targets = target_tokens['tokens']
-
+            targets = util.get_token_ids_from_text_field_tensors(target_tokens)
             # shape: (batch_size, num_decoding_steps)
             best_logits = logits[:, 0, :, :].squeeze(1)
             target_mask = util.get_text_field_mask(target_tokens)
@@ -894,7 +900,7 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
 
         step_targets = None
         if target_tokens is not None:
-            step_targets = target_tokens['tokens']
+            step_targets = util.get_token_ids_from_text_field_tensors(target_tokens)
 
             if target_prefixes is not None:
                 prefixes_length = target_prefixes.size(1)
@@ -950,7 +956,8 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
             oracle_sampled_model_seq_probs {torch.LongTensor} -- Probability of per prediction in a sequence
         """
         state = {}
-        sequences = sequences_dict['tokens']
+        sequences = util.get_token_ids_from_text_field_tensors(sequences_dict)
+
         batch_size = sequences.size(0)
         seq_len = sequences.size(1)
         start_predictions = self._get_start_predictions(state,
@@ -1019,7 +1026,8 @@ class QuantExpAutoRegressiveSeqDecoder(SeqDecoder):
            source_mask = state["source_mask"]
            batch_size = source_mask.size()[0]
         elif target_tokens:
-            batch_size = target_tokens["tokens"].size(0)
+            targets = util.get_token_ids_from_text_field_tensors(target_tokens)
+            batch_size = targets.size(0)
         else:
             batch_size = generation_batch_size
 
