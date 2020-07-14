@@ -1,5 +1,5 @@
-from allennlp.common.util import import_submodules
-import_submodules("quant_exp_bias")
+from allennlp.common.util import import_module_and_submodules
+import_module_and_submodules("quant_exp_bias")
 import argparse
 
 
@@ -13,13 +13,8 @@ import time
 from overrides import overrides
 
 from allennlp import __version__
-from allennlp.commands.configure import Configure
-from allennlp.commands.elmo import Elmo
 from allennlp.commands.evaluate import Evaluate
-from allennlp.commands.fine_tune import FineTune
-from allennlp.commands.make_vocab import MakeVocab
 from allennlp.commands.predict import Predict
-from allennlp.commands.dry_run import DryRun
 from allennlp.commands.subcommand import Subcommand
 from allennlp.commands.test_install import TestInstall
 from allennlp.commands.find_learning_rate import FindLearningRate
@@ -56,14 +51,9 @@ def get_args(args: argparse.Namespace = None):
 
     subcommands = {
             # Default commands
-            "configure": Configure(),
             "train": Train(),
             "evaluate": Evaluate(),
             "predict": Predict(),
-            "make-vocab": MakeVocab(),
-            "elmo": Elmo(),
-            "fine-tune": FineTune(),
-            "dry-run": DryRun(),
             "test-install": TestInstall(),
             "find-lr": FindLearningRate(),
             "print-results": PrintResults(),
@@ -71,10 +61,15 @@ def get_args(args: argparse.Namespace = None):
             "quantify-exposure-bias": QuantifyExposureBias()
             
     }
-
     for name, subcommand in subcommands.items():
-        subparser = subcommand.add_subparser(name, subparsers)
- 
+        subparser = subcommand.add_subparser(subparsers)
+        subparser.add_argument(
+            "--include-package",
+            type=str,
+            action="append",
+            default=[],
+            help="additional packages to include",
+        )
     args, _ = parser.parse_known_args(args)
     return args
 
@@ -148,9 +143,11 @@ def quantify_exposure_bias_runner(args: argparse.Namespace,
                                   output_dir: str,
                                   cuda_device: int,
                                   weights_file: str = None,
+                                  opt_level: str = None,
                                   num_trials: int = None,
                                   num_length_samples: int = None,
-                                  num_samples_per_length: int = None):
+                                  num_samples_per_length: int = None,
+                                  ):
 
     num_trials = num_trials or args.num_trials
     num_samples_per_length = num_samples_per_length or args.num_samples_per_length
@@ -163,4 +160,6 @@ def quantify_exposure_bias_runner(args: argparse.Namespace,
                                   num_samples_per_length=num_samples_per_length,
                                   cuda_device=cuda_device,
                                   overrides=args.overrides,
-                                  weights_file=weights_file)
+                                  weights_file=weights_file,
+                                  opt_level=opt_level,
+                                 )

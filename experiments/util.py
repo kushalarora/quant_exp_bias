@@ -14,8 +14,8 @@ from datetime import datetime
 from random import randint
 from time import sleep
 
-from allennlp.common.util import import_submodules
-import_submodules("quant_exp_bias")
+from allennlp.common.util import import_module_and_submodules
+import_module_and_submodules("quant_exp_bias")
 
 from comet_ml import Experiment, OfflineExperiment
 from typing import Dict, List, Callable, Tuple, Union, Any

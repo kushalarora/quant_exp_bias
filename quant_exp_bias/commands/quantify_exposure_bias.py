@@ -68,7 +68,6 @@ from allennlp.common import Params
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
 from allennlp.data.instance import Instance
 
-from allennlp.data.iterators import DataIterator
 
 from allennlp.models.archival import load_archive
 from allennlp.models.model import Model
@@ -77,13 +76,13 @@ from allennlp.nn import util as nn_util
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
-
+@Subcommand.register("quantify-exposure-bias")
 class QuantifyExposureBias(Subcommand):
-    def add_subparser(self, name: str, parser: argparse._SubParsersAction) -> argparse.ArgumentParser:
+    def add_subparser(self, parser: argparse._SubParsersAction) -> argparse.ArgumentParser:
         # pylint: disable=protected-access
         description = '''Evaluate the specified model + dataset'''
         subparser = parser.add_parser(
-                name, description=description, help='Evaluate the specified model + dataset.')
+                self.name, description=description, help='Evaluate the specified model + dataset.')
 
         subparser.add_argument('archive_file', 
                                type=str, 
@@ -149,13 +148,19 @@ def quantify_exposure_bias(archive_file: str,
                            num_samples_per_length: int = 360,
                            cuda_device: int = -1,
                            overrides: str = "",
-                           weights_file: str = None):
+                           weights_file: str = None, 
+                           opt_level: str = None):
     # Disable some of the more verbose logging statements
     logging.getLogger('allennlp.common.params').disabled = True
     logging.getLogger('allennlp.nn.initializers').disabled = True
 
     # Load from archive
-    archive = load_archive(archive_file, cuda_device, overrides, weights_file)
+    archive = load_archive(
+                archive_file=archive_file, 
+                cuda_device=cuda_device, 
+                overrides=overrides, 
+                weights_file=weights_file, 
+                opt_level=opt_level)
     config = archive.config
     prepare_environment(config)
     config = dict(config)
@@ -171,13 +176,6 @@ def quantify_exposure_bias(archive_file: str,
         dataset_reader = DatasetReader.from_params(validation_dataset_reader_params)
     else:
         dataset_reader = DatasetReader.from_params(config.pop("dataset_reader"))
-    
-    iterator_params = config.pop("validation_iterator", None)
-    if iterator_params is None:
-        iterator_params = config.pop("iterator")
-    data_iterator = DataIterator.from_params(iterator_params)
-    data_iterator.index_with(model.vocab)
-    data_iterator._batch_size = generation_batch_size
 
     output_dir_trail = None
     exp_biases = []
