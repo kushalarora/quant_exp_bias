@@ -13,10 +13,11 @@ local rollout_cost_function = {
 
 emnlp_gpt2_rl_config + {
       "vocabulary": {
-        "directory_path": std.extVar("VOCAB_PATH"),
+        "type": "from_files",
+        "directory": std.extVar("VOCAB_PATH"),
       },
-      "model" : {
-        "decoder": {
+      "model"+: {
+        "decoder"+: {
           "type": "quant_exp_reinforce_decoder",
           "generation_batch_size": 128,
           "rollout_cost_function": rollout_cost_function,
@@ -25,21 +26,22 @@ emnlp_gpt2_rl_config + {
           "detach_rollin_logits": false,
         },
         "initializer": {
-          "regexes": ["_decoder._decoder_net.*|_decoder._output_projection*|_decoder.target_embedder*|_decoder._dropout",
-            {
-              "type": "pretrained",
-              "weights_file_path": std.extVar("WEIGHT_FILE_PATH"),
-              "parameter_name_overrides": {},
-            },
+          "regexes": [
+            ["_decoder._decoder_net.*|_decoder._output_projection*|_decoder.target_embedder*|_decoder._dropout",
+              {
+                "type": "pretrained",
+                "weights_file_path": std.extVar("WEIGHT_FILE_PATH"),
+              },
+            ],
           ],
         },
       },
-      "data_loader": {
-        "batch_sampler": {
+      "data_loader"+: {
+        "batch_sampler"+: {
           "batch_size": 16,
         },
       },
-      "trainer": {
+      "trainer"+: {
         "validation_metric": "-loss",
       },
     }

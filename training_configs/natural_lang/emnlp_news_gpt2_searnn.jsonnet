@@ -1,19 +1,19 @@
 local emnlp_gpt2_searnn_config = import "emnlp_news_gpt2.jsonnet";
 
 local rollout_cost_function = {
-                                "type": "noisy_oracle",
-                                "add_brevity_penalty": true,
-                                "oracle": {
-                                  "type": "gpt2_oracle",
-                                  "model_name": "distilgpt2",
-                                  "batch_size": 16,
-                                  "cuda_device": -2,
-                                }
-                              };
+          "type": "noisy_oracle",
+          "add_brevity_penalty": true,
+          "oracle": {
+            "type": "gpt2_oracle",
+            "model_name": "distilgpt2",
+            "batch_size": 16,
+            "cuda_device": -2,
+          }
+        };
 
 emnlp_gpt2_searnn_config + {
-  'model': {
-    'decoder': {
+  'model'+: {
+    'decoder'+: {
           "type": "quant_exp_searnn_decoder",
           "generation_batch_size": 128,
           "rollin_mode":  std.extVar("rollin_mode"),
@@ -25,12 +25,12 @@ emnlp_gpt2_searnn_config + {
           "rollout_cost_function": rollout_cost_function,
     },
   },
-  "data_loader": {
-    "batch_sampler": {
+  "data_loader"+: {
+    "batch_sampler"+: {
       "batch_size": 16,
     },
   },
-  "trainer": {
+  "trainer"+: {
     "validation_metric": "-loss",
   },
 }
