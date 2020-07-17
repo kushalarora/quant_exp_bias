@@ -18,7 +18,6 @@
       "decoder": {
         "type": "quant_exp_auto_regressive_seq_decoder",
         "max_decoding_steps": 50,
-        //"max_decoding_steps": 30,
         "decoder_net": {
           "type": "quant_exp_bias_lstm_cell",
           "decoding_dim": 100,
@@ -42,26 +41,20 @@
           "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME"),
           "parallelize": true,
           "num_threads": 32,
-          //"max_len": 30,
         },
       }
     },
-    "iterator": {
+    "data_loader": {
+      "batch_sampler": {
         "type": "bucket",
-        "sorting_keys": [["target_tokens", "num_tokens"]],
-        "batch_size": 128,
-
-        // This is needed stupidly for bucket iterator to work.
-        "max_instances_in_memory": 50000
-    },
-    "validation_iterator": {
-      "type": "basic",
-      "batch_size": 1000
+        "batch_size": 128,  
+      }
     },
     "trainer": {
       "num_epochs": 50,
       "cuda_device" : 0,
       "validation_metric": "-perplexity",
+      "grad_clipping": 5.0,
       "optimizer": {
         "type": "adam",
         "lr": 0.01
@@ -77,9 +70,9 @@
           "patience": 2
       },
       "patience": 10,
-      "should_log_learning_rate": true,
-      "log_batch_size_period": 50,
-      "num_serialized_models_to_keep": -1
+      "checkpointer": {
+        "num_serialized_models_to_keep": 1,
+      },
     },
   }
 
