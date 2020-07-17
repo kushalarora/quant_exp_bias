@@ -68,6 +68,7 @@
     "opt_level": "O2",
     "validation_metric": "-perplexity",
     "cuda_device" : 0,
+    "grad_clipping": 5.0,
     "optimizer": {
       "type": "adam",
       "lr": 0.001,

@@ -1,7 +1,3 @@
-from allennlp.common.util import import_module_and_submodules
-import_module_and_submodules("quant_exp_bias")
-import argparse
-
 
 from typing import Dict
 import argparse
@@ -25,7 +21,8 @@ from allennlp.common.params import Params
 from allennlp.commands.train import train_model
 from allennlp.commands import ArgumentParserWithDefaults
 
-from quant_exp_bias.commands.quantify_exposure_bias import QuantifyExposureBias, quantify_exposure_bias
+from quant_exp_bias.commands.quantify_exposure_bias import QuantifyExposureBias, \
+                                                            quantify_exposure_bias
 from quant_exp_bias.commands.sample_oracle import SampleOracle, sample_oracle
 
 
@@ -163,3 +160,6 @@ def quantify_exposure_bias_runner(args: argparse.Namespace,
                                   weights_file=weights_file,
                                   opt_level=opt_level,
                                  )
+
+if __name__ == '__main__':
+    get_args()

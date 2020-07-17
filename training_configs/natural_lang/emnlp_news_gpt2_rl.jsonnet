@@ -10,9 +10,6 @@
       "tokenizer": {
         "type": "pretrained_transformer",
         "model_name": "gpt2",
-        "start_tokens": ["@@@@"],
-        "end_tokens": ["####"],
-        "do_lowercase": false,
       },
     },
     "vocabulary": {
@@ -80,21 +77,24 @@
           ],
       ]
   },
-  "iterator": {
+  "data_loader": {
+    "batch_sampler": {
       "type": "bucket",
-      "sorting_keys": [["target_tokens", "num_tokens"]],
-      "batch_size": 16,
-      // This is needed stupidly for bucket iterator to work.
-      "max_instances_in_memory": 2000000
+      "batch_size": 16  
+
+    }
   },
-  "validation_iterator": {
-      "type": "basic",
-      "batch_size": 32
+  "validation_data_loader": {
+      "batch_sampler": {
+          "type": "bucket",
+          "batch_size": 32
+      }
   },
   "trainer": {
     "num_epochs": 20,
-    // "validation_metric": "-perplexity",
+    "opt_level": "O2",
     "cuda_device" : 0,
+    "grad_clipping": 5.0,
     "optimizer": {
       "type": "adam",
       "lr": 0.001,
@@ -106,8 +106,8 @@
         "patience": 0
     },
     "patience": 10,
-    "should_log_learning_rate": true,
-    "log_batch_size_period": 500,
-    "num_serialized_models_to_keep": -1
+    "checkpointer": {
+      "num_serialized_models_to_keep": 1,
+    },
   }
 }
