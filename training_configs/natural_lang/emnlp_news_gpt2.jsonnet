@@ -1,3 +1,19 @@
+local learning_rate_scheduler = {
+        "type": "reduce_on_plateau",
+        "factor": 0.5,
+        "mode": "min",
+        "patience": 0
+    };
+local optimizer = {
+      "type": "adam",
+      "lr": 0.001,
+    };
+
+local validation_metric = '-perplexity';
+
+local batch_size = 96; 
+
+local decoder_type = "quant_exp_auto_regressive_seq_decoder";
 {
     "dataset_reader": {
       "type": "quant_exp_language_modeling",
@@ -10,9 +26,6 @@
       "tokenizer": {
         "type": "pretrained_transformer",
         "model_name": "gpt2",
-        "start_tokens": ["@@@@"],
-        "end_tokens": ["####"],
-        "do_lowercase": false,
       },
     },
     // "vocabulary": {
@@ -26,7 +39,7 @@
       "type": "quant_exp_composed_lm",
       "use_in_seq2seq_mode": false,
       "decoder": {
-        "type": "quant_exp_auto_regressive_seq_decoder",
+        "type": decoder_type,
         "generation_batch_size": 256,
         "max_decoding_steps": 50,
         "decoder_net": {
@@ -59,30 +72,24 @@
         },
       }
   },
-  "iterator": {
+  "data_loader": {
+    "batch_sampler": {
       "type": "bucket",
-      "sorting_keys": [["target_tokens", "num_tokens"]],
-      "batch_size": 96,
-      // This is needed stupidly for bucket iterator to work.
-      "max_instances_in_memory": 2000000
+      "batch_size": batch_size,
+
+    }
   },
   "trainer": {
     "num_epochs": 20,
-    "validation_metric": "-perplexity",
+    "opt_level": "O2",
+    "validation_metric": validation_metric,
     "cuda_device" : 0,
-    "optimizer": {
-      "type": "adam",
-      "lr": 0.001,
-    },
-    "learning_rate_scheduler": {
-        "type": "reduce_on_plateau",
-        "factor": 0.5,
-        "mode": "min",
-        "patience": 0
-    },
+    "grad_clipping": 5.0,
+    "optimizer": optimizer,
+    "learning_rate_scheduler": learning_rate_scheduler,
     "patience": 5,
-    "should_log_learning_rate": true,
-    "log_batch_size_period": 500,
-    "num_serialized_models_to_keep": -1
+    "checkpointer": {
+      "num_serialized_models_to_keep": 1,
+    },
   }
 }

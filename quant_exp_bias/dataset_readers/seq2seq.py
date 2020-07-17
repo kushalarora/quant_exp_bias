@@ -10,7 +10,8 @@ from allennlp.common.util import START_SYMBOL, END_SYMBOL
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
 from allennlp.data.fields import TextField
 from allennlp.data.instance import Instance
-from allennlp.data.tokenizers import Token, Tokenizer, WordTokenizer
+from allennlp.data.tokenizers import Token, Tokenizer
+from allennlp.data.tokenizers.whitespace_tokenizer import WhitespaceTokenizer
 from allennlp.data.token_indexers import TokenIndexer, SingleIdTokenIndexer
 
 logger = logging.getLogger(__name__)
@@ -63,7 +64,7 @@ class Seq2SeqDatasetReader(DatasetReader):
         lazy: bool = False,
     ) -> None:
         super().__init__(lazy)
-        self._source_tokenizer = source_tokenizer or WordTokenizer()
+        self._source_tokenizer = source_tokenizer or WhitespaceTokenizer()
         self._target_tokenizer = target_tokenizer or self._source_tokenizer
         self._source_token_indexers = source_token_indexers or {"tokens": SingleIdTokenIndexer()}
         self._target_token_indexers = target_token_indexers or self._source_token_indexers

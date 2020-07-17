@@ -8,11 +8,11 @@ import numpy
 from allennlp.common.util import pad_sequence_to_length
 from allennlp.data.vocabulary import Vocabulary
 from allennlp.data.tokenizers.token import Token
-from allennlp.data.token_indexers.token_indexer import TokenIndexer
+from allennlp.data.token_indexers.token_indexer import TokenIndexer, IndexedTokenList
 
 
 @TokenIndexer.register("ocr_indexer")
-class OCRTokenIndexer(TokenIndexer[int]):
+class OCRTokenIndexer(TokenIndexer):
     """
     This :class:`TokenIndexer` represents tokens as single integers.
 
@@ -39,7 +39,7 @@ class OCRTokenIndexer(TokenIndexer[int]):
     def tokens_to_indices(self,
                           tokens: List[Token],
                           vocabulary: Vocabulary,
-                          index_name: str) -> Dict[str, List[int]]:
+                          index_name: str) -> IndexedTokenList:
 
         indices: List[numpy.ndarray] = []
         for binary_token in tokens:
@@ -56,7 +56,7 @@ class OCRTokenIndexer(TokenIndexer[int]):
         return {}
 
     @overrides
-    def as_padded_tensor(self,
+    def as_padded_tensor_dict(self,
                          tokens: Dict[str, List[int]],
                          desired_num_tokens: Dict[str, int],
                          padding_lengths: Dict[str, int]) -> Dict[str, torch.Tensor]:  # pylint: disable=unused-argument

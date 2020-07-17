@@ -68,8 +68,6 @@ from allennlp.common import Params
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
 from allennlp.data.instance import Instance
 
-from allennlp.data.iterators import DataIterator
-
 from allennlp.models.archival import load_archive
 from allennlp.models.model import Model
 from allennlp.training.util import evaluate
@@ -77,13 +75,13 @@ from allennlp.nn import util as nn_util
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
-
+@Subcommand.register("compute-nll")
 class ComputeNLLScore(Subcommand):
-    def add_subparser(self, name: str, parser: argparse._SubParsersAction) -> argparse.ArgumentParser:
+    def add_subparser(self, parser: argparse._SubParsersAction) -> argparse.ArgumentParser:
         # pylint: disable=protected-access
         description = '''Evaluate the specified model + dataset'''
         subparser = parser.add_parser(
-                name, description=description, help='Evaluate the specified model + dataset.')
+                self.name, description=description, help='Evaluate the specified model + dataset.')
 
         subparser.add_argument('archive_file', 
                                type=str, 
@@ -164,21 +162,6 @@ def compute_nll_score(archive_file: str,
     model.training = False
 
     generation_batch_size = config['model']['decoder'].get('generation_batch_size', num_samples_per_length)
-
-    # Try to use the validation dataset reader if there is one - otherwise fall back
-    # to the default dataset_reader used for both training and validation.
-    validation_dataset_reader_params = config.pop("validation_dataset_reader", None)
-    if validation_dataset_reader_params is not None:
-        dataset_reader = DatasetReader.from_params(validation_dataset_reader_params)
-    else:
-        dataset_reader = DatasetReader.from_params(config.pop("dataset_reader"))
-    
-    iterator_params = config.pop("validation_iterator", None)
-    if iterator_params is None:
-        iterator_params = config.pop("iterator")
-    data_iterator = DataIterator.from_params(iterator_params)
-    data_iterator.index_with(model.vocab)
-    data_iterator._batch_size = generation_batch_size
 
     output_dir_trail = None
     H_m_o = []

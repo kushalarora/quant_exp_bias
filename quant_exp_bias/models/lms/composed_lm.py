@@ -138,7 +138,7 @@ class ComposedLMBase(Model):
                              max_decoding_step=max_decoding_step)
 
     @overrides
-    def decode(self, output_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def make_output_human_readable(self, output_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
         Finalize predictions.
         """

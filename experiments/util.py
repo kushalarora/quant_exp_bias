@@ -14,8 +14,7 @@ from datetime import datetime
 from random import randint
 from time import sleep
 
-from allennlp.common.util import import_submodules
-import_submodules("quant_exp_bias")
+from allennlp.common.util import import_module_and_submodules
 
 from comet_ml import Experiment, OfflineExperiment
 from typing import Dict, List, Callable, Tuple, Union, Any
@@ -26,7 +25,6 @@ from quant_exp_bias.utils import (get_args, quantify_exposure_bias_runner,
                                   sample_oracle_runner, train_runner)
 
 from quant_exp_bias.oracles.artificial_grammar_oracle import ArtificialLanguageOracle
-from quant_exp_bias.utils import get_args
 
 
 OverrideFuncType = Callable[[], Dict[str, Union[float, str, int]]]
@@ -63,6 +61,9 @@ def initialize_experiments(experiment_name: str,
                            offline: bool = False,
                            experiment_text: str = None,
                            ):
+    # Import LMPL library as plugin. 
+    import_module_and_submodules("quant_exp_bias")
+
     # Ipython by default adds some arguments to sys.argv.
     #  We don't want those arguments, hence we pass [] here.
     #

@@ -43,13 +43,13 @@ from quant_exp_bias.oracles.oracle_base import Oracle
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
-
+@Subcommand.register("sample-oracle")
 class SampleOracle(Subcommand):
-    def add_subparser(self, name: str, parser: argparse._SubParsersAction) -> argparse.ArgumentParser:
+    def add_subparser(self, parser: argparse._SubParsersAction) -> argparse.ArgumentParser:
         # pylint: disable=protected-access
         description = '''Create a vocabulary from the specified dataset.'''
         subparser = parser.add_parser(
-                name, description=description, help='Sample oracle to generate dataset for quantifying exposure bias experiments.')
+                self.name, description=description, help='Sample oracle to generate dataset for quantifying exposure bias experiments.')
         subparser.add_argument('param_path',
                                type=str,
                                help='path to parameter file describing the model and its inputs')
