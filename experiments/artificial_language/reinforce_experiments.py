@@ -12,7 +12,7 @@ args = get_experiment_args("artificial_language", "reiforce_experiments")
 main_args, serialization_dir, param_path, experiment_id, \
     experiment = initialize_experiments('artificial_lang/reinforce_experiments',
                                         output_dir=args.output_dir,
-                                        param_path='training_configs/artificial_grammar/artificial_grammar_rl_bleu.jsonnet',
+                                        param_path='experiments/artificial_language/training_configs/artificial_grammar_rl.jsonnet',
                                         offline=args.offline,
                                         debug=args.debug,
                                         experiment_text=args.exp_msg,

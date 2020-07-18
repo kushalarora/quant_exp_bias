@@ -38,6 +38,7 @@ args = parser.parse_args()
 
 main_args, serialization_dir, param_path, experiment_id, \
     experiment = initialize_experiments('artificial_lang/beam_size_experiments', 
+                                        param_path='experiments/artificial_language/training_configs/artificial_grammar_composed.jsonnet',
                                         output_dir=args.output_dir,
                                         offline=args.offline,
                                         debug=args.debug,

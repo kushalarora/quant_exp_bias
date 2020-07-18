@@ -14,7 +14,7 @@ args = get_experiment_args("artificial_language", "searnn_ablation_experiments")
 main_args, serialization_dir, param_path, experiment_id, \
     experiment = initialize_experiments('artificial_lang/searnn_ablation_experiments', 
                                         output_dir=args.output_dir,
-                                        param_path='training_configs/artificial_grammar/artificial_grammar_searnn.jsonnet',
+                                        param_path='experiments/artificial_language/training_configs/artificial_grammar_searnn.jsonnet',
                                         offline=args.offline,
                                         debug=args.debug,
                                         experiment_text=args.exp_msg,

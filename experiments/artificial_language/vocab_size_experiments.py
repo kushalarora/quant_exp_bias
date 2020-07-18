@@ -10,6 +10,7 @@ args = get_experiment_args("artificial_language", "vocabulary_experiments")
 
 main_args, serialization_dir, param_path, experiment_id, \
     experiment = initialize_experiments('artificial_lang/vocabulary_size_experiments', 
+                                        param_path='experiments/artificial_language/training_configs/artificial_grammar_composed.jsonnet',
                                         output_dir=args.output_dir,
                                         debug=args.debug,
                                         offline=args.offline,
