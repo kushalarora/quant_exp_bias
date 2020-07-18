@@ -27,6 +27,7 @@ scheduled_sampling_ratios  = [
 
 main_args, serialization_dir, param_path, experiment_id, \
     experiment = initialize_experiments('artificial_lang/scheduled_sampling_ablation_experiment',
+                                        param_path='experiments/artificial_language/training_configs/artificial_grammar_composed.jsonnet',
                                         output_dir=args.output_dir,
                                         debug=args.debug,
                                         offline=args.offline,

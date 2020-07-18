@@ -10,7 +10,7 @@ args = get_experiment_args("natural_language", "model_size_experiments")
 main_args, serialization_dir, param_path, experiment_id, \
     experiment = initialize_experiments('natural_lang/model_size_experiments',
                                         output_dir=args.output_dir,
-                                        param_path = 'training_configs/natural_lang/emnlp_news_gpt2.jsonnet',
+                                        param_path = 'experiments/natural_language/training_configs/emnlp_news_gpt2.jsonnet',
                                         debug=args.debug,
                                         offline=args.offline,
                                         experiment_text=args.exp_msg,

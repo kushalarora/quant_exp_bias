@@ -19,7 +19,7 @@ args = get_experiment_args("natural_language", "reinforce_ablation_experiments")
 main_args, serialization_dir, param_path, experiment_id, \
     experiment = initialize_experiments('natural_lang/reinforce_ablation_experiments',
                                         output_dir=args.output_dir,
-                                        param_path='training_configs/natural_lang/emnlp_news_gpt2_rl.jsonnet',
+                                        param_path='experiments/natural_language/training_configs/emnlp_news_gpt2_rl.jsonnet',
                                         debug=args.debug,
                                         offline=args.offline,
                                         experiment_text=args.exp_msg,
