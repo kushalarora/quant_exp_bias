@@ -47,7 +47,8 @@ class LanguageModelingDatasetReader(DatasetReader):
         super().__init__()
         self._tokenizer = tokenizer or WhitespaceTokenizer()
         # HACK: Somehow pad_token is not set for GPT tokenizer:
-        if isinstance(self._tokenizer.tokenizer, GPT2TokenizerFast):
+        if hasattr(self._tokenizer, "tokenizer") and \
+            isinstance(self._tokenizer.tokenizer, GPT2TokenizerFast):
             self._tokenizer.tokenizer.pad_token = self._tokenizer.tokenizer.eos_token
 
         self._token_indexers = token_indexers or {"tokens": SingleIdTokenIndexer()}

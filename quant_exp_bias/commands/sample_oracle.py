@@ -52,7 +52,7 @@ class SampleOracle(Subcommand):
                 self.name, description=description, help='Sample oracle to generate dataset for quantifying exposure bias experiments.')
         subparser.add_argument('param_path',
                                type=str,
-                               help='path to parameter file describing the model and its inputs')
+                               help='path to config file to instantiate the oracle.')
 
         subparser.add_argument('-s', '--serialization-dir',
                                required=True,
@@ -114,6 +114,7 @@ def sample_oracle(params: Params,
 
     if dataset_filename is not None:
         # TODO (Kushal): Convert this to a generator.
+        # TODO (Kushal): Maybe consider moving this out.
         filesize = 0
         with open(dataset_filename) as dataset_file:
             for line in dataset_file:
@@ -137,18 +138,7 @@ def sample_oracle(params: Params,
                 if sample_count == num_samples:
                     break
     else:
-        model_oracle_params = params.get('model', {})
-        assert model_oracle_params is not None, \
-            "We should have specified model in configuration."
-
-        oracle_params = model_oracle_params.get('oracle', {})
-
-        # This is to handle composed LM.
-        if not oracle_params:
-                decoder_params = model_oracle_params.get('decoder', {})
-                if decoder_params:
-                    oracle_params = decoder_params.get('oracle', {})
-
+        oracle_params = params.get('oracle', {})
         assert oracle_params is not None, \
             "Oracle should be specified in configuration."
 

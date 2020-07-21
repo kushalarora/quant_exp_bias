@@ -59,6 +59,8 @@ import numpy as np
 import math
 import random
 
+import torch.nn.functional as F
+
 from allennlp.commands.subcommand import Subcommand
 from allennlp.common.util import prepare_environment
 from allennlp.common.checks import ConfigurationError, check_for_gpu
@@ -74,6 +76,9 @@ from allennlp.models.model import Model
 from allennlp.training.util import evaluate
 from allennlp.nn import util as nn_util
 
+from quant_exp_bias.metrics.exposure_bias import ExposureBias
+from quant_exp_bias.oracles.oracle_base import Oracle
+
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 @Subcommand.register("quantify-exposure-bias")
@@ -87,6 +92,11 @@ class QuantifyExposureBias(Subcommand):
         subparser.add_argument('archive_file', 
                                type=str, 
                                help='path to an archived trained model')
+
+        subparser.add_argument('--oracle-config', 
+                                type=str,
+                                required=True,
+                                help='config file for oracle.')
 
         subparser.add_argument('--output-dir', 
                                required=True,
@@ -134,6 +144,7 @@ class QuantifyExposureBias(Subcommand):
 def quantify_exposure_bias_from_args(args: argparse.Namespace) -> Dict[str, Any]:
     return quantify_exposure_bias(archive_file=args.archive_file,
                                  output_dir=args.output_dir,
+                                 oracle_config=args.oracle_config,
                                  num_trials=args.num_trials,
                                  num_length_samples=args.num_length_samples,
                                  num_samples_per_length=args.num_samples_per_length,
@@ -143,6 +154,7 @@ def quantify_exposure_bias_from_args(args: argparse.Namespace) -> Dict[str, Any]
 
 def quantify_exposure_bias(archive_file: str,
                            output_dir: str,
+                           oracle_config,
                            num_trials: int = 5,
                            num_length_samples: int = 50,
                            num_samples_per_length: int = 360,
@@ -169,6 +181,14 @@ def quantify_exposure_bias(archive_file: str,
 
     generation_batch_size = config['model']['decoder'].get('generation_batch_size', num_samples_per_length)
 
+    oracle_params_from_file = Params.from_file(oracle_config)
+    oracle_params = oracle_params_from_file.get('oracle', {})
+    assert oracle_params is not None, \
+        "Oracle should be specified in configuration."
+    
+    oracle = Oracle.from_params(oracle_params)
+    exposure_bias = ExposureBias(oracle)
+
     # Try to use the validation dataset reader if there is one - otherwise fall back
     # to the default dataset_reader used for both training and validation.
     validation_dataset_reader_params = config.pop("validation_dataset_reader", None)
@@ -187,7 +207,6 @@ def quantify_exposure_bias(archive_file: str,
     # H_o_o = []
 
     input_dict = {
-         "compute_exposure_bias": True,
          "sample_rollouts": True,
         }
     input_dict['generation_batch_size'] = generation_batch_size
@@ -207,26 +226,42 @@ def quantify_exposure_bias(archive_file: str,
             # Delete all the previous context of the file. SO/2769061.
             open(os.path.join(output_dir_trail, 'model_sampled_generated.txt'), "w").close()
             # open(os.path.join(output_dir_trail, 'oracle_sampled_generated.txt'), "w").close()
+            for sample_num in range(num_length_samples):
 
-        for sample_num in range(num_length_samples):
+                output_dict = model(**input_dict)
 
-            output_dict = model(**input_dict)
+                # shape: (batch_size, beam_size, max_sequence_length)
+                top_k_predictions = output_dict['predictions']
 
-            metric_trial = model.get_metrics(reset=True, get_exposure_bias=True)
+                # shape: (batch_size, max_predicted_sequence_length)
+                best_predictions = top_k_predictions[:, 0, :]
 
-            for key, metric in metric_trial.items():
-                logger.info("Trial: %3d-%-3d :: %s: %-5.4f", trail_num, sample_num, key, metric)
+                model_sampled_model_probs = output_dict['model_sampled_model_probs']
+                predicted_tokens = output_dict['predicted_tokens']
+   
+                # This +1 takes care of </S> prediction as predicted token are limited to
+                # token before </S>.
+                step_log_probs = F.log_softmax(output_dict['logits'].squeeze(1), dim=-1)
+                model_sampled_model_seq_probs = torch.exp(torch.gather(step_log_probs, 2,
+                                                                        best_predictions[:,1:].unsqueeze(2)) \
+                                                                .squeeze(2))
+                
+                exp_bias_output_dict = exposure_bias(
+                                            model_sampled_model_probs=model_sampled_model_probs,
+                                            model_sampled_predictions=predicted_tokens,
+                                            model_sampled_model_seq_probs=model_sampled_model_seq_probs.data.cpu(),
+                                        )
+                metric_trial = exposure_bias.get_metric(reset=True)
 
-            exp_biases.append(metric_trial['exposure_bias'])
-            df_p_qs.append(metric_trial['df_p_q'])
-            # df_q_ps.append(metric_trial['df_q_p'])
+                exp_biases.append(metric_trial['exposure_bias'])
+                df_p_qs.append(metric_trial['df_p_q'])
 
             if output_dir_trail:
                 with open(os.path.join(output_dir_trail, 'model_sampled_generated.txt'), "a+") as file:
                     for seq, model_prob, oracle_prob, value in zip(output_dict['model_sampled_predicted_tokens'],
-                                                                    output_dict['model_sampled_model_probs'],
-                                                                    output_dict['model_sampled_oracle_probs'],
-                                                                    output_dict['model_sampled_scores']):
+                                                                    exp_bias_output_dict['model_sampled_model_probs'],
+                                                                    exp_bias_output_dict['model_sampled_oracle_probs'],
+                                                                    exp_bias_output_dict['model_sampled_scores']):
                         print(f'{seq} P={model_prob:.4f} O={oracle_prob:.4f} Df_p_q={value:.4f}', file=file)
                         H_m_m.append(float(model_prob))
                         H_m_o.append(float(oracle_prob))
