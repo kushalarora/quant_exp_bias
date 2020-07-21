@@ -137,6 +137,7 @@ def train_runner(args: argparse.Namespace,
 
 def quantify_exposure_bias_runner(args: argparse.Namespace,
                                   archive_file: str,
+                                  oracle_config: str,
                                   output_dir: str,
                                   cuda_device: int,
                                   weights_file: str = None,
@@ -145,13 +146,12 @@ def quantify_exposure_bias_runner(args: argparse.Namespace,
                                   num_length_samples: int = None,
                                   num_samples_per_length: int = None,
                                   ):
-
     num_trials = num_trials or args.num_trials
     num_samples_per_length = num_samples_per_length or args.num_samples_per_length
     num_length_samples = num_length_samples or args.num_length_samples
-    
     return quantify_exposure_bias(archive_file=archive_file, 
                                   output_dir=output_dir, 
+                                  oracle_config=oracle_config,
                                   num_trials=num_trials,
                                   num_length_samples=num_length_samples,
                                   num_samples_per_length=num_samples_per_length,

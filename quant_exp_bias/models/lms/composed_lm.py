@@ -104,7 +104,6 @@ class ComposedLMBase(Model):
         self,  # type: ignore
         source_tokens: Dict[str, torch.LongTensor] = None,
         target_tokens: Dict[str, torch.LongTensor] = None,
-        compute_exposure_bias: bool = False,
         sample_rollouts: bool = False,
         generation_batch_size:int = 1024,
         max_decoding_step: int = None
@@ -132,7 +131,6 @@ class ComposedLMBase(Model):
             state.update(self._encode(source_tokens))
         return self._decoder(state, 
                              target_tokens,
-                             compute_exposure_bias=compute_exposure_bias,
                              sample_rollouts=sample_rollouts,
                              generation_batch_size=generation_batch_size,
                              max_decoding_step=max_decoding_step)
@@ -176,5 +174,5 @@ class ComposedLMBase(Model):
 
 
     @overrides
-    def get_metrics(self, reset: bool = False, get_exposure_bias=False) -> Dict[str, float]:
-        return self._decoder.get_metrics(reset, get_exposure_bias=get_exposure_bias)
+    def get_metrics(self, reset: bool = False) -> Dict[str, float]:
+        return self._decoder.get_metrics(reset)

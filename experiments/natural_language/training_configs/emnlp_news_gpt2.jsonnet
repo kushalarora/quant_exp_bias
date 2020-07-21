@@ -60,12 +60,6 @@ local decoder_type = "quant_exp_auto_regressive_seq_decoder";
         "dropout": 0.2,
         "start_token": "@@@@",
         "end_token": "####",
-        "oracle": {
-          "type": "gpt2_oracle",
-          "model_name": "gpt2-xl",
-          "batch_size": 10,
-          "cuda_device": -1,
-        },
         "detokenizer": {
           "type": "gpt2_detokenizer",
           "model_name": "gpt2"

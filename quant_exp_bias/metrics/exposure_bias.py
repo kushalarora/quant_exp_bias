@@ -215,7 +215,10 @@ class ExposureBias(Metric):
         if reset:
             self.reset()
 
-        return avg_exp_bias, avg_df_p_q #, avg_df_q_p
+        return {
+            "exposure_bias": avg_exp_bias, 
+            "df_p_q": avg_df_p_q #, avg_df_q_p
+        }
 
     @overrides
     def reset(self):

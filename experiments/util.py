@@ -133,10 +133,128 @@ def last_exp_bias_epoch_func(train_model_serialization_dir):
     metrics_filename = f'metrics_epoch_{epoch}.json'
     return [(-1, '', metrics_filename)]
 
+def generate_dataset(run_serialization_dir: str,
+                     oracle_config: str = 'experiments/artificial_language/training_configs/artificial_grammar_oracle.jsonnet',
+                     shall_generate_grammar_file: str = False,
+                     grammar_template: str='grammar_templates/grammar_2.template',
+                     vocabulary_size: int=6,
+                     vocabulary_distribution: str='zipf',
+                     num_samples: int = 10000,
+                     grammar_file_epsilon_0: str = None,
+                     grammar_file_epsilon: str = None,
+                     sample_from_file: bool = False,
+                     dataset_filename: str = None,
+                    ):
+    # This is grammar with epsilon 0 to sample correct sequence.
+    if shall_generate_grammar_file:
+        generate_grammar_file(run_serialization_dir, grammar_template,
+                                vocabulary_size, vocabulary_distribution, 
+                                epsilon=0, cost_func_grammar=True)
+    elif grammar_file_epsilon_0:
+        os.environ["FSA_GRAMMAR_FILENAME"] = grammar_file_epsilon_0
+        os.environ["FSA_GRAMMAR_FILENAME_COST_FUNC"] = grammar_file_epsilon_0
+
+    # We might want to sample from file, for example, in cases,
+    # where dataset is fixed. This is the case with natural language
+    # experiments.
+    sample_oracle_arg_list = ['sample-oracle',
+                            oracle_config,
+                            '-s', run_serialization_dir,
+                            '-n', str(num_samples)]
+
+    if sample_from_file:
+        sample_oracle_arg_list += ['-f', dataset_filename]
+
+    sample_oracle_args = get_args(args=sample_oracle_arg_list)
+    oracle_train_filename, oracle_dev_filename, _ = \
+        sample_oracle_runner(sample_oracle_args,
+                            run_serialization_dir)
+
+    os.environ['TRAIN_FILE'] = oracle_train_filename
+    os.environ['DEV_FILE'] = oracle_dev_filename
+
+    # This is grammar with epsilon 1e-4 to smoothened probability distribution
+    # so that we can assign some prob. to incorrect sequences.
+    if shall_generate_grammar_file:
+        generate_grammar_file(run_serialization_dir, grammar_template,
+                            vocabulary_size, vocabulary_distribution, epsilon=1e-4)
+    elif grammar_file_epsilon_0 or grammar_file_epsilon:
+        os.environ["FSA_GRAMMAR_FILENAME"] = grammar_file_epsilon or grammar_file_epsilon_0
+
+    return oracle_train_filename, oracle_dev_filename
+
+def quantify_exposure_bias(metric_filepath: str,
+                            archive_file: str,
+                            oracle_config: str,
+                            output_dir: str,
+                            cuda_device: int = 0,
+                            weights_file: str = None,
+                            opt_level: str = "O2",
+                            num_trials: int = None,
+                            num_length_samples: int = None,
+                            num_samples_per_length: int = None,
+                            overrides: str = None,
+                          ):
+    overrides = overrides or default_overides_func()
+
+    metrics = json.load(open(metric_filepath))
+    args=['quantify-exposure-bias',
+                                archive_file,
+                                '--oracle-config', oracle_config,
+                                '--output-dir', output_dir]
+    if weights_file:
+        args += ['--weights-file', weights_file]
+    
+    if overrides:
+        args += ['-o', overrides]
+
+    qeb_args = get_args(args=args)
+
+    exp_biases, exp_bias_mean, exp_bias_std, \
+        df_p_qs, df_p_q_mean, df_p_q_std, \
+        h_m_m_mean, h_m_m_std, h_m_o_mean, h_m_o_std = \
+            quantify_exposure_bias_runner(qeb_args,
+                                    archive_file,
+                                    oracle_config,
+                                    output_dir,
+                                    opt_level=opt_level,
+                                    cuda_device=cuda_device,
+                                    weights_file=weights_file,
+                                    num_trials=num_trials,
+                                    num_length_samples=num_length_samples,
+                                    num_samples_per_length=num_samples_per_length)
+
+    metrics['exp_biases'] = exp_biases
+    metrics['exp_bias_mean'] = exp_bias_mean
+    metrics['exp_bias_std'] = exp_bias_std
+
+    metrics['df_p_qs'] = df_p_qs
+    metrics['df_p_q_mean'] = df_p_q_mean
+    metrics['df_p_q_std'] = df_p_q_std
+
+    # metrics['df_q_ps'] = df_q_ps
+    # metrics['df_q_p_mean'] = df_q_p_mean
+    # metrics['df_q_p_std'] = df_q_p_std
+
+    metrics['H_m_m_mean'] = h_m_m_mean
+    metrics['H_m_m_std'] =  h_m_m_std
+
+    metrics['H_m_o_mean'] = h_m_o_mean
+    metrics['H_m_o_std'] = h_m_o_std
+
+    # metrics['H_o_m_mean'] = h_o_m_mean
+    # metrics['H_o_m_std'] = h_o_m_std
+    
+    # metrics['H_o_o_mean'] = h_o_o_mean
+    # metrics['H_o_o_std'] = h_o_o_std
+
+    return metrics
+
 def one_exp_run(serialization_dir: str = None,
                 num_samples: int = 10000,
                 run: int = 0,
                 param_path: str = None,
+                oracle_config: str = None,
                 cuda_device:int = 0,
                 overides_func: OverrideFuncType = default_overides_func,
                 exp_bias_epochs_func: ExpBiasEpochsFuncType = default_exp_bias_epochs_func,
@@ -153,13 +271,12 @@ def one_exp_run(serialization_dir: str = None,
                 grammar_file_epsilon_0: str = None,
                 grammar_file_epsilon: str = None,
                 only_quantify: bool = False,
-                run_serialization_dir:str = None,
+                run_serialization_dir: str = None,
                 train_model_serialization_dir: str = None,
-                oracle_train_filename:str = None, 
-                oracle_dev_filename:str = None,
-                recover:bool = False,
+                oracle_train_filename: str = None, 
+                oracle_dev_filename: str = None,
+                recover: bool = False,
                 ):
-
     overrides = default_overides_func()
     # UUID adds a random id at the end in case two or more runs start at the same time.
     run_serialization_dir = run_serialization_dir or \
@@ -176,45 +293,20 @@ def one_exp_run(serialization_dir: str = None,
         if recover:
             param_path = os.path.join(run_serialization_dir, 'training/config.json')
         else:
-            # This is grammar with epsilon 0 to sample correct sequence.
-            if shall_generate_grammar_file:
-                generate_grammar_file(run_serialization_dir, grammar_template,
-                                        vocabulary_size, vocabulary_distribution, 
-                                        epsilon=0, cost_func_grammar=True)
-            elif grammar_file_epsilon_0:
-                os.environ["FSA_GRAMMAR_FILENAME"] = grammar_file_epsilon_0
-                os.environ["FSA_GRAMMAR_FILENAME_COST_FUNC"] = grammar_file_epsilon_0
-
-            overrides = overides_func()
-
-            if oracle_train_filename is None and oracle_dev_filename is None:
-                # We might want to sample from file, for example, in cases,
-                # where dataset is fixed. This is the case with natural language
-                # experiments.
-                sample_oracle_args = ['sample-oracle',
-                                        param_path,
-                                        '-s', run_serialization_dir,
-                                        '-n', str(num_samples),
-                                        '-o',  overrides]
-
-                if sample_from_file:
-                    sample_oracle_args += ['-f', dataset_filename]
-
-                sample_oracle_args = get_args(args=sample_oracle_args)
-                oracle_train_filename, oracle_dev_filename, _ = \
-                    sample_oracle_runner(sample_oracle_args,
-                                        run_serialization_dir)
-
-            os.environ['TRAIN_FILE'] = oracle_train_filename
-            os.environ['DEV_FILE'] = oracle_dev_filename
-
-            # This is grammar with epsilon 1e-4 to smoothened probability distribution
-            # so that we can assign some prob. to incorrect sequences.
-            if shall_generate_grammar_file:
-                generate_grammar_file(run_serialization_dir, grammar_template,
-                                    vocabulary_size, vocabulary_distribution, epsilon=1e-4)
-            elif grammar_file_epsilon_0 or grammar_file_epsilon:
-                os.environ["FSA_GRAMMAR_FILENAME"] = grammar_file_epsilon or grammar_file_epsilon_0
+            if oracle_dev_filename is None and oracle_dev_filename is None:
+                oracle_train_filename, oracle_dev_filename = \
+                    generate_dataset(run_serialization_dir=run_serialization_dir,
+                                        oracle_config=oracle_config,
+                                        shall_generate_grammar_file=shall_generate_grammar_file,
+                                        grammar_template=grammar_template,
+                                        vocabulary_size=vocabulary_size,
+                                        vocabulary_distribution=vocabulary_distribution,
+                                        num_samples=num_samples,
+                                        grammar_file_epsilon_0=grammar_file_epsilon_0,
+                                        grammar_file_epsilon=grammar_file_epsilon,
+                                        sample_from_file=sample_from_file,
+                                        dataset_filename=dataset_filename,
+                                    )
 
         train_args = get_args(args=['train',
                                     param_path,
@@ -227,116 +319,51 @@ def one_exp_run(serialization_dir: str = None,
                                                     recover=recover)
 
         archive_file = os.path.join(train_model_serialization_dir, 'model.tar.gz')
+    
     metric_list = []
-
+    # This is only needed when doing validation experiments.
     for epoch, qeb_suffix, metric_filename in exp_bias_epochs_func(train_model_serialization_dir):
         qeb_output_dir = os.path.join(run_serialization_dir, 
                                       'exp_bias', 
                                       qeb_suffix)
 
-        metrics = json.load(open(os.path.join(train_model_serialization_dir, 
-                                              metric_filename)))
-
-        # This is only needed when doing validation experiments.
+        metrics_filepath = os.path.join(train_model_serialization_dir, 
+                                              metric_filename)
         weights_file = None
         if epoch != -1:
             weights_file = os.path.join(train_model_serialization_dir, 
                                         f'model_state_epoch_{epoch}.th')
 
-        qeb_args = get_args(args=['quantify-exposure-bias',
-                                  archive_file,
-                                  '--output-dir', qeb_output_dir,
-                                  '--weights-file', weights_file,
-                                  '-o',  overrides])
-
-        exp_biases, exp_bias_mean, exp_bias_std, \
-            df_p_qs, df_p_q_mean, df_p_q_std, \
-            h_m_m_mean, h_m_m_std, h_m_o_mean, h_m_o_std, = \
-                quantify_exposure_bias_runner(qeb_args,
-                                                archive_file,
-                                                qeb_output_dir,
-                                                cuda_device=cuda_device,
-                                                weights_file=weights_file,
-                                                num_trials=num_trials,
-                                                num_length_samples=num_length_samples,
-                                                num_samples_per_length=num_samples_per_length)
-
-        metrics['exp_biases'] = exp_biases
-        metrics['exp_bias_mean'] = exp_bias_mean
-        metrics['exp_bias_std'] = exp_bias_std
-
-        metrics['df_p_qs'] = df_p_qs
-        metrics['df_p_q_mean'] = df_p_q_mean
-        metrics['df_p_q_std'] = df_p_q_std
-
-        # metrics['df_q_ps'] = df_q_ps
-        # metrics['df_q_p_mean'] = df_q_p_mean
-        # metrics['df_q_p_std'] = df_q_p_std
-
-        metrics['H_m_m_mean'] = h_m_m_mean
-        metrics['H_m_m_std'] =  h_m_m_std
-
-        metrics['H_m_o_mean'] = h_m_o_mean
-        metrics['H_m_o_std'] = h_m_o_std
-
-        # metrics['H_o_m_mean'] = h_o_m_mean
-        # metrics['H_o_m_std'] = h_o_m_std
-
-        # metrics['H_o_o_mean'] = h_o_o_mean
-        # metrics['H_o_o_std'] = h_o_o_std
+        metrics = quantify_exposure_bias(metric_filepath=metrics_filepath,
+                                         archive_file=archive_file, 
+                                         oracle_config=oracle_config,
+                                         output_dir=qeb_output_dir,
+                                         cuda_device=cuda_device,
+                                         weights_file=weights_file,
+                                         num_trials=num_trials,
+                                         num_length_samples=num_length_samples,
+                                         num_samples_per_length=num_samples_per_length)
         metrics['run_serialization_dir'] = run_serialization_dir
-
         metric_list.append(metrics)
 
     for key, value, qeb_overides in exp_bias_inference_funcs():
-        metrics = json.load(open(os.path.join(train_model_serialization_dir, 
-                                              metric_filename)))
-
         qeb_suffix = f"{key}_{value}"
         qeb_output_dir = os.path.join(run_serialization_dir, 
                                       'exp_bias', 
                                       qeb_suffix)
+        metric_filepath = os.path.join(train_model_serialization_dir, 
+                                                metric_filename)
 
-        qeb_args = get_args(args=['quantify-exposure-bias',
-                                  archive_file,
-                                  '--output-dir', qeb_output_dir,
-                                  '-o', qeb_overides])
-
-        exp_biases, exp_bias_mean, exp_bias_std, \
-            df_p_qs, df_p_q_mean, df_p_q_std, \
-            h_m_m_mean, h_m_m_std, h_m_o_mean, h_m_o_std = \
-                quantify_exposure_bias_runner(qeb_args,
-                                                archive_file,
-                                                qeb_output_dir,
-                                                cuda_device=cuda_device,
-                                                num_trials=num_trials,
-                                                num_length_samples=num_length_samples,
-                                                num_samples_per_length=num_samples_per_length)
-
-        metrics['exp_biases'] = exp_biases
-        metrics['exp_bias_mean'] = exp_bias_mean
-        metrics['exp_bias_std'] = exp_bias_std
-
-        metrics['df_p_qs'] = df_p_qs
-        metrics['df_p_q_mean'] = df_p_q_mean
-        metrics['df_p_q_std'] = df_p_q_std
-
-        # metrics['df_q_ps'] = df_q_ps
-        # metrics['df_q_p_mean'] = df_q_p_mean
-        # metrics['df_q_p_std'] = df_q_p_std
-
-        metrics['H_m_m_mean'] = h_m_m_mean
-        metrics['H_m_m_std'] =  h_m_m_std
-
-        metrics['H_m_o_mean'] = h_m_o_mean
-        metrics['H_m_o_std'] = h_m_o_std
-
-        # metrics['H_o_m_mean'] = h_o_m_mean
-        # metrics['H_o_m_std'] = h_o_m_std
-        
-        # metrics['H_o_o_mean'] = h_o_o_mean
-        # metrics['H_o_o_std'] = h_o_o_std
-
+        metrics = quantify_exposure_bias(metric_filepath=metrics_filepath,
+                                         archive_file=archive_file, 
+                                         oracle_config=oracle_config,
+                                         output_dir=qeb_output_dir,
+                                         cuda_device=cuda_device,
+                                         weights_file=weights_file,
+                                         num_trials=num_trials,
+                                         num_length_samples=num_length_samples,
+                                         num_samples_per_length=num_samples_per_length, 
+                                         overrides=qeb_overides)
         metrics[key] = value
         metrics['run_serialization_dir'] = run_serialization_dir
         metric_list.append(metrics)
@@ -359,6 +386,16 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
     parser.add_argument('--output_dir', '-o', type=str, default=os.path.expanduser('~/scratch/quant_exp_bias/'), help='Output directory.')
     parser.add_argument('--run_serialization_dir', type=str, default=None, help='Specify run serialization dir if only quantifying.')
 
+    if experiment_type == 'artificial_language':
+        parser.add_argument('--oracle_config', type=str, 
+                                default='experiments/artificial_language/training_configs/artificial_grammar_oracle.jsonnet',
+                                help='Number of batches for the experiment.')
+    elif experiment_type == 'natural_language':
+            parser.add_argument('--oracle_config', type=str, 
+                                default='experiments/natural_language/training_configs/gpt2_oracle.jsonnet',
+                                help='Number of batches for the experiment.')
+    else:
+        raise ValueError(f"experiment_type can either be {artificial_language, natural_language}, fount {experiment_type}")
     
     if experiment_type == 'artificial_language':
         parser.add_argument('--vocab_distributions', nargs='+', type=str, default=['zipf', 'uniform'], 
