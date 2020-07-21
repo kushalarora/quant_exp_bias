@@ -395,7 +395,7 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
                                 default='experiments/natural_language/training_configs/gpt2_oracle.jsonnet',
                                 help='Number of batches for the experiment.')
     else:
-        raise ValueError(f"experiment_type can either be {artificial_language, natural_language}, fount {experiment_type}")
+        raise ValueError(f"experiment_type can either be ['artificial_language', 'natural_language'], fount {experiment_type}")
     
     if experiment_type == 'artificial_language':
         parser.add_argument('--vocab_distributions', nargs='+', type=str, default=['zipf', 'uniform'], 
