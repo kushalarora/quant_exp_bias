@@ -370,7 +370,8 @@ def one_exp_run(serialization_dir: str = None,
     return metric_list
 
 def get_experiment_args(experiment_type: str = 'artificial_language', 
-             experiment_name: str = 'dataset_experiments'):
+                        experiment_name: str = 'dataset_experiments', 
+                        args: List[str] = None):
     
     import argparse
     parser = argparse.ArgumentParser(description=f'{experiment_type}/{experiment_name}.')
@@ -454,7 +455,7 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
                             help='temperature for SEARNN experiments')
         parser.add_argument('--neighbors', type=int, default=6,
                             help='Number of neighbors to add for SEARNN experiments')
-    return parser.parse_args()
+    return parser.parse_args(args)
 
 def calculate_ss_k(num_samples, batch_size, num_epochs, ratio_level=0.5):
     high = 20000; low = 1
