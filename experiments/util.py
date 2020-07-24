@@ -24,7 +24,7 @@ from allennlp.common import Params
 from quant_exp_bias.utils import (get_args, quantify_exposure_bias_runner,
                                   sample_oracle_runner, train_runner)
 
-from quant_exp_bias.oracles.artificial_grammar_oracle import ArtificialLanguageOracle
+from lmpl.oracles.artificial_grammar_oracle import ArtificialLanguageOracle
 
 
 OverrideFuncType = Callable[[], Dict[str, Union[float, str, int]]]
@@ -63,6 +63,7 @@ def initialize_experiments(experiment_name: str,
                            ):
     # Import LMPL library as plugin. 
     import_module_and_submodules("quant_exp_bias")
+    import_module_and_submodules("lmpl")
 
     # Ipython by default adds some arguments to sys.argv.
     #  We don't want those arguments, hence we pass [] here.

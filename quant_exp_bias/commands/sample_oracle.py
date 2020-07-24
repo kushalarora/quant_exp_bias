@@ -39,7 +39,7 @@ from allennlp.common.checks import ConfigurationError
 from allennlp.common.params import Params
 from allennlp.common.util import prepare_environment
 from allennlp.data import Vocabulary
-from quant_exp_bias.oracles.oracle_base import Oracle 
+from lmpl.oracles.oracle_base import Oracle 
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 

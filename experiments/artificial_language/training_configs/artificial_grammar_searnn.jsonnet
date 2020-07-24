@@ -11,7 +11,7 @@ local rollout_cost_function = {
 artificial_grammar_searnn_config + {
     "model"+: {
       "decoder"+: {
-        "type": "quant_exp_searnn_decoder",
+        "type": "lmpl_searnn_decoder",
         "rollin_mode":  std.extVar("rollin_mode"),
         "rollout_mode": std.extVar("rollout_mode"),
         "rollout_cost_function": rollout_cost_function,

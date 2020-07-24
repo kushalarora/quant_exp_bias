@@ -15,7 +15,7 @@ artificial_grammar_rl_config + {
     },
     "model"+: {
       "decoder"+: {
-        "type": "quant_exp_reinforce_decoder",
+        "type": "lmpl_reinforce_decoder",
         "rollout_cost_function": rollout_cost_function,
         "rollin_rollout_mixing_coeff": 0.5,
         "detach_rollin_logits": false,

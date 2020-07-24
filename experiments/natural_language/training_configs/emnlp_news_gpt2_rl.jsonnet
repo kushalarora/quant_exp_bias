@@ -18,7 +18,7 @@ emnlp_gpt2_rl_config + {
       },
       "model"+: {
         "decoder"+: {
-          "type": "quant_exp_reinforce_decoder",
+          "type": "lmpl_reinforce_decoder",
           "generation_batch_size": 128,
           "rollout_cost_function": rollout_cost_function,
           "rollout_ratio": 0.33,

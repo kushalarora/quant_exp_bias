@@ -14,7 +14,7 @@ local rollout_cost_function = {
 emnlp_gpt2_searnn_config + {
   'model'+: {
     'decoder'+: {
-          "type": "quant_exp_searnn_decoder",
+          "type": "lmpl_searnn_decoder",
           "generation_batch_size": 128,
           "rollin_mode":  std.extVar("rollin_mode"),
           "rollout_mode": std.extVar("rollout_mode"),

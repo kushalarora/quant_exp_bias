@@ -77,7 +77,7 @@ from allennlp.training.util import evaluate
 from allennlp.nn import util as nn_util
 
 from quant_exp_bias.metrics.exposure_bias import ExposureBias
-from quant_exp_bias.oracles.oracle_base import Oracle
+from lmpl.oracles.oracle_base import Oracle
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -178,6 +178,7 @@ def quantify_exposure_bias(archive_file: str,
     config = dict(config)
     model = archive.model
     model.eval()
+    model.sample_rollouts = True
 
     generation_batch_size = config['model']['decoder'].get('generation_batch_size', num_samples_per_length)
 
@@ -206,9 +207,7 @@ def quantify_exposure_bias(archive_file: str,
     # H_o_m = []
     # H_o_o = []
 
-    input_dict = {
-         "sample_rollouts": True,
-        }
+    input_dict = {}
     input_dict['generation_batch_size'] = generation_batch_size
 
     logger.info(f'Num Trials: {num_trials}')

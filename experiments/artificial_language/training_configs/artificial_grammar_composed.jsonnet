@@ -1,6 +1,6 @@
 {
     "dataset_reader": {
-      "type": "quant_exp_language_modeling",
+      "type": "lmpl_language_modeling",
       "token_indexers": {
         "tokens": {
           "type": "single_id",
@@ -13,13 +13,13 @@
     "train_data_path": std.extVar("TRAIN_FILE"),
     "validation_data_path": std.extVar("DEV_FILE"),
     "model": {
-      "type": "quant_exp_composed_lm",
+      "type": "lmpl_composed_lm",
       "use_in_seq2seq_mode": false,
       "decoder": {
-        "type": "quant_exp_auto_regressive_seq_decoder",
+        "type": "lmpl_auto_regressive_seq_decoder",
         "max_decoding_steps": 50,
         "decoder_net": {
-          "type": "quant_exp_bias_lstm_cell",
+          "type": "lmpl_bias_lstm_cell",
           "decoding_dim": 100,
           "target_embedding_dim": 100,
         },

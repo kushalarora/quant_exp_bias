@@ -3,7 +3,7 @@ from typing import List
 
 from allennlp.training.metrics.metric import Metric
 
-from quant_exp_bias.oracles.oracle_base import Oracle
+from lmpl.oracles.oracle_base import Oracle
 
 import logging
 import torch

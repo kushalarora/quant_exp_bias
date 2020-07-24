@@ -13,10 +13,10 @@ local validation_metric = '-perplexity';
 
 local batch_size = 96; 
 
-local decoder_type = "quant_exp_auto_regressive_seq_decoder";
+local decoder_type = "lmpl_auto_regressive_seq_decoder";
 {
     "dataset_reader": {
-      "type": "quant_exp_language_modeling",
+      "type": "lmpl_language_modeling",
       "token_indexers": {
         "tokens": {
           "type": "single_id",
@@ -36,14 +36,14 @@ local decoder_type = "quant_exp_auto_regressive_seq_decoder";
     "validation_data_path": std.extVar("DEV_FILE"),
     // "validation_data_path": "data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered.dev",
     "model": {
-      "type": "quant_exp_composed_lm",
+      "type": "lmpl_composed_lm",
       "use_in_seq2seq_mode": false,
       "decoder": {
         "type": decoder_type,
         "generation_batch_size": 256,
         "max_decoding_steps": 50,
         "decoder_net": {
-          "type": "quant_exp_bias_lstm_cell",
+          "type": "lmpl_lstm_cell",
           "decoding_dim": 300, 
           "target_embedding_dim": 300,
           "num_decoder_layers": 1,
@@ -56,7 +56,6 @@ local decoder_type = "quant_exp_auto_regressive_seq_decoder";
         "target_namespace": "target_tokens",
         "beam_size": 1,
         "use_bleu" : false,
-        "sample_output": true,
         "dropout": 0.2,
         "start_token": "@@@@",
         "end_token": "####",
@@ -75,7 +74,6 @@ local decoder_type = "quant_exp_auto_regressive_seq_decoder";
   },
   "trainer": {
     "num_epochs": 20,
-    "opt_level": "O2",
     "validation_metric": validation_metric,
     "cuda_device" : 0,
     "grad_clipping": 5.0,

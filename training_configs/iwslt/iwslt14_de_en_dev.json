@@ -1,5 +1,0 @@
-local config = import "iwslt14_de_en.json";
-
-config + {
-  "train_data_path": "data/iwslt/dev.de-en.tsv",
-}
