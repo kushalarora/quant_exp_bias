@@ -218,7 +218,6 @@ def quantify_exposure_bias(metric_filepath: str,
                                     archive_file,
                                     oracle_config,
                                     output_dir,
-                                    opt_level=opt_level,
                                     cuda_device=cuda_device,
                                     weights_file=weights_file,
                                     num_trials=num_trials,
@@ -277,6 +276,7 @@ def one_exp_run(serialization_dir: str = None,
                 oracle_train_filename: str = None, 
                 oracle_dev_filename: str = None,
                 recover: bool = False,
+                donot_quantify: bool = False,
                 ):
     overrides = default_overides_func()
     # UUID adds a random id at the end in case two or more runs start at the same time.
@@ -320,54 +320,55 @@ def one_exp_run(serialization_dir: str = None,
                                                     recover=recover)
 
         archive_file = os.path.join(train_model_serialization_dir, 'model.tar.gz')
-    
+
     metric_list = []
-    # This is only needed when doing validation experiments.
-    for epoch, qeb_suffix, metric_filename in exp_bias_epochs_func(train_model_serialization_dir):
-        qeb_output_dir = os.path.join(run_serialization_dir, 
-                                      'exp_bias', 
-                                      qeb_suffix)
+    if not donot_quantify:
+        # This is only needed when doing validation experiments.
+        for epoch, qeb_suffix, metric_filename in exp_bias_epochs_func(train_model_serialization_dir):
+            qeb_output_dir = os.path.join(run_serialization_dir, 
+                                        'exp_bias', 
+                                        qeb_suffix)
 
-        metrics_filepath = os.path.join(train_model_serialization_dir, 
-                                              metric_filename)
-        weights_file = None
-        if epoch != -1:
-            weights_file = os.path.join(train_model_serialization_dir, 
-                                        f'model_state_epoch_{epoch}.th')
-
-        metrics = quantify_exposure_bias(metric_filepath=metrics_filepath,
-                                         archive_file=archive_file, 
-                                         oracle_config=oracle_config,
-                                         output_dir=qeb_output_dir,
-                                         cuda_device=cuda_device,
-                                         weights_file=weights_file,
-                                         num_trials=num_trials,
-                                         num_length_samples=num_length_samples,
-                                         num_samples_per_length=num_samples_per_length)
-        metrics['run_serialization_dir'] = run_serialization_dir
-        metric_list.append(metrics)
-
-    for key, value, qeb_overides in exp_bias_inference_funcs():
-        qeb_suffix = f"{key}_{value}"
-        qeb_output_dir = os.path.join(run_serialization_dir, 
-                                      'exp_bias', 
-                                      qeb_suffix)
-        metric_filepath = os.path.join(train_model_serialization_dir, 
+            metrics_filepath = os.path.join(train_model_serialization_dir, 
                                                 metric_filename)
+            weights_file = None
+            if epoch != -1:
+                weights_file = os.path.join(train_model_serialization_dir, 
+                                            f'model_state_epoch_{epoch}.th')
 
-        metrics = quantify_exposure_bias(metric_filepath=metrics_filepath,
-                                         archive_file=archive_file, 
-                                         oracle_config=oracle_config,
-                                         output_dir=qeb_output_dir,
-                                         cuda_device=cuda_device,
-                                         weights_file=weights_file,
-                                         num_trials=num_trials,
-                                         num_length_samples=num_length_samples,
-                                         num_samples_per_length=num_samples_per_length, 
-                                         overrides=qeb_overides)
-        metrics[key] = value
-        metrics['run_serialization_dir'] = run_serialization_dir
-        metric_list.append(metrics)
+            metrics = quantify_exposure_bias(metric_filepath=metrics_filepath,
+                                            archive_file=archive_file, 
+                                            oracle_config=oracle_config,
+                                            output_dir=qeb_output_dir,
+                                            cuda_device=cuda_device,
+                                            weights_file=weights_file,
+                                            num_trials=num_trials,
+                                            num_length_samples=num_length_samples,
+                                            num_samples_per_length=num_samples_per_length)
+            metrics['run_serialization_dir'] = run_serialization_dir
+            metric_list.append(metrics)
+
+        for key, value, qeb_overides in exp_bias_inference_funcs():
+            qeb_suffix = f"{key}_{value}"
+            qeb_output_dir = os.path.join(run_serialization_dir, 
+                                        'exp_bias', 
+                                        qeb_suffix)
+            metric_filepath = os.path.join(train_model_serialization_dir, 
+                                                    metric_filename)
+
+            metrics = quantify_exposure_bias(metric_filepath=metrics_filepath,
+                                            archive_file=archive_file, 
+                                            oracle_config=oracle_config,
+                                            output_dir=qeb_output_dir,
+                                            cuda_device=cuda_device,
+                                            weights_file=weights_file,
+                                            num_trials=num_trials,
+                                            num_length_samples=num_length_samples,
+                                            num_samples_per_length=num_samples_per_length, 
+                                            overrides=qeb_overides)
+            metrics[key] = value
+            metrics['run_serialization_dir'] = run_serialization_dir
+            metric_list.append(metrics)
     return metric_list
 
 def get_experiment_args(experiment_type: str = 'artificial_language', 

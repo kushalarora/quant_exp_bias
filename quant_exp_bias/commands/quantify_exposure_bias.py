@@ -115,7 +115,7 @@ class QuantifyExposureBias(Subcommand):
 
         subparser.add_argument('--num-samples-per-length',
                                  type=int,
-                                 default=360,
+                                 default=64,
                                  help='Number of samples to draw from $w_{1}^{n}~p$ for approximating expectation.')
 
         subparser.add_argument('--num-length-samples',
@@ -157,30 +157,65 @@ def quantify_exposure_bias(archive_file: str,
                            oracle_config,
                            num_trials: int = 5,
                            num_length_samples: int = 50,
-                           num_samples_per_length: int = 360,
+                           num_samples_per_length: int = 64,
                            cuda_device: int = -1,
                            overrides: str = "",
                            weights_file: str = None, 
-                           opt_level: str = None):
+                           top_k: int = 10,
+                           top_p: float = 0.0,
+                           beam_size: int = 1,
+                          ):
     # Disable some of the more verbose logging statements
     logging.getLogger('allennlp.common.params').disabled = True
     logging.getLogger('allennlp.nn.initializers').disabled = True
+    
+    overrides_dict = {}
+    if overrides:
+        overrides_dict = json.loads(overrides)
+    model = {}
+    if "model" in overrides_dict:
+        model = overrides_dict["model"]
+
+    decoder = {}
+    if "decoder" in model:
+        decoder = model["decoder"]
+    
+    decoder["sample_rollouts"] = True
+
+    if "top_k" not in decoder:
+        decoder["top_k"] = top_k
+
+    if "top_p" not in decoder:
+        decoder["top_k"] = top_p
+    
+    if "beam_size" not in decoder:
+        decoder["beam_size"] = beam_size
+
+    if "generation_batch_size" not in decoder:
+        decoder['generation_batch_size'] = num_samples_per_length//beam_size
+
+    num_trials = num_trials * beam_size
+    model["decoder"] = decoder
+    overrides_dict["model"] = model
+
+    overrides = json.dumps(overrides_dict)
+    print(overrides)
 
     # Load from archive
     archive = load_archive(
                 archive_file=archive_file, 
                 cuda_device=cuda_device, 
                 overrides=overrides, 
-                weights_file=weights_file, 
-                opt_level=opt_level)
+                weights_file=weights_file,
+               )
     config = archive.config
     prepare_environment(config)
     config = dict(config)
     model = archive.model
     model.eval()
-    model.sample_rollouts = True
+    model._decoder._sample_rollouts = True
 
-    generation_batch_size = config['model']['decoder'].get('generation_batch_size', num_samples_per_length)
+    generation_batch_size = config['model']['decoder']['generation_batch_size']
 
     oracle_params_from_file = Params.from_file(oracle_config)
     oracle_params = oracle_params_from_file.get('oracle', {})
@@ -208,11 +243,10 @@ def quantify_exposure_bias(archive_file: str,
     # H_o_o = []
 
     input_dict = {}
-    input_dict['generation_batch_size'] = generation_batch_size
 
     logger.info(f'Num Trials: {num_trials}')
     logger.info(f'Num Length Samples: {num_length_samples}')
-    logger.info(f'Num Samples Per Length: {input_dict["generation_batch_size"]}')
+    logger.info(f'Num Samples Per Length: {generation_batch_size}')
 
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
@@ -232,16 +266,23 @@ def quantify_exposure_bias(archive_file: str,
                 # shape: (batch_size, beam_size, max_sequence_length)
                 top_k_predictions = output_dict['predictions']
 
-                # shape: (batch_size, max_predicted_sequence_length)
-                best_predictions = top_k_predictions[:, 0, :]
+                # shape: (batch_size, beam_size, max_sequence_length)
+                class_log_probabilities = output_dict['class_log_probabilities']
 
-                model_sampled_model_probs = output_dict['model_sampled_model_probs']
-                predicted_tokens = output_dict['predicted_tokens']
-   
+                # shape: (batch_size, sequence_length)
+                predicted_tokens: List[List[str]] = output_dict['decoded_predictions']
+
+                # shape: (batch_size, max_predicted_sequence_length)
+                best_predictions = top_k_predictions[:, 0]
+
+                best_prediction_loss = class_log_probabilities[:, 0].data.cpu()
+                model_sampled_model_probs = [torch.exp(pred_loss/(len(pred_tokens) + 1)).data.cpu()
+                                                    for pred_loss, pred_tokens in zip(best_prediction_loss, predicted_tokens)]
+
                 # This +1 takes care of </S> prediction as predicted token are limited to
                 # token before </S>.
-                step_log_probs = F.log_softmax(output_dict['logits'].squeeze(1), dim=-1)
-                model_sampled_model_seq_probs = torch.exp(torch.gather(step_log_probs, 2,
+                step_log_probs = F.log_softmax(output_dict['logits'][:, 0], dim=-1)
+                model_sampled_model_seq_probs = torch.exp(torch.gather(step_log_probs, -1,
                                                                         best_predictions[:,1:].unsqueeze(2)) \
                                                                 .squeeze(2))
                 
@@ -251,19 +292,22 @@ def quantify_exposure_bias(archive_file: str,
                                             model_sampled_model_seq_probs=model_sampled_model_seq_probs.data.cpu(),
                                         )
                 metric_trial = exposure_bias.get_metric(reset=True)
-
                 exp_biases.append(metric_trial['exposure_bias'])
                 df_p_qs.append(metric_trial['df_p_q'])
 
-            if output_dir_trail:
-                with open(os.path.join(output_dir_trail, 'model_sampled_generated.txt'), "a+") as file:
-                    for seq, model_prob, oracle_prob, value in zip(output_dict['model_sampled_predicted_tokens'],
-                                                                    exp_bias_output_dict['model_sampled_model_probs'],
-                                                                    exp_bias_output_dict['model_sampled_oracle_probs'],
-                                                                    exp_bias_output_dict['model_sampled_scores']):
-                        print(f'{seq} P={model_prob:.4f} O={oracle_prob:.4f} Df_p_q={value:.4f}', file=file)
-                        H_m_m.append(float(model_prob))
-                        H_m_o.append(float(oracle_prob))
+                if output_dir_trail:
+                    with open(os.path.join(output_dir_trail, 'model_sampled_generated.txt'), "a+") as file:
+                        for seq, model_prob, oracle_prob, value in zip(output_dict['detokenized_predictions'],
+                                                                        exp_bias_output_dict['model_sampled_model_probs'],
+                                                                        exp_bias_output_dict['model_sampled_oracle_probs'],
+                                                                        exp_bias_output_dict['model_sampled_scores']):
+                            print(f'{seq} P={float(model_prob):.4f} O={float(oracle_prob):.4f} Df_p_q={float(value):.4f}', file=file)
+                            H_m_m.append(float(model_prob))
+                            H_m_o.append(float(oracle_prob))
+
+                    logger.info("Trial: %3d-%-3d :: %s: %-5.4f", trail_num, sample_num, "Exp_Bias", np.mean(exp_biases))
+                    logger.info("Trial: %3d-%-3d :: %s: %-5.4f", trail_num, sample_num, "Df_p_q", np.mean(df_p_qs))
+
                     logger.info("Trial: %3d-%-3d :: %s: %-5.4f", trail_num, sample_num, "H_m_m", np.mean(H_m_m))
                     logger.info("Trial: %3d-%-3d :: %s: %-5.4f", trail_num, sample_num, "H_m_o", np.mean(H_m_o))
 
