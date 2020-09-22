@@ -13,9 +13,9 @@
 ###########################
 
 set -x
-source ~/.bashrc
-conda deactivate
+module load cuda/10.1
 module load httpproxy
-source activate quant_exp
-conda activate quant_exp
+export TOKENIZERS_PARALLELISM=true
+export PYTHONPATH=.:${PYTHONPATH}
+source ~/scratch/envs/qeb/bin/activate
 $@
