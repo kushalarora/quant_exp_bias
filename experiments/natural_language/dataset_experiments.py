@@ -8,7 +8,12 @@ def dataset_experiments(main_args,
                         param_path,
                         num_samples,
                         num_runs,
+                        oracle_config,
                         experiment=None,
+                        only_quantify=False,
+                        run_serialization_dir=None,
+                        recover=False,
+                        donot_quantify=False,
                        ):
     step = 0
     run_metrics_lists = []
@@ -17,16 +22,17 @@ def dataset_experiments(main_args,
                                     num_samples=num_samples,
                                     run=num_run,
                                     param_path=param_path,
-                                    oracle_config=args.oracle_config,
+                                    oracle_config=oracle_config,
                                     sample_from_file=True,
                                     dataset_filename='data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered',
-                                    run_serialization_dir=args.run_serialization_dir,
-                                    only_quantify=args.only_quantify,
-                                    recover=args.recover,
-                                    )
+                                    run_serialization_dir=run_serialization_dir,
+                                    only_quantify=only_quantify,
+                                    recover=recover,
+                                    donot_quantify=donot_quantify,
+                                 )
+        if len(run_metrics) == 0:
+            continue
 
-        assert len(run_metrics) == 1, \
-            'For this experiment, there should only be one final metric object for a run.'
         run_metrics = run_metrics[0]
 
         for result in get_result_iterator(run_metrics):
@@ -57,7 +63,28 @@ if __name__ == '__main__':
 
     if args.all:
         for num_samples, num_runs in dataset_experiments_params:
-            dataset_experiments(main_args, serialization_dir, param_path, num_samples, num_runs, experiment)
+            dataset_experiments(
+                main_args=main_args, 
+                serialization_dir=serialization_dir, 
+                param_path=param_path, 
+                num_samples=num_samples, 
+                num_runs=num_runs, 
+                experiment=experiment,
+                oracle_config=args.oracle_config,
+                only_quantify=args.only_quantify,
+                run_serialization_dir=args.run_serialization_dir,
+                recover=args.recover,
+                )
     else:
-        dataset_experiments(main_args, serialization_dir, 
-                            param_path, args.num_samples, args.num_runs, experiment)
+        dataset_experiments(
+                main_args=main_args, 
+                serialization_dir=serialization_dir, 
+                param_path=param_path, 
+                num_samples=args.num_samples, 
+                num_runs=args.num_runs, 
+                experiment=experiment,
+                oracle_config=args.oracle_config,
+                only_quantify=args.only_quantify,
+                run_serialization_dir=args.run_serialization_dir,
+                recover=args.recover,
+               )

@@ -28,12 +28,6 @@ main_args, serialization_dir, param_path, experiment_id, \
 num_samples_and_runs = [(10000, 4)]
 
 
-samples2pretrained_model = {
-    10000: '/home/karora/scratch/quant_exp_bias/natural_lang/dataset_experiments/05_13_2020_01_36_02/10000/0/',
-    5000: '/home/karora/scratch/quant_exp_bias/natural_lang/dataset_experiments/05_22_2020_01_11_03/5000/0/',
-    1000: '/home/karora/scratch/quant_exp_bias/natural_lang/dataset_experiments/05_20_2020_22_39_35/1000/0',
-    25000: '/home/karora/scratch/quant_exp_bias/natural_lang/dataset_experiments/05_13_2020_01_36_02/10000/0/',
-}
 
 def reinforce_ablation_experiments(main_args,
                           orig_serialization_dir,
@@ -45,17 +39,25 @@ def reinforce_ablation_experiments(main_args,
                           use_pretrained_model=False,
                         ):
     if use_pretrained_model:
-        pretrained_model = samples2pretrained_model[num_samples]
-    elif args.only_quantify:
-        pretrained_model = args.run_serialization_dir
+        assert "WARM_START_MODEL" in os.environ, \
+            "WARM_START_MODEL env. variable is needed for reinforcement learning experiments."
     else:
-        dataset_metrics = dataset_experiments(main_args, orig_serialization_dir, 
-                                'training_configs/natural_lang/emnlp_news_gpt2.jsonnet', 
-                                num_samples, 1)
-        pretrained_model = dataset_metrics[0]['run_serialization_dir']
+        if args.only_quantify:
+            pretrained_model = args.run_serialization_dir
+        else:
+            dataset_metrics = dataset_experiments(
+                                        main_args=main_args, 
+                                        serialization_dir=orig_serialization_dir, 
+                                        param_path='experiments/natural_language/training_configs/emnlp_news_gpt2.jsonnet', 
+                                        num_samples=num_samples, 
+                                        num_runs=1,
+                                        oracle_config=args.oracle_config,
+                                        experiment=experiment,
+                                        donot_quantify=donot_quantify,
+                                    )
+            pretrained_model = dataset_metrics[0]['run_serialization_dir']
         
-    os.environ['VOCAB_PATH'] = os.path.join(pretrained_model, 'training/vocabulary')
-    os.environ['WEIGHT_FILE_PATH'] = os.path.join(pretrained_model, 'training/best.th')
+        os.environ['WARM_START_MODEL'] = os.path.join(pretrained_model, 'training/vocabulary')
 
     # Setup variables needed later.
     step = 0

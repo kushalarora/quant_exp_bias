@@ -8,14 +8,19 @@ local rollout_cost_function = {
           },
         };
 
+local loss_criterion = {
+          "type": "searnn-kl",
+          "rollout_cost_function": rollout_cost_function,
+          "temperature": 1,
+      };
+
 artificial_grammar_searnn_config + {
     "model"+: {
       "decoder"+: {
         "type": "lmpl_searnn_decoder",
+        "loss_criterion": loss_criterion,
         "rollin_mode":  std.extVar("rollin_mode"),
         "rollout_mode": std.extVar("rollout_mode"),
-        "rollout_cost_function": rollout_cost_function,
-        "temperature": 1,
         "rollout_ratio": 0.25,
         "rollin_rollout_mixing_coeff": 0.0,
       }

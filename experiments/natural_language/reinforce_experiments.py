@@ -19,10 +19,7 @@ main_args, serialization_dir, param_path, experiment_id, \
 
 num_samples_and_runs = [(10000, 4), (50000, 2), (2000000, 2)]
 
-samples2pretrained_model = {
-    10000: 'results/artificial_grammar/natural_lang/dataset_experiments/03_15_2020_00_43_12/10000/0/',
-    50000: 'results/artificial_grammar/natural_lang/dataset_experiments/03_14_2020_22_59_49/50000/0/',
-}
+
 
 def reinforce_experiments(main_args,
                           serialization_dir,
@@ -31,14 +28,10 @@ def reinforce_experiments(main_args,
                           num_runs,
                           ):
 
-    pretrained_model = samples2pretrained_model[num_samples]
-    os.environ['VOCAB_PATH'] = os.path.join(pretrained_model, 'training/vocabulary')
-    os.environ['WEIGHT_FILE_PATH'] = os.path.join(pretrained_model, 'training/best.th')
-
+    assert "WARM_START_MODEL" in os.environ, "WARM_START_MODEL environment variable is needed for reinforcement learning experiments."
     # Setup variables needed later.
     step = 0
     orig_serialization_dir = serialization_dir
-
     serialization_dir = os.path.join(orig_serialization_dir)
     for num_run in range(num_runs):
         run_metrics = one_exp_run(serialization_dir=serialization_dir,

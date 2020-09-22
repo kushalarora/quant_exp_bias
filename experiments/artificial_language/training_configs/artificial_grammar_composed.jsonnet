@@ -19,7 +19,7 @@
         "type": "lmpl_auto_regressive_seq_decoder",
         "max_decoding_steps": 50,
         "decoder_net": {
-          "type": "lmpl_bias_lstm_cell",
+          "type": "lmpl_lstm_cell",
           "decoding_dim": 100,
           "target_embedding_dim": 100,
         },
@@ -27,12 +27,14 @@
           "vocab_namespace": "target_tokens",
           "embedding_dim": 100
         },
+        "loss_criterion": {
+          "type": "mle",
+        },
         "use_in_seq2seq_mode": false,
         "target_namespace": "target_tokens",
         "beam_size": 1,
         "use_bleu" : false,
         "dropout": 0.2,
-        "sample_output": true,
         "start_token": "<S>",
         "end_token": "</S>",
         "mask_pad_and_oov": true,

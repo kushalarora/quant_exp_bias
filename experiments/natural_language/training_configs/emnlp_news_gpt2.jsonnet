@@ -2,7 +2,7 @@ local learning_rate_scheduler = {
         "type": "reduce_on_plateau",
         "factor": 0.5,
         "mode": "min",
-        "patience": 0
+        "patience": 2
     };
 local optimizer = {
       "type": "adam",
@@ -13,9 +13,9 @@ local validation_metric = '-perplexity';
 
 local batch_size = 96; 
 
-local decoder_type = "lmpl_auto_regressive_seq_decoder";
-{
-    "dataset_reader": {
+local dropout_ratio = 0.4;
+
+local dataset_reader =  {
       "type": "lmpl_language_modeling",
       "token_indexers": {
         "tokens": {
@@ -24,10 +24,24 @@ local decoder_type = "lmpl_auto_regressive_seq_decoder";
         },
       },
       "tokenizer": {
-        "type": "pretrained_transformer",
+        // "type": "pretrained_transformer",
+        "type": "qeb_pretrained_transformer",
         "model_name": "gpt2",
+        "start_tokens": ["@@@@"],
+        "end_tokens": ["####"],
+        // "do_lowercase": false,
       },
-    },
+    };
+
+local decoder_type = "lmpl_auto_regressive_seq_decoder";
+
+{
+    "random_seed": null,
+    "dataset_reader": dataset_reader,
+    // {
+    //   "type": "sharded",
+    //   "base_reader": dataset_reader,
+    // },
     // "vocabulary": {
     //    "directory_path": "training_configs/natural_lang/vocab/",
     // },
@@ -40,23 +54,27 @@ local decoder_type = "lmpl_auto_regressive_seq_decoder";
       "use_in_seq2seq_mode": false,
       "decoder": {
         "type": decoder_type,
-        "generation_batch_size": 256,
+        "generation_batch_size": 64,
         "max_decoding_steps": 50,
         "decoder_net": {
           "type": "lmpl_lstm_cell",
           "decoding_dim": 300, 
           "target_embedding_dim": 300,
           "num_decoder_layers": 1,
+          "dropout": dropout_ratio,
         },
         "target_embedder": {
           "vocab_namespace": "target_tokens",
           "embedding_dim": 300,
         },
+        "loss_criterion": {
+          "type": "mle",
+        },
         "use_in_seq2seq_mode": false,
         "target_namespace": "target_tokens",
         "beam_size": 1,
         "use_bleu" : false,
-        "dropout": 0.2,
+        "dropout": dropout_ratio,
         "start_token": "@@@@",
         "end_token": "####",
         "detokenizer": {
@@ -69,19 +87,22 @@ local decoder_type = "lmpl_auto_regressive_seq_decoder";
     "batch_sampler": {
       "type": "bucket",
       "batch_size": batch_size,
-
-    }
+      "sorting_keys": ["target_tokens"],
+    },
+    "num_workers": 1,
+    "pin_memory": true,
   },
   "trainer": {
     "num_epochs": 20,
     "validation_metric": validation_metric,
     "cuda_device" : 0,
-    "grad_clipping": 5.0,
+    // "use_amp": true,
+    // "grad_clipping": 5.0,
     "optimizer": optimizer,
     "learning_rate_scheduler": learning_rate_scheduler,
     "patience": 5,
     "checkpointer": {
       "num_serialized_models_to_keep": 1,
     },
-  }
+  },
 }
