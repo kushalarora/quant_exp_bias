@@ -24,7 +24,7 @@ from allennlp.common import Params
 from quant_exp_bias.utils import (get_args, quantify_exposure_bias_runner,
                                   sample_oracle_runner, train_runner)
 
-from lmpl.oracles.artificial_grammar_oracle import ArtificialLanguageOracle
+from quant_exp_bias.oracles.artificial_grammar_oracle import ArtificialLanguageOracle
 
 
 OverrideFuncType = Callable[[], Dict[str, Union[float, str, int]]]
@@ -88,7 +88,7 @@ def initialize_experiments(experiment_name: str,
         experiment_name += '_debug'
         random.seed(220488)
 
-    workspace_name = 'quantifying_exposure_bias'
+    workspace_name = 'qeb'
     try:
         if offline:
             raise ValueError

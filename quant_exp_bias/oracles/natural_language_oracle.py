@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import time 
 
 from typing import List
-from transformers import AutoTokenizer, AutoLMHeadModel
+from transformers import AutoTokenizer, AutoModelWithLMHead
 
 from lmpl.oracles.oracle_base import Oracle
 from multiprocessing import Pool
@@ -44,7 +44,7 @@ class NaturalLanguageOracle(Oracle):
         self.tokenizer = AutoTokenizer.from_pretrained('gpt2')
 
         # Load pre-trained model (weights)
-        self.model = AutoLMHeadModel.from_pretrained(model_name).to(self.device)
+        self.model = AutoModelWithLMHead.from_pretrained(model_name).to(self.device)
 
         self.batch_size = batch_size
         self.model.eval()

@@ -46,7 +46,6 @@ ids = [tokenizer.convert_tokens_to_ids(sequence) + [tokenizer.eos_token_id] * (m
 tensor_input = torch.tensor(ids).to(torch.cuda.current_device())
 attention_mask = (tensor_input != tokenizer.eos_token_id).float().to(torch.cuda.current_device())
 batch_size = 10
-import pdb;pdb.set_trace()
 
 for i in range(0, len(sequences), batch_size):
     inp = tensor_input[i:i+batch_size] if i + batch_size < len(sequences) else tensor_input[i:len(sequences)]
