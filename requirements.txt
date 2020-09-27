@@ -5,7 +5,7 @@ comet_ml==3.1.11
 numpy==1.18.1
 spacy==2.2.0
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-2.2.0/en_core_web_sm-2.2.0.tar.gz
-transformers==2.7.0
+transformers==3.0.2
 sacrebleu==1.4.4
 torchvision
 fairseq==0.9.0
