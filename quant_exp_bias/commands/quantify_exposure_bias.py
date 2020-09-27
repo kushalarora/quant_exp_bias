@@ -115,7 +115,7 @@ class QuantifyExposureBias(Subcommand):
 
         subparser.add_argument('--num-samples-per-length',
                                  type=int,
-                                 default=64,
+                                 default=128,
                                  help='Number of samples to draw from $w_{1}^{n}~p$ for approximating expectation.')
 
         subparser.add_argument('--num-length-samples',
@@ -161,8 +161,8 @@ def quantify_exposure_bias(archive_file: str,
                            cuda_device: int = -1,
                            overrides: str = "",
                            weights_file: str = None, 
-                           top_k: int = 10,
-                           top_p: float = 0.0,
+                           top_k: int = 0,
+                           top_p: float = 0.75,
                            beam_size: int = 1,
                           ):
     # Disable some of the more verbose logging statements
@@ -186,7 +186,7 @@ def quantify_exposure_bias(archive_file: str,
         decoder["top_k"] = top_k
 
     if "top_p" not in decoder:
-        decoder["top_k"] = top_p
+        decoder["top_p"] = top_p
     
     if "beam_size" not in decoder:
         decoder["beam_size"] = beam_size
