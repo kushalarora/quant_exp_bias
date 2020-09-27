@@ -302,8 +302,8 @@ def quantify_exposure_bias(archive_file: str,
                                                                         exp_bias_output_dict['model_sampled_oracle_probs'],
                                                                         exp_bias_output_dict['model_sampled_scores']):
                             print(f'{seq} P={float(model_prob):.4f} O={float(oracle_prob):.4f} Df_p_q={float(value):.4f}', file=file)
-                            H_m_m.append(float(model_prob))
-                            H_m_o.append(float(oracle_prob))
+                            H_m_m.append(float(-1 * np.log(model_prob)))
+                            H_m_o.append(float(-1 * np.log(oracle_prob)))
 
                     logger.info("Trial: %3d-%-3d :: %s: %-5.4f", trail_num, sample_num, "Exp_Bias", np.mean(exp_biases))
                     logger.info("Trial: %3d-%-3d :: %s: %-5.4f", trail_num, sample_num, "Df_p_q", np.mean(df_p_qs))
