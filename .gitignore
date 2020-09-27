@@ -107,7 +107,6 @@ venv.bak/
 .vscode/
 
 
-data/
 results/
 result/
 logs/
@@ -117,3 +116,5 @@ slurm-*
 */*logs/*
 */*results/*
 comet_exp/
+/data/*
+tests/data/*
