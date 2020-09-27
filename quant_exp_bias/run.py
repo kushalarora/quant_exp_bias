@@ -16,13 +16,12 @@ from allennlp.commands import main  # pylint: disable=wrong-import-position
 from quant_exp_bias.commands.sample_oracle import SampleOracle
 from quant_exp_bias.commands.quantify_exposure_bias import QuantifyExposureBias
 from quant_exp_bias.commands.compute_nll import ComputeNLLScore
+from allennlp.common.util import import_module_and_submodules
 
 def run():
-    main(prog="allennlp", subcommand_overrides={
-                                'sample-oracle': SampleOracle(),
-                                'quantify-exposure-bias': QuantifyExposureBias(),
-                                'compute-nll': ComputeNLLScore(),
-                            })
+    import_module_and_submodules("lmpl")
+    import_module_and_submodules("quant_exp_bias")
+    main(prog="allennlp")
 
 if __name__ == "__main__":
     run()
