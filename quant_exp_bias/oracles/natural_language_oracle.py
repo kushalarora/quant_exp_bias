@@ -51,7 +51,7 @@ class NaturalLanguageOracle(Oracle):
         self._start_token = start_token
         self._end_token = end_token
         self._end_token_id = self.tokenizer.convert_tokens_to_ids(self._end_token)
-        self._vocab_mask = None
+        self._vocab_idxs = None
 
     def sample_training_set(self, num_samples: int):
         """
@@ -172,90 +172,29 @@ class NaturalLanguageOracle(Oracle):
         batch_size = last_predictions.shape[0]
         model_vocab_size = len(token_to_idx.keys())
 
-        if self._vocab_mask is None:
-            vocab_idxs = self.tokenizer.convert_tokens_to_ids(token_to_idx.keys())
-            self._vocab_mask = torch.zeros(self.tokenizer.vocab_size)
-            self._vocab_mask.scatter_(0, torch.tensor(vocab_idxs), 1)
-            self._vocab_mask.to(self.device)
+        if self._vocab_idxs is None:
+            self._vocab_idxs = torch.tensor(
+                    self.tokenizer.convert_tokens_to_ids(token_to_idx.keys())).to(self.device)
 
-        # prefix_tokens = []
-        # for seq in model_prefixes.tolist():
-        #     prefix_tokens.append([])
-        #     for idx in seq:
-        #         prefix_tokens[-1].append(idx_to_token[idx])
-                                               
-        # oracle_prefixes = torch.LongTensor([self.tokenizer.convert_tokens_to_ids(seq) 
-        #                                 for seq in prefix_tokens]).to(self.device)
         past = state['rollout_params'].get('past', None)
         rollout_prefixes = state['rollout_params'].get('rollout_prefixes', None)
+        batch_size, prefix_len = rollout_prefixes.shape
 
         if not state['rollout_params'].get('rollout_prefixes_in_oracle_vocab', False):
-            prefix_tokens = []
-            for seq in rollout_prefixes.tolist():
-                prefix_tokens.append([])
-                for idx in seq:
-                    prefix_tokens[-1].append(idx_to_token[idx])
-
-            rollout_prefixes = torch.LongTensor([self.tokenizer.convert_tokens_to_ids(seq) 
-                                                        for seq in prefix_tokens])\
-                                    .to(self.device)
+            rollout_prefixes = torch.gather(self._vocab_idxs.unsqueeze(0).expand(batch_size, -1), 
+                                                -1, rollout_prefixes)
 
             state['rollout_params']['rollout_prefixes_in_oracle_vocab'] = True
         
-        last_prediction_tokens = [idx_to_token[idx] for idx in last_predictions.tolist()]
+        last_prediction_oracle = torch.gather(self._vocab_idxs.unsqueeze(0).expand(batch_size, -1), 
+                                                -1, last_predictions.unsqueeze(1))
         
-        last_prediction_oracle = \
-            torch.LongTensor(self.tokenizer.convert_tokens_to_ids(last_prediction_tokens))\
-                    .to(self.device).unsqueeze(1)
-        
-        oracle_prefixes = torch.cat([rollout_prefixes, last_prediction_oracle], dim=1)
+        oracle_prefixes = torch.cat([rollout_prefixes[:, 1:], last_prediction_oracle], dim=1) \
+                            if past is None else last_prediction_oracle
 
-        state['rollout_params']['rollout_prefixes'] = oracle_prefixes
+        # state['rollout_params']['rollout_prefixes'] = oracle_prefixes
 
-        start_time = time.time()
-        logits, past =  self.model(oracle_prefixes[:, 1:], past=past)
-        end_time = time.time()
-        logger.info(f"Till Topk {end_time - start_time}s")
+        logits, past =  self.model(oracle_prefixes, past=past)
         state['rollout_params']['past'] = past
-
-        mask = (self._vocab_mask.expand(logits.shape) + 1e-45).log().to(self.device)
-
-        logits = logits + mask
-
-        _, predictions = torch.topk(logits[:, -1, :], k=5)
-
-
-        # If EOS or newline (198) appears in top-5 and we have generated atleast 50% of rollout steps, 
-        # we assume we can meaningfully end the sentence and we do.
-        next_oracle_idxs = torch.where((((predictions == self.tokenizer.eos_token_id).sum(-1) + 
-                                        (predictions == 198).sum(-1) > 0) \
-                                            ) \
-                                        .bool(), 
-                                torch.zeros_like(predictions[:, 0]).fill_(self._end_token_id), 
-                                predictions[:, 0])
-
-        # prediction_tokens = [[self.tokenizer.convert_ids_to_tokens(ids)] \
-        #                         for ids in next_tokens.tolist()]
-
-        # prediction_idxs = []
-        # for seq in prediction_tokens:
-        #     prediction_idxs.append([])
-        #     for token in seq:
-        #         if token in set([self.tokenizer.convert_ids_to_tokens(198), # This is newline token.
-        #                             self.tokenizer.eos_token]):
-        #             prediction_idxs[-1].append(token_to_idx[self._end_token])
-        #             break
-
-        #         prediction_idxs[-1].append(token_to_idx[token])
-
-        # prediction_idxs = model_prefixes.new(prediction_idxs)
-        
-
-        next_tokens = self.tokenizer.convert_ids_to_tokens(next_oracle_idxs)
-        next_model_idxs = last_predictions.new([token_to_idx[token] for token in next_tokens])
-
-        target_logits = (last_predictions.new_zeros((batch_size, model_vocab_size))  + 1e-45) \
-                            .scatter_(dim=1, 
-                                        index=next_model_idxs.unsqueeze(1),
-                                        value=1.0).log()
+        target_logits = torch.index_select(logits[:, -1], -1, self._vocab_idxs)
         return target_logits, state
