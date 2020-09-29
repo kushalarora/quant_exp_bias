@@ -197,7 +197,7 @@ def quantify_exposure_bias(archive_file: str,
     num_trials = num_trials * beam_size
     model["decoder"] = decoder
     overrides_dict["model"] = model
-
+    overrides_dict["training"] = {"use_amp": False}
     overrides = json.dumps(overrides_dict)
     print(overrides)
 

@@ -5,15 +5,16 @@ local rollout_cost_function = {
           "add_brevity_penalty": true,
           "oracle": {
             "type": "gpt2_oracle",
-            "model_name": "gpt2",
+            "model_name": "distilgpt2",
             "batch_size": 16,
             "cuda_device": -2,
-          }
+          },
+          "log_cost": true,
         };
 local loss_criterion = {
           "type": "searnn-kl",
           "rollout_cost_function": rollout_cost_function,
-          "temperature": 50,
+          "temperature": 10,
       };
 
 emnlp_gpt2_searnn_config + {
@@ -23,15 +24,15 @@ emnlp_gpt2_searnn_config + {
           "generation_batch_size": 128,
           "rollin_mode":  std.extVar("rollin_mode"),
           "rollout_mode": std.extVar("rollout_mode"),
-          "num_neighbors_to_add": 10,
+          "num_neighbors_to_add": 0,
+          "num_random_tokens_to_add": 0,
           "num_tokens_to_rollout": 20,
-          "rollout_ratio": 0.33,
+          "rollout_ratio": 0.20,
           "loss_criterion": loss_criterion,
-          "include_first": true,
-          "include_last": true,
+          "include_first": false,
+          "include_last": false,
           "max_num_contexts": 10,
           // "rollout_reference_policy": "oracle",
-
     },
   },
   "data_loader"+: {
@@ -40,6 +41,8 @@ emnlp_gpt2_searnn_config + {
     },
   },
   "trainer"+: {
+    "validation_metric": "-perplexity",
     "num_gradient_accumulation_steps": 6,
+    "use_amp": false,
   },
 }

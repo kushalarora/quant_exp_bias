@@ -9,6 +9,7 @@ import re
 import sys
 import uuid
 
+from comet_ml import Experiment, OfflineExperiment
 
 from datetime import datetime
 from random import randint
@@ -16,7 +17,6 @@ from time import sleep
 
 from allennlp.common.util import import_module_and_submodules
 
-from comet_ml import Experiment, OfflineExperiment
 from typing import Dict, List, Callable, Tuple, Union, Any
 
 from allennlp.common import Params

@@ -42,6 +42,7 @@ class NaturalLanguageOracle(Oracle):
         
         # Load pre-trained model tokenizer (vocabulary)
         self.tokenizer = AutoTokenizer.from_pretrained('gpt2')
+        self.tokenizer.pad_token = self.tokenizer.eos_token
 
         # Load pre-trained model (weights)
         self.model = AutoModelWithLMHead.from_pretrained(model_name).to(self.device)
@@ -49,6 +50,7 @@ class NaturalLanguageOracle(Oracle):
         self.batch_size = batch_size
         self.model.eval()
         self._start_token = start_token
+    
         self._end_token = end_token
         self._end_token_id = self.tokenizer.convert_tokens_to_ids(self._end_token)
         self._vocab_idxs = None
@@ -65,40 +67,42 @@ class NaturalLanguageOracle(Oracle):
         seq_batch_size = len(sequences)
         output = []
         batch_size = self.batch_size or seq_batch_size
-
+        
+        sequences = [self.tokenizer.convert_tokens_to_string(x) for x in sequences]
         for i in range(0, seq_batch_size, batch_size):
-            batch = sequences[i:i + batch_size] if i + batch_size < seq_batch_size else sequences[i:seq_batch_size]
-            bsize = self.batch_size if i + batch_size < len(sequences) else seq_batch_size - i
+            batch = sequences[i:i + batch_size] \
+                        if i + batch_size < seq_batch_size \
+                            else sequences[i:seq_batch_size]
+            bsize = len(batch)
 
-            max_len = max(3, max([len(sequence) for sequence in batch]))
-            ids = [self.tokenizer.convert_tokens_to_ids(sequence) + [self.tokenizer.eos_token_id] * (max_len - len(sequence)) for sequence in batch]
-            tensor_input = torch.tensor(ids).to(self.device)
-            attention_mask = (tensor_input != self.tokenizer.eos_token_id).to(self.device)
+            encoded_batch = self.tokenizer(batch, return_tensors='pt', padding=True)
+
+            tensor_input = encoded_batch['input_ids'].to(torch.cuda.current_device())
+            attention_mask = encoded_batch['attention_mask'].to(torch.cuda.current_device())
 
             with torch.no_grad():
-                results =  self.model(tensor_input, labels=tensor_input, attention_mask=attention_mask)
-                logits = results[1]
+                results =  self.model(input_ids=tensor_input, 
+                                        labels=tensor_input, 
+                                        attention_mask=attention_mask)
                 labels = tensor_input
+                logits = results[1]
 
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous()
+                loss_batch_seq = (torch.gather(F.log_softmax(logits[:, :-1], dim=-1), 
+                                                -1, 
+                                                tensor_input[:, 1:].unsqueeze(2)).squeeze(2)) * \
+                                    attention_mask[:, 1:]
 
-                loss_batch_seq = F.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)),
-                                                    shift_labels.view(-1),
-                                                    ignore_index = -1, reduction='none').view(bsize, -1)
-
-                loss_batch_seq *=attention_mask[:, 1:]
-                seq_sizes = attention_mask[:,1:].sum(dim=-1)
+                seq_sizes = attention_mask[:, 1:].sum(dim=-1)
                 loss_batch = loss_batch_seq.sum(dim=-1)/(seq_sizes + 1)
-
-                seq_probs = torch.exp(-1 * loss_batch_seq)
+                
+                probs = torch.exp(loss_batch)
+                seq_probs = torch.exp(loss_batch_seq)
                 # Dummy first token. This is ignored while computing exposure bias.
                 start_tokens = torch.ones((bsize, 1), dtype=torch.float, device=self.device)
                 seq_probs = torch.cat([start_tokens, seq_probs], dim=-1)
 
                 for j in range(bsize):
-                    prob = math.exp(-1 * loss_batch[j].item())
-                    output.append((prob, seq_probs[j].tolist(), seq_sizes[j]))
+                    output.append((probs[j].item(), seq_probs[j].tolist(), seq_sizes[j]))
         return output
 
     # TODO (Figure out how to support mixed rollout with this.)

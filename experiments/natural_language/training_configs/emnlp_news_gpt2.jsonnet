@@ -11,9 +11,9 @@ local optimizer = {
 
 local validation_metric = '-perplexity';
 
-local batch_size = 96; 
+local batch_size = 48; 
 
-local dropout_ratio = 0.4;
+local dropout_ratio = 0.2;
 
 local dataset_reader =  {
       "type": "lmpl_language_modeling",
@@ -32,6 +32,13 @@ local dataset_reader =  {
         // "do_lowercase": false,
       },
     };
+
+local oracle = {
+          "type": "gpt2_oracle",
+          "model_name": "gpt2",
+          "batch_size": 16,
+          "cuda_device": 0,
+      };
 
 local decoder_type = "lmpl_auto_regressive_seq_decoder";
 
@@ -71,16 +78,23 @@ local decoder_type = "lmpl_auto_regressive_seq_decoder";
           "type": "mle",
         },
         "use_in_seq2seq_mode": false,
+        // "mask_padding_and_start": false,
         "target_namespace": "target_tokens",
         "beam_size": 1,
         "use_bleu" : false,
         "dropout": dropout_ratio,
         "start_token": "@@@@",
         "end_token": "####",
+        "sample_rollouts": true,
         "detokenizer": {
           "type": "gpt2_detokenizer",
           "model_name": "gpt2"
         },
+        // "token_based_metric": {
+        //   "type": "oracle_likelihood",
+        //   "oracle": oracle,
+        //   "log_cost": true,
+        // },
       }
   },
   "data_loader": {
@@ -97,12 +111,12 @@ local decoder_type = "lmpl_auto_regressive_seq_decoder";
     "validation_metric": validation_metric,
     "cuda_device" : 0,
     // "use_amp": true,
-    // "grad_clipping": 5.0,
+    "grad_clipping": 1.0,
     "optimizer": optimizer,
     "learning_rate_scheduler": learning_rate_scheduler,
     "patience": 5,
     "checkpointer": {
-      "num_serialized_models_to_keep": 1,
+      "num_serialized_models_to_keep": 20,
     },
   },
 }
