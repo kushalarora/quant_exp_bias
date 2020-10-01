@@ -43,7 +43,7 @@ emnlp_gpt2_searnn_config + {
     },
   },
   "trainer"+: {
-    "validation_metric": "-perplexity",
+    "validation_metric": "-loss",
     "num_gradient_accumulation_steps": 1,
     "use_amp": false,
   },

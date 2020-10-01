@@ -43,6 +43,14 @@ local oracle = {
 local decoder_type = "lmpl_auto_regressive_seq_decoder";
 
 local distributed = std.extVar("DISTRIBUTED");
+ local ngpu=std.parseInt(std.extVar("NUM_GPUS"));
+
+local gpus(ngpu) =
+  if ngpu == 1 then [0]
+  else if ngpu == 2 then [0, 1]
+  else if ngpu == 3 then [0, 1, 2]
+  else if ngpu == 4 then [0, 1, 2, 3]
+  else error "invalid option: " + std.manifestJson(ngpu);
 
 local stringToBool(s) =
   if s == "true" then true
@@ -125,5 +133,5 @@ local stringToBool(s) =
       "num_serialized_models_to_keep": 20,
     },
   },
-  "distributed":  if stringToBool(distributed) then { "cuda_devices": [0, 1],} else null,
+  "distributed":  if stringToBool(distributed) then { "cuda_devices": gpus(ngpu),} else null,
 }

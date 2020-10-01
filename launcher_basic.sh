@@ -13,6 +13,8 @@
 ###########################
 
 set -x
+export NUM_GPUS=${NUM_GPUS:=2}
+export DISTRIBUTED=${DISTRIBUTED:="false"}
 module load cuda/10.1
 module load httpproxy
 export TOKENIZERS_PARALLELISM=true
