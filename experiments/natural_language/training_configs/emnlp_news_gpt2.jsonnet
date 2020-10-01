@@ -13,7 +13,7 @@ local validation_metric = '-perplexity';
 
 local batch_size = 48; 
 
-local dropout_ratio = 0.2;
+local dropout_ratio = 0.4;
 
 local dataset_reader =  {
       "type": "lmpl_language_modeling",
@@ -111,7 +111,7 @@ local decoder_type = "lmpl_auto_regressive_seq_decoder";
     "validation_metric": validation_metric,
     "cuda_device" : 0,
     // "use_amp": true,
-    "grad_clipping": 1.0,
+    "grad_norm": 0.1,
     "optimizer": optimizer,
     "learning_rate_scheduler": learning_rate_scheduler,
     "patience": 5,
