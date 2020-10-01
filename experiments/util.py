@@ -8,7 +8,7 @@ import random
 import re
 import sys
 import uuid
-
+import subprocess
 from comet_ml import Experiment, OfflineExperiment
 
 from datetime import datetime
@@ -134,6 +134,30 @@ def last_exp_bias_epoch_func(train_model_serialization_dir):
     metrics_filename = f'metrics_epoch_{epoch}.json'
     return [(-1, '', metrics_filename)]
 
+
+def shard_file(filename: str):
+    head, tail = os.path.split(filename)
+    tail_prefix, tail_suffix = tail.split('.')
+
+    shards = []
+    for i in range(1,5):
+        shard_filename =os.path.join(head, f'{tail_prefix}_{i}.{tail_suffix}')
+        shards.append(open(shard_filename, 'w'))
+
+    with open(filename) as f:
+        for i,line in enumerate(f):
+            shard_idx = 3
+            if  (i + 3) % 4 == 0:
+                shard_idx = 0
+            elif (i + 2) % 4 == 0:
+                shard_idx = 1
+            elif (i + 1) % 4 == 0:
+                shard_idx = 2
+            shards[shard_idx].write(line)
+    for shard_file in shards:
+        shard_file.close()
+    return os.path.join(head, f'{tail_prefix}_*.{tail_suffix}')
+
 def generate_dataset(run_serialization_dir: str,
                      oracle_config: str = 'experiments/artificial_language/training_configs/artificial_grammar_oracle.jsonnet',
                      shall_generate_grammar_file: str = False,
@@ -170,6 +194,9 @@ def generate_dataset(run_serialization_dir: str,
     oracle_train_filename, oracle_dev_filename, _ = \
         sample_oracle_runner(sample_oracle_args,
                             run_serialization_dir)
+
+    oracle_train_filename = shard_file(oracle_train_filename)
+    oracle_dev_filename = shard_file(oracle_dev_filename)
 
     os.environ['TRAIN_FILE'] = oracle_train_filename
     os.environ['DEV_FILE'] = oracle_dev_filename
@@ -277,7 +304,7 @@ def one_exp_run(serialization_dir: str = None,
                 oracle_dev_filename: str = None,
                 recover: bool = False,
                 donot_quantify: bool = False,
-                ):
+            ):
     overrides = default_overides_func()
     # UUID adds a random id at the end in case two or more runs start at the same time.
     run_serialization_dir = run_serialization_dir or \
@@ -308,16 +335,30 @@ def one_exp_run(serialization_dir: str = None,
                                         sample_from_file=sample_from_file,
                                         dataset_filename=dataset_filename,
                                     )
+        if bool(os.environ["DISTRIBUTED"]):
+            from multiprocessing import freeze_support
+            freeze_support()
 
-        train_args = get_args(args=['train',
-                                    param_path,
-                                    '-s', run_serialization_dir,
-                                    '-o',  overrides])
-        trainer_params = Params.from_file(train_args.param_path, train_args.overrides)
+            train_model_serialization_dir =  os.path.join(serialization_dir, 'training')
+            train_cmd = ["allennlp", "train", 
+                                param_path, '-s', train_model_serialization_dir,
+                                '-o',  overrides,
+                                '--include-package', 'lmpl',
+                                '--include-package', 'quant_exp_bias']
+            if recover:
+                train_cmd += ['--recover']
 
-        train_model_serialization_dir = train_runner(train_args,
-                                                    run_serialization_dir, 
-                                                    recover=recover)
+            subprocess.run(train_cmd)
+        else:
+            train_args = get_args(args=['train',
+                                        param_path,
+                                        '-s', run_serialization_dir,
+                                        '-o',  overrides])
+            trainer_params = Params.from_file(train_args.param_path, train_args.overrides)
+
+            train_model_serialization_dir = train_runner(train_args,
+                                                        run_serialization_dir, 
+                                                        recover=recover)
 
         archive_file = os.path.join(train_model_serialization_dir, 'model.tar.gz')
 

@@ -42,13 +42,19 @@ local oracle = {
 
 local decoder_type = "lmpl_auto_regressive_seq_decoder";
 
+local distributed = std.extVar("DISTRIBUTED");
+
+local stringToBool(s) =
+  if s == "true" then true
+  else if s == "false" || s == '' || s == null then false
+  else error "invalid boolean: " + std.manifestJson(s);
+
 {
     "random_seed": null,
-    "dataset_reader": dataset_reader,
-    // {
-    //   "type": "sharded",
-    //   "base_reader": dataset_reader,
-    // },
+    "dataset_reader": {
+      "type": "sharded",
+      "base_reader": dataset_reader,
+    },
     // "vocabulary": {
     //    "directory_path": "training_configs/natural_lang/vocab/",
     // },
@@ -119,4 +125,5 @@ local decoder_type = "lmpl_auto_regressive_seq_decoder";
       "num_serialized_models_to_keep": 20,
     },
   },
+  "distributed":  if stringToBool(distributed) then { "cuda_devices": [0, 1],} else null,
 }

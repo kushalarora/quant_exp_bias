@@ -47,7 +47,4 @@ emnlp_gpt2_searnn_config + {
     "num_gradient_accumulation_steps": 1,
     "use_amp": false,
   },
-  // "distributed": {
-  //   "cuda_devices": [0, 1],
-  // },
 }
