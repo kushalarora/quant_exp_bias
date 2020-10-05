@@ -122,18 +122,17 @@ def sample_oracle(params: Params,
                     filesize += 1
 
 
-            # 1.2 to get 10% test and valid sets.
-            num_samples = math.ceil(1.2 * num_samples)
+            # 1.1 to get 10% valid set.
+            num_samples = math.ceil(1.1 * num_samples)
             
-            sample_idxs = sorted(random.sample(range(filesize), num_samples))
+            # sample_idxs = sorted(random.sample(range(filesize), num_samples))
             oracle_sample_iterator = []
             sample_count = 0
             dataset_file.seek(0)
             for i, line in enumerate(dataset_file):
-                if sample_idxs[0] == i:
+                if random.random() < float(num_samples)/filesize:
                     oracle_sample_iterator.append(line.strip())
                     sample_count += 1
-                    del sample_idxs[0]
 
                 if sample_count == num_samples:
                     break
