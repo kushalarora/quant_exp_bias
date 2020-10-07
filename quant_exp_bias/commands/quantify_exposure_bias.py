@@ -162,7 +162,7 @@ def quantify_exposure_bias(archive_file: str,
                            overrides: str = "",
                            weights_file: str = None, 
                            top_k: int = 0,
-                           top_p: float = 0.75,
+                           top_p: float = 0.0,
                            beam_size: int = 1,
                           ):
     # Disable some of the more verbose logging statements
