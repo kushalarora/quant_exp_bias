@@ -47,7 +47,7 @@ def validation_experiments(main_args,
                                                           num_runs):
         num_run, grammar_template_file, vocab_dist, \
             shall_generate_grammar_file, grammar_params = grammars_and_vocabularies
-        run_metrics_list = one_exp_run(serialization_dir=serialization_dir,
+        run_metrics_list,_ = one_exp_run(serialization_dir=serialization_dir,
                                         num_samples=num_samples,
                                         run=num_run,
                                         param_path=param_path,

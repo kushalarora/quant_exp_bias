@@ -49,7 +49,7 @@ def model_size_experiments(model_sizes,
             num_run, grammar_template_file, vocab_dist, \
                 shall_generate_grammar_file, grammar_params = grammars_and_vocabularies
                 
-            run_metrics = one_exp_run(serialization_dir=serialization_dir, 
+            run_metrics,_ = one_exp_run(serialization_dir=serialization_dir, 
                                         num_samples=num_samples,
                                         run=num_run,
                                         param_path=param_path,

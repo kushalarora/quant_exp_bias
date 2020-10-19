@@ -28,7 +28,7 @@ def dataset_experiments(main_args, serialization_dir, param_path,
         num_run, grammar_template_file, vocab_dist, \
             shall_generate_grammar_file, grammar_params = grammars_and_vocabularies
             
-        run_metrics = one_exp_run(serialization_dir=serialization_dir,
+        run_metrics, run_serialization_dir = one_exp_run(serialization_dir=serialization_dir,
                                     num_samples=num_samples,
                                     run=num_run,
                                     param_path=param_path,
@@ -49,6 +49,7 @@ def dataset_experiments(main_args, serialization_dir, param_path,
         mean_results = get_mean_std_results(num_run, num_samples, run_metrics)
         mean_results.update(grammar_params)
         experiment.log_metrics(mean_results, step=step)
+    return run_serialization_dir
 
 if args.all:
     for num_samples, num_runs in dataset_experiments_params:

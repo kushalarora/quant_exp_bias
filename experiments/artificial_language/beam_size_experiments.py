@@ -75,7 +75,7 @@ def beam_size_experiments(beam_sizes,
 
     serialization_dir = os.path.join(orig_serialization_dir, f'beam_size_experiments')
     for num_run in range(num_runs):
-        run_metrics_list = one_exp_run(serialization_dir=serialization_dir, 
+        run_metrics_list,_ = one_exp_run(serialization_dir=serialization_dir, 
                                         num_samples=num_samples,
                                         run=num_run, 
                                         param_path=param_path,
