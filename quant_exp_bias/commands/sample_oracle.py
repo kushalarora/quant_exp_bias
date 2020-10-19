@@ -122,8 +122,8 @@ def sample_oracle(params: Params,
                     filesize += 1
 
 
-            # 1.1 to get 10% valid set.
-            num_samples = math.ceil(1.1 * num_samples)
+            # Get 20% valid set or 1000 examples, whichever is less.
+            num_samples += max(1000, int(0.2 * num_samples))
             
             # sample_idxs = sorted(random.sample(range(filesize), num_samples))
             oracle_sample_iterator = []

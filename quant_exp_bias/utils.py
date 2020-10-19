@@ -94,15 +94,18 @@ def sample_oracle_runner(args: argparse.Namespace,
          open(oracle_train_filename, 'w') as train_file, \
          open(oracle_dev_filename, 'w') as dev_file, \
          open(oracle_test_filename, 'w') as test_file:
-        
+        num_lines = 0
         for line in full_file:
+            num_lines += 1
+
+        full_file.seek(0)
+
+        for i,line in enumerate(full_file):
             line = line.strip()
-            if random.random() < 0.1:
-                print(line, file=dev_file)
-            elif random.random() < 0.2:
-                print(line, file=test_file)
-            else:
+            if i < num_samples:
                 print(line, file=train_file)
+            else:
+                print(line, file=dev_file)
 
     return oracle_train_filename, oracle_dev_filename, oracle_test_filename
 
