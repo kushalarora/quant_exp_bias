@@ -56,7 +56,7 @@ class NoiseOracleCostFunction(CostFunction):
                                         self._add_brevity_penalty \
                                else 0
             if self._log_cost:
-                cost = -1 * np.log(oracle_probs_and_seq_probs[i][0]) - brevity_penality
+                cost = -1 * np.log(oracle_probs_and_seq_probs[i][0] + 1e-45) - brevity_penality
             else:
                 cost = 1 - np.exp(brevity_penality) * oracle_probs_and_seq_probs[i][0]
             costs.append(cost)
