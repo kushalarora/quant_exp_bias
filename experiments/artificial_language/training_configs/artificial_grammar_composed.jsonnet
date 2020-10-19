@@ -1,5 +1,4 @@
-{
-    "dataset_reader": {
+local dataset_reader = {
       "type": "lmpl_language_modeling",
       "token_indexers": {
         "tokens": {
@@ -9,6 +8,11 @@
       },
       "start_tokens": ["<S>"],
       "end_tokens": ["</S>"]
+    };
+{
+    "dataset_reader": {
+      "type": "sharded",
+      "base_reader": dataset_reader,
     },
     "train_data_path": std.extVar("TRAIN_FILE"),
     "validation_data_path": std.extVar("DEV_FILE"),
