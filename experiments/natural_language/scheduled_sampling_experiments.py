@@ -49,7 +49,7 @@ def scheduled_sampling_experiments(scheduled_sampling_ratios,
         overrides_func = get_scheduled_sampling_overrides_func(ss_type, ss_ratio, ss_k)
 
         for num_run in range(num_runs):
-            run_metrics = one_exp_run(serialization_dir=serialization_dir, 
+            run_metrics,_ = one_exp_run(serialization_dir=serialization_dir, 
                                         num_samples=num_samples,
                                         run=num_run,
                                         param_path=param_path, 

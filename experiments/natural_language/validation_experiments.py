@@ -41,7 +41,7 @@ def validation_experiments(main_args,
     overrides = json.dumps({'trainer': {'num_epochs': 20, 'patience': None}})
 
     for num_run in range(num_runs):
-        run_metrics_list = one_exp_run(serialization_dir=serialization_dir, 
+        run_metrics_list,_ = one_exp_run(serialization_dir=serialization_dir, 
                                         num_samples=num_samples,
                                         run=num_run, 
                                         param_path=param_path,

@@ -18,7 +18,7 @@ def dataset_experiments(main_args,
     step = 0
     run_metrics_lists = []
     for num_run in range(num_runs):
-        run_metrics = one_exp_run(serialization_dir=serialization_dir,
+        run_metrics, run_serialization_dir = one_exp_run(serialization_dir=serialization_dir,
                                     num_samples=num_samples,
                                     run=num_run,
                                     param_path=param_path,
@@ -45,7 +45,7 @@ def dataset_experiments(main_args,
             experiment.log_metrics(mean_results, step=step)
 
         run_metrics_lists.append(run_metrics)
-    return run_metrics_lists
+    return run_metrics_lists, run_serialization_dir
 
 if __name__ == '__main__':
     args = get_experiment_args("natural_language", "dataset_experiments")

@@ -42,7 +42,7 @@ def model_size_experiments(model_sizes,
         serialization_dir = os.path.join(orig_serialization_dir, model_size)
 
         for num_run in range(num_runs):
-            run_metrics = one_exp_run(serialization_dir=serialization_dir, 
+            run_metrics, _ = one_exp_run(serialization_dir=serialization_dir, 
                                         num_samples=num_samples,
                                         run=num_run, 
                                         param_path=param_path,
