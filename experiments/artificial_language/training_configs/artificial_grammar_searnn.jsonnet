@@ -6,6 +6,7 @@ local rollout_cost_function = {
             "type": "artificial_lang_oracle",
             "grammar_file": std.extVar("FSA_GRAMMAR_FILENAME_COST_FUNC"),
           },
+          "log_cost": true,
         };
 
 local loss_criterion = {
@@ -21,8 +22,9 @@ artificial_grammar_searnn_config + {
         "loss_criterion": loss_criterion,
         "rollin_mode":  std.extVar("rollin_mode"),
         "rollout_mode": std.extVar("rollout_mode"),
-        "rollout_ratio": 0.25,
+        "rollout_ratio": 1.0,
         "rollin_rollout_mixing_coeff": 0.0,
+        // "sort_next_tokens": true,
       }
     },
     "data_loader"+: {
