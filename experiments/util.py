@@ -306,12 +306,7 @@ def one_exp_run(serialization_dir: str = None,
                 donot_quantify: bool = False,
             ):
     overrides = default_overides_func()
-    # UUID adds a random id at the end in case two or more runs start at the same time.
-    run_serialization_dir = run_serialization_dir or \
-                                os.path.join(serialization_dir, 
-                                            str(num_samples), 
-                                            str(run), 
-                                            str(uuid.uuid4().fields[0])) 
+
     if only_quantify:
         train_model_serialization_dir = os.path.join(run_serialization_dir, 'training')
         # Doing this as the command might not have completed and metrics.json might not exist.
@@ -321,6 +316,11 @@ def one_exp_run(serialization_dir: str = None,
         if recover:
             param_path = os.path.join(run_serialization_dir, 'training/config.json')
         else:
+            # UUID adds a random id at the end in case two or more runs start at the same time.
+            run_serialization_dir = os.path.join(serialization_dir, 
+                                                    str(num_samples), 
+                                                    str(run), 
+                                                    str(uuid.uuid4().fields[0])) 
             if oracle_dev_filename is None and oracle_dev_filename is None:
                 oracle_train_filename, oracle_dev_filename = \
                     generate_dataset(run_serialization_dir=run_serialization_dir,
@@ -335,11 +335,12 @@ def one_exp_run(serialization_dir: str = None,
                                         sample_from_file=sample_from_file,
                                         dataset_filename=dataset_filename,
                                     )
-        if bool(os.environ["DISTRIBUTED"]):
+        overrides = overides_func()
+        if os.environ["DISTRIBUTED"]== "true":
             from multiprocessing import freeze_support
             freeze_support()
 
-            train_model_serialization_dir =  os.path.join(serialization_dir, 'training')
+            train_model_serialization_dir =  os.path.join(run_serialization_dir, 'training')
             train_cmd = ["allennlp", "train", 
                                 param_path, '-s', train_model_serialization_dir,
                                 '-o',  overrides,
@@ -410,7 +411,7 @@ def one_exp_run(serialization_dir: str = None,
             metrics[key] = value
             metrics['run_serialization_dir'] = run_serialization_dir
             metric_list.append(metrics)
-    return metric_list
+    return metric_list, run_serialization_dir
 
 def get_experiment_args(experiment_type: str = 'artificial_language', 
                         experiment_name: str = 'dataset_experiments', 
@@ -466,8 +467,7 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
             
         parser.add_argument('--ss_configs', nargs='+', type=str, 
                                 default=['u_0.05', 'u_0.10', 'u_0.25',
-                                            'l_0.50', 'l_0.75', 'l_0.90',
-                                            'q_0.50', 'q_0.75', 'q_0.90'],
+                                         'linear', 'exponential', 'inverse_sigmoid'],
                                 help='Scheduled Sampling configs to try.')
 
     if experiment_name == 'searnn_experiments' or \
@@ -500,21 +500,27 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
                             help='Number of neighbors to add for SEARNN experiments')
     return parser.parse_args(args)
 
-def calculate_ss_k(num_samples, batch_size, num_epochs, ratio_level=0.5):
-    high = 20000; low = 1
+def calculate_ss_k(num_samples, batch_size, num_epochs, ss_type='exponential'):
     num_iteration_per_batch = num_samples/batch_size
-    iteration_to_ratio = num_iteration_per_batch * int((num_epochs + 1)*ratio_level)
-    k_func = lambda k: k/(k + math.exp(iteration_to_ratio/k))
+    iteration_to_ratio = int(num_iteration_per_batch * num_epochs)
+    if ss_type == 'exponential':
+        k_func, high, low = (lambda k: 1 - (k/10_000_000)**(iteration_to_ratio//100), 10_000_000, 8_00_0000)
+    elif ss_type == 'inverse_sigmoid':
+        k_func, high, low = (lambda k: 1- k/(k + math.exp(iteration_to_ratio//(100 * k))), 10000, 1)
+    elif ss_type == 'linear':
+        return iteration_to_ratio
+    else: raise ConfigurationError(f"SS Type not supported: {type}")
+
     while low < high:
         mid = (high + low)//2
         if mid == high or mid == low:
             return mid
             
         k_mid = k_func(mid)
-        if k_mid > 0.505:
-            high = mid
-        elif k_mid < 0.495:
+        if k_mid > 0.01:
             low = mid
+        elif k_mid <= 0.001:
+            high = mid
         else:
             return mid
     return -1
@@ -605,6 +611,7 @@ def get_scheduled_sampling_overrides_func(ss_type:str, ss_ratio:float, ss_k:int)
                                         'scheduled_sampling_type': ss_type,
                                         'scheduled_sampling_ratio': ss_ratio,
                                         'scheduled_sampling_k': ss_k,
+                                        "rollin_mode": "mixed",
                                     },
                                 }
                             })
@@ -647,17 +654,14 @@ def get_rollout_cost_function_configs(experiment_type, cost_func, mixing_coeff,
     return lambda: json.dumps(overrides_dict)
 
 def get_scheduled_sampling_configs(num_samples, batch_size, num_epochs):
-    k = lambda ratio_level: calculate_ss_k(num_samples, batch_size, 
-                                            num_epochs, ratio_level=ratio_level)
+    k = lambda ss_type: calculate_ss_k(num_samples, batch_size, 
+                                            num_epochs, ss_type=ss_type)
     return {
             'u_0': ('uniform', 0.0, -1),
             'u_0.05':  ('uniform', 0.05, -1),
             'u_0.10':  ('uniform', 0.1, -1),
             'u_0.25':  ('uniform', 0.25, -1),
-            'q_0.50': ('quantized', 1.0, k(0.5)),  # Quantized increase ss ratio.
-            'q_0.75': ('quantized', 1.0, k(0.75)),  # Quantized increase ss ratio.
-            'q_0.90': ('quantized', 1.0, k(0.90)),  # Quantized increase ss ratio.
-            'l_0.50': ('linear', 1.0, k(0.5)),  # Linearly increase ss ratio.
-            'l_0.75': ('linear', 1.0, k(0.75)),  # Linearly increase ss ratio.
-            'l_0.90': ('linear', 1.0, k(0.90)),  # Linearly increase ss ratio.
+            'linear': ('linear', 1.0, int(k('linear'))),
+            'exponential': ('exponential', 1.0, int(k('exponential'))),
+            'inverse_sigmoid': ('inverse_sigmoid', 1.0, int(k('inverse_sigmoid'))),
            }
