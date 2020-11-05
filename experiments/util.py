@@ -129,7 +129,7 @@ def default_exp_bias_epochs_func(train_model_serialization_dir):
 
 def last_exp_bias_epoch_func(train_model_serialization_dir):
     epoch_files = glob.glob(os.path.join(train_model_serialization_dir + '/model_state_epoch_*.th'))
-    epochs =[int(re.search('epoch_([0-9]+).th', fname).group(1)) for fname in epoch_files]
+    epochs = sorted([int(re.search('epoch_([0-9]+).th', fname).group(1)) for fname in epoch_files])
     epoch = epochs[-1]
     metrics_filename = f'metrics_epoch_{epoch}.json'
     return [(-1, '', metrics_filename)]
@@ -631,13 +631,14 @@ def get_rollout_cost_function_configs(experiment_type, cost_func, mixing_coeff,
         elif experiment_type == 'natural_language':
             oracle = {
                     "type": "gpt2_oracle",
-                    "model_name": "distilgpt2",
-                    "batch_size": 8,
+                    "model_name": "gpt2",
+                    "batch_size": 16,
                     "cuda_device": -2,
                 }
             temperature = temperature
         rollout_cost_func_dict = {
           "type": "noisy_oracle",
+          "add_brevity_penalty": true,
           "oracle": oracle,
         }
     overrides_dict = {
