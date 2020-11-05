@@ -118,3 +118,4 @@ slurm-*
 comet_exp/
 /data/*
 tests/data/*
+*/*/*.tgz
