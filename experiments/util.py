@@ -60,6 +60,7 @@ def initialize_experiments(experiment_name: str,
                            debug: bool = False,
                            offline: bool = False,
                            experiment_text: str = None,
+                           error_accumulation_experiments: bool = False,
                            ):
     # Import LMPL library as plugin. 
     import_module_and_submodules("quant_exp_bias")
@@ -89,6 +90,10 @@ def initialize_experiments(experiment_name: str,
         random.seed(220488)
 
     workspace_name = 'qeb'
+    
+    if error_accumulation_experiments:
+        experiment_name = 'error_accu_exp_' + experiment_name
+
     try:
         if offline:
             raise ValueError
@@ -169,6 +174,7 @@ def generate_dataset(run_serialization_dir: str,
                      grammar_file_epsilon: str = None,
                      sample_from_file: bool = False,
                      dataset_filename: str = None,
+                     maximum_sequence_length: int = None,
                     ):
     # This is grammar with epsilon 0 to sample correct sequence.
     if shall_generate_grammar_file:
@@ -190,10 +196,14 @@ def generate_dataset(run_serialization_dir: str,
     if sample_from_file:
         sample_oracle_arg_list += ['-f', dataset_filename]
 
+    if maximum_sequence_length:
+        sample_oracle_arg_list += ['--max-seq_length', maximum_sequence_length]
+
     sample_oracle_args = get_args(args=sample_oracle_arg_list)
     oracle_train_filename, oracle_dev_filename, _ = \
         sample_oracle_runner(sample_oracle_args,
-                            run_serialization_dir)
+                            run_serialization_dir 
+                            )
 
     oracle_train_filename = shard_file(oracle_train_filename)
     oracle_dev_filename = shard_file(oracle_dev_filename)
@@ -427,7 +437,8 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
     parser.add_argument('--exp_msg', type=str, default=None, help='Debug(maybe) experiment message.')
     parser.add_argument('--only_quantify', action='store_true', help='Run in debug mode.')
     parser.add_argument('--recover', action='store_true', help='Recover the run.')
-
+    parser.add_argument('--max_len', type=int, default=50, help='Maximum Sequence Length')
+    parser.add_argument('--error_acc', action='store_true', help='Error Accumulation Experiments.')
     parser.add_argument('--output_dir', '-o', type=str, default=os.path.expanduser('~/scratch/quant_exp_bias/'), help='Output directory.')
     parser.add_argument('--run_serialization_dir', type=str, default=None, help='Specify run serialization dir if only quantifying.')
 

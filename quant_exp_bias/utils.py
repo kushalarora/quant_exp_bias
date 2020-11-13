@@ -80,11 +80,12 @@ def sample_oracle_runner(args: argparse.Namespace,
     params = Params.from_file(parameter_path, overrides)
     num_samples = num_samples or args.num_samples
     dataset_filename = args.dataset_filename
-    oracle_filename =  sample_oracle(params, 
-                                     serialization_dir,
-                                    # X 1.2 for test and validation set.
-                                     int(num_samples * 1.2),
-                                     dataset_filename)
+    oracle_filename =  sample_oracle(params=params, 
+                                     serialization_dir=serialization_dir,
+                                    # X 1.1 for validation set.
+                                     num_samples=int(num_samples * 1.1),
+                                     dataset_filename=dataset_filename,
+                                     max_seq_len=max_sequence_length)
 
     oracle_train_filename = os.path.join(serialization_dir, 'oracle_samples-train.txt')
     oracle_dev_filename = os.path.join(serialization_dir, 'oracle_samples-dev.txt')

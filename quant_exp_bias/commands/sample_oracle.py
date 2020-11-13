@@ -68,7 +68,10 @@ class SampleOracle(Subcommand):
                                type=int,
                                default=10000,
                                help='Number of samples to draw from oracle for training.')
-        
+        subparser.add_argument('--max-seq_length',
+                        type=int,
+                        default=50,
+                        help='Maximum Sequence Length to include in the corpus.')
         subparser.add_argument('-f', '--dataset-filename',
                                 type=str,
                                 default=None,
@@ -97,7 +100,9 @@ def sample_oracle_from_args(args: argparse.Namespace):
 def sample_oracle(params: Params, 
                   serialization_dir: str, 
                   num_samples: int, 
-                  dataset_filename: str) -> str:
+                  dataset_filename: str, 
+                  max_seq_len: int = 50, 
+                ) -> str:
 
     prepare_environment(params)
 
@@ -118,18 +123,22 @@ def sample_oracle(params: Params,
         filesize = 0
         with open(dataset_filename) as dataset_file:
             for line in dataset_file:
-                if len(line.strip()) > 0:
+                num_tokens = len(line.strip().split())
+                if num_tokens < max_seq_len:
                     filesize += 1
-
+            print("Num Sequences of Max Sequence Length: {max_seq_len} are: {filesize}")
 
             # Get 20% valid set or 1000 examples, whichever is less.
             num_samples += max(1000, int(0.1 * num_samples))
             
-            # sample_idxs = sorted(random.sample(range(filesize), num_samples))
             oracle_sample_iterator = []
             sample_count = 0
             dataset_file.seek(0)
             for i, line in enumerate(dataset_file):
+                num_tokens = len(line.strip().split())
+                if num_tokens > max_seq_len:
+                    continue
+
                 if random.random() < float(num_samples)/filesize:
                     oracle_sample_iterator.append(line.strip())
                     sample_count += 1
