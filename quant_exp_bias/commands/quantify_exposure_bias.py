@@ -115,12 +115,12 @@ class QuantifyExposureBias(Subcommand):
 
         subparser.add_argument('--num-samples-per-length',
                                  type=int,
-                                 default=64,
+                                 default=32,
                                  help='Number of samples to draw from $w_{1}^{n}~p$ for approximating expectation.')
 
         subparser.add_argument('--num-length-samples',
                                  type=int,
-                                 default=20,
+                                 default=40,
                                  help='Number of samples to draw from $n~\mathcal{N}$" + \
                                         "for approximating expectation over sequence lengths.')
         
@@ -260,7 +260,7 @@ def quantify_exposure_bias(archive_file: str,
             open(os.path.join(output_dir_trail, 'model_sampled_generated.txt'), "w").close()
             # open(os.path.join(output_dir_trail, 'oracle_sampled_generated.txt'), "w").close()
             for sample_num in range(num_length_samples):
-
+                
                 output_dict = model(**input_dict)
 
                 # shape: (batch_size, beam_size, max_sequence_length)
@@ -270,7 +270,8 @@ def quantify_exposure_bias(archive_file: str,
                 class_log_probabilities = output_dict['class_log_probabilities']
 
                 # shape: (batch_size, sequence_length)
-                predicted_tokens: List[List[str]] = output_dict['decoded_predictions']
+                predicted_tokens: List[List[str]] = [predictions[0] \
+                                                        for predictions in output_dict['decoded_predictions']]
 
                 # shape: (batch_size, max_predicted_sequence_length)
                 best_predictions = top_k_predictions[:, 0]
@@ -285,12 +286,14 @@ def quantify_exposure_bias(archive_file: str,
                 model_sampled_model_seq_probs = torch.exp(torch.gather(step_log_probs, -1,
                                                                         best_predictions[:,1:].unsqueeze(2)) \
                                                                 .squeeze(2))
-                
-                exp_bias_output_dict = exposure_bias(
-                                            model_sampled_model_probs=model_sampled_model_probs,
+                try:
+                    exp_bias_output_dict = exposure_bias(
                                             model_sampled_predictions=predicted_tokens,
                                             model_sampled_model_seq_probs=model_sampled_model_seq_probs.data.cpu(),
                                         )
+                except:
+                    continue
+
                 metric_trial = exposure_bias.get_metric(reset=True)
                 exp_biases.append(metric_trial['exposure_bias'])
                 df_p_qs.append(metric_trial['df_p_q'])
@@ -298,12 +301,14 @@ def quantify_exposure_bias(archive_file: str,
                 if output_dir_trail:
                     with open(os.path.join(output_dir_trail, 'model_sampled_generated.txt'), "a+") as file:
                         for seq, model_prob, oracle_prob, value in zip(output_dict['detokenized_predictions'],
-                                                                        exp_bias_output_dict['model_sampled_model_probs'],
+                                                                        model_sampled_model_probs,
                                                                         exp_bias_output_dict['model_sampled_oracle_probs'],
                                                                         exp_bias_output_dict['model_sampled_scores']):
                             print(f'{seq} P={float(model_prob):.4f} O={float(oracle_prob):.4f} Df_p_q={float(value):.4f}', file=file)
-                            H_m_m.append(float(-1 * np.log(model_prob)))
-                            H_m_o.append(float(-1 * np.log(oracle_prob)))
+                            if model_prob > 0:
+                                H_m_m.append(float(-1 * np.log(model_prob + 1e-45)))
+                            if oracle_prob > 0:
+                                H_m_o.append(float(-1 * np.log(oracle_prob + 1e-45)))
 
                     logger.info("Trial: %3d-%-3d :: %s: %-5.4f", trail_num, sample_num, "Exp_Bias", np.mean(exp_biases))
                     logger.info("Trial: %3d-%-3d :: %s: %-5.4f", trail_num, sample_num, "Df_p_q", np.mean(df_p_qs))
@@ -311,31 +316,15 @@ def quantify_exposure_bias(archive_file: str,
                     logger.info("Trial: %3d-%-3d :: %s: %-5.4f", trail_num, sample_num, "H_m_m", np.mean(H_m_m))
                     logger.info("Trial: %3d-%-3d :: %s: %-5.4f", trail_num, sample_num, "H_m_o", np.mean(H_m_o))
 
-
-                # with open(os.path.join(output_dir_trail, 'oracle_sampled_generated.txt'), "a+") as file:
-                #     for seq, model_prob, oracle_prob, value in zip(output_dict['oracle_sampled_predicted_tokens'],
-                #                                                     output_dict['oracle_sampled_model_probs'],
-                #                                                     output_dict['oracle_sampled_oracle_probs'],
-                #                                                     output_dict['oracle_sampled_scores']):
-                #         print(f'{seq} P={model_prob:.4f} O={oracle_prob:.4f} Df_q_p={value:.4f}', file=file)
-                #         H_o_o.append(float(oracle_prob))
-                #         H_o_m.append(float(model_prob))
-
     metrics = {
         'exposure_bias_mean': np.mean(exp_biases),
         'exposure_bias_std': np.std(exp_biases),
         'df_p_q_mean': np.mean(df_p_qs),
         'df_p_q_std': np.std(df_p_qs),
-        # 'df_q_p_mean': np.mean(df_q_ps),
-        # 'df_q_p_std': np.std(df_q_ps),
         'H_m_m_mean': np.mean(H_m_m),
         'H_m_m_std': np.std(H_m_m),
         'H_m_o_mean': np.mean(H_m_o),
         'H_m_o_std': np.std(H_m_o),
-        # 'H_o_m_mean': np.mean(H_o_m),
-        # 'H_o_m_std': np.std(H_o_m),
-        # 'H_o_o_mean': np.mean(H_o_o),
-        # 'H_o_o_std': np.std(H_o_o),
     }
 
     with open(os.path.join(output_dir, 'metrics.json'), "w") as file:
@@ -354,13 +343,6 @@ def quantify_exposure_bias(archive_file: str,
     logger.info("\t std: %5.3f", metrics['H_m_m_std']) 
 
     logger.info("Done!!")
-    # return exp_biases, metrics['exposure_bias_mean'], metrics['exposure_bias_std'], \
-    #     df_p_qs, metrics['df_p_q_mean'], metrics['df_p_q_std'], \
-    #     df_q_ps, metrics['df_q_p_mean'], metrics['df_q_p_std'], \
-    #     metrics['H_m_m_mean'], metrics['H_m_m_std'], \
-    #     metrics['H_m_o_mean'], metrics['H_m_o_std'], \
-    #     metrics['H_o_m_mean'], metrics['H_o_m_std'], \
-    #     metrics['H_o_o_mean'], metrics['H_o_o_std']
 
     return exp_biases, metrics['exposure_bias_mean'], metrics['exposure_bias_std'], \
         df_p_qs, metrics['df_p_q_mean'], metrics['df_p_q_std'], \
