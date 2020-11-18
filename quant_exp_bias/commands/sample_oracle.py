@@ -68,10 +68,7 @@ class SampleOracle(Subcommand):
                                type=int,
                                default=10000,
                                help='Number of samples to draw from oracle for training.')
-        subparser.add_argument('--max-seq_length',
-                        type=int,
-                        default=50,
-                        help='Maximum Sequence Length to include in the corpus.')
+
         subparser.add_argument('-f', '--dataset-filename',
                                 type=str,
                                 default=None,
@@ -101,7 +98,6 @@ def sample_oracle(params: Params,
                   serialization_dir: str, 
                   num_samples: int, 
                   dataset_filename: str, 
-                  max_seq_len: int = 50, 
                 ) -> str:
 
     prepare_environment(params)
@@ -122,23 +118,13 @@ def sample_oracle(params: Params,
         # TODO (Kushal): Maybe consider moving this out.
         filesize = 0
         with open(dataset_filename) as dataset_file:
-            for line in dataset_file:
-                num_tokens = len(line.strip().split())
-                if num_tokens < max_seq_len:
-                    filesize += 1
-            print("Num Sequences of Max Sequence Length: {max_seq_len} are: {filesize}")
 
-            # Get 20% valid set or 1000 examples, whichever is less.
+
+            # Get 10% valid set or 1000 examples, whichever is less.
             num_samples += max(1000, int(0.1 * num_samples))
-            
             oracle_sample_iterator = []
             sample_count = 0
-            dataset_file.seek(0)
             for i, line in enumerate(dataset_file):
-                num_tokens = len(line.strip().split())
-                if num_tokens > max_seq_len:
-                    continue
-
                 if random.random() < float(num_samples)/filesize:
                     oracle_sample_iterator.append(line.strip())
                     sample_count += 1
