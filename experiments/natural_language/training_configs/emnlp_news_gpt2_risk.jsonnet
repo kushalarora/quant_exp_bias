@@ -4,7 +4,8 @@ local warm_start_model = std.extVar("WARM_START_MODEL");
 local rollout_cost_function = {
                                 "type": "noisy_oracle",
                                 "add_brevity_penalty": true,
-                                "log_cost": false,
+                                // "log_cost": false,
+                                "log_cost": true,
                                 "oracle": {
                                   "type": "gpt2_oracle",
                                   "model_name": "gpt2",
@@ -13,14 +14,14 @@ local rollout_cost_function = {
                                 }
                               };
 local loss_criterion = {
-          "type": "reinforce",
+          "type": "risk",
+          // "type": "reinforce",
           "temperature": 1,
           "rollout_cost_function": rollout_cost_function,
           "detach_rollin_logits": false,
           "entropy_regularization_coeff": 1e-5,
-          "rollin_rollout_mixing_coeff": 0.001,
+          // "rollin_rollout_mixing_coeff": 0.001,
           "normalize_by_mean_std": true,
-          "entropy_augumented_reward": true,
       };
 emnlp_gpt2_rl_config + {
       "vocabulary": {

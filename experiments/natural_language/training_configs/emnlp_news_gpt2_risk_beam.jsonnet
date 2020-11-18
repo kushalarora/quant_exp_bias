@@ -4,7 +4,8 @@ local warm_start_model = std.extVar("WARM_START_MODEL");
 local rollout_cost_function = {
                                 "type": "noisy_oracle",
                                 "add_brevity_penalty": true,
-                                "log_cost": false,
+                                // "log_cost": false,
+                                "log_cost": true,
                                 "oracle": {
                                   "type": "gpt2_oracle",
                                   "model_name": "gpt2",
@@ -13,14 +14,14 @@ local rollout_cost_function = {
                                 }
                               };
 local loss_criterion = {
-          "type": "reinforce",
+          "type": "risk",
+          // "type": "reinforce",
           "temperature": 1,
           "rollout_cost_function": rollout_cost_function,
           "detach_rollin_logits": false,
           "entropy_regularization_coeff": 1e-5,
           "rollin_rollout_mixing_coeff": 0.001,
-          "normalize_by_mean_std": true,
-          "entropy_augumented_reward": true,
+          // "normalize_by_mean_std": true,
       };
 emnlp_gpt2_rl_config + {
       "vocabulary": {
@@ -35,13 +36,13 @@ emnlp_gpt2_rl_config + {
           "generation_batch_size": 128,
           "loss_criterion": loss_criterion,
           "rollout_ratio": 1.0,
-          "max_num_contexts": 10,
-          "min_num_contexts": 10,
-          // "rollout_iter_start_pct": 10,
-          // "rollout_iter_end_pct": 80,
-          "include_first": true,
-          "include_last": true,
-          // "beam_size": 2,
+          "max_num_contexts": 4,
+          // "min_num_contexts": 10,
+          "rollout_iter_start_pct": 25,
+          "rollout_iter_end_pct": 50,
+          "include_first": false,
+          "include_last": false,
+          "beam_size": 10,
         },
         "initializer": {
           "regexes": [
@@ -56,7 +57,7 @@ emnlp_gpt2_rl_config + {
       },
       "data_loader"+: {
         "batch_sampler"+: {
-          "batch_size": 5,
+          "batch_size": 2,
         },
       },
       "trainer"+: {

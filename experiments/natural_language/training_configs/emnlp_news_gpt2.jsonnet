@@ -2,7 +2,7 @@ local learning_rate_scheduler = {
         "type": "reduce_on_plateau",
         "factor": 0.5,
         "mode": "min",
-        "patience": 2
+        "patience": 3
     };
 local optimizer = {
       "type": "adam",
@@ -11,7 +11,6 @@ local optimizer = {
 
 local validation_metric = '-perplexity';
 
-local batch_size = 48; 
 
 local dropout_ratio = 0.4;
 
@@ -45,6 +44,8 @@ local decoder_type = "lmpl_auto_regressive_seq_decoder";
 local distributed = std.extVar("DISTRIBUTED");
  local ngpu=std.parseInt(std.extVar("NUM_GPUS"));
 
+local batch_size = 48;
+
 local gpus(ngpu) =
   if ngpu == 1 then [0]
   else if ngpu == 2 then [0, 1]
@@ -59,17 +60,23 @@ local stringToBool(s) =
 
 {
     "random_seed": null,
+    "numpy_seed": null,
+    "pytorch_seed": null,
     "dataset_reader": {
       "type": "sharded",
       "base_reader": dataset_reader,
     },
-    // "vocabulary": {
-    //    "directory_path": "training_configs/natural_lang/vocab/",
-    // },
+    // "validation_dataset_reader": dataset_reader,
+    "vocabulary": {
+      "type": "from_files",
+      "directory": "experiments/natural_language/vocab/",
+    },
+    // "evaluate_on_test": true,
     // "train_data_path": "data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered.2000000",
     "train_data_path": std.extVar("TRAIN_FILE"),
     "validation_data_path": std.extVar("DEV_FILE"),
-    // "validation_data_path": "data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered.dev",
+    // "test_data_path": "data/wmt_news_2017/news.2017.en.shuffled.deduped.filtered.test",
+    // "test_data_path": "data/ted_talks.txt",
     "model": {
       "type": "lmpl_composed_lm",
       "use_in_seq2seq_mode": false,
@@ -90,6 +97,7 @@ local stringToBool(s) =
         },
         "loss_criterion": {
           "type": "mle",
+          "labeling_smooting_ratio": 0.0,
         },
         "use_in_seq2seq_mode": false,
         // "mask_padding_and_start": false,
@@ -114,10 +122,10 @@ local stringToBool(s) =
   "data_loader": {
     "batch_sampler": {
       "type": "bucket",
-      "batch_size": batch_size,
+      "batch_size": batch_size/ngpu,
       "sorting_keys": ["target_tokens"],
     },
-    "num_workers": 1,
+    // "num_workers": 1,
     "pin_memory": true,
   },
   "trainer": {
