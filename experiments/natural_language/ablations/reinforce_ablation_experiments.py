@@ -34,7 +34,7 @@ def reinforce_ablation_experiments(main_args,
                           param_path,
                           num_samples,
                           num_runs,
-                          rollout_cost_funcs,
+                          entropy_coeffs,
                           mixing_coeffs,
                           use_pretrained_model=False,
                         ):
@@ -53,19 +53,20 @@ def reinforce_ablation_experiments(main_args,
                                         num_runs=1,
                                         oracle_config=args.oracle_config,
                                         experiment=experiment,
-                                        donot_quantify=donot_quantify,
+                                        donot_quantify=False,
                                     )
             pretrained_model = dataset_metrics[0]['run_serialization_dir']
         
-        os.environ['WARM_START_MODEL'] = os.path.join(pretrained_model, 'training/vocabulary')
+        os.environ['WARM_START_MODEL'] = os.path.join(pretrained_model, 'training/')
 
     # Setup variables needed later.
     step = 0
-    for cost_func, mixing_coeff in itertools.product(rollout_cost_funcs, mixing_coeffs):
-        serialization_dir = os.path.join(orig_serialization_dir, f'{cost_func}_{mixing_coeff}')
+    for entropy_coeff, mixing_coeff in itertools.product(entropy_coeffs, mixing_coeffs):
+        serialization_dir = os.path.join(orig_serialization_dir, f'{entropy_coeff}_{mixing_coeff}')
         overrides_func=get_rollout_cost_function_configs("natural_language", 
                                                             cost_func, 
-                                                            mixing_coeff)
+                                                            mixing_coeff, 
+                                                            entropy_coeff)
 
         for num_run in range(num_runs):
             run_metrics = one_exp_run(serialization_dir=serialization_dir,
@@ -102,8 +103,8 @@ if args.all:
     for num_samples, num_runs in num_samples_and_runs:
         reinforce_ablation_experiments(main_args, serialization_dir,
                               param_path, num_samples, num_runs,
-                              args.rollout_cost_funcs, args.mixing_coeffs)
+                              args.entropy_coeffs, args.mixing_coeffs)
 else:
     reinforce_ablation_experiments(main_args, serialization_dir,
                           param_path, args.num_samples, args.num_runs,
-                          args.rollout_cost_funcs, args.mixing_coeffs)
+                          args.entropy_coeffs, args.mixing_coeffs)
