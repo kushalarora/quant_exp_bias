@@ -19,5 +19,5 @@ module load cuda/10.1
 module load httpproxy
 export TOKENIZERS_PARALLELISM=true
 export PYTHONPATH=.:${PYTHONPATH}
-source ~/scratch/envs/qeb/bin/activate
+source ~/envs/qeb/bin/activate
 $@
