@@ -60,7 +60,6 @@ def reinforce_ablation_experiments(main_args,
         os.environ['WARM_START_MODEL'] = os.path.join(pretrained_model, 'training/')
 
     # Setup variables needed later.
-    step = 0
     for entropy_coeff, mixing_coeff in itertools.product(entropy_coeffs, mixing_coeffs):
         serialization_dir = os.path.join(orig_serialization_dir, f'{entropy_coeff}_{mixing_coeff}')
         overrides_func=get_rollout_cost_function_configs("natural_language", 
@@ -88,15 +87,14 @@ def reinforce_ablation_experiments(main_args,
             run_metrics = run_metrics[0]
 
             for result in get_result_iterator(run_metrics):
-                experiment.log_metrics(result, step=step)
-                step += 1
+                experiment.log(result)
 
             mean_results = get_mean_std_results(num_run, num_samples, run_metrics)
             mean_results.update({
                 'cost_func': cost_func,
                 'mixing_coeff': mixing_coeff,
             })
-            experiment.log_metrics(mean_results, step=step)
+            experiment.log(mean_results)
     return 
 
 if args.all:

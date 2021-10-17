@@ -15,7 +15,7 @@ def dataset_experiments(main_args,
                         recover=False,
                         donot_quantify=False,
                        ):
-    step = 0
+
     run_metrics_lists = []
     for num_run in range(num_runs):
         run_metrics, run_serialization_dir = one_exp_run(serialization_dir=serialization_dir,
@@ -37,12 +37,11 @@ def dataset_experiments(main_args,
 
         for result in get_result_iterator(run_metrics):
             if experiment:
-                experiment.log_metrics(result, step=step)
-            step += 1
+                experiment.log(result)
 
         mean_results = get_mean_std_results(num_run, num_samples, run_metrics)
         if experiment:
-            experiment.log_metrics(mean_results, step=step)
+            experiment.log(mean_results)
 
         run_metrics_lists.append(run_metrics)
     return run_metrics_lists, run_serialization_dir

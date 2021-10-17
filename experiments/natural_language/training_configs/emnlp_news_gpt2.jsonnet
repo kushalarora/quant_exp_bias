@@ -11,6 +11,7 @@ local optimizer = {
 
 local validation_metric = '-perplexity';
 
+local gpt2_dir="/home/karora/scratch/huggingface/gpt2/";
 
 local dropout_ratio = 0.4;
 
@@ -25,7 +26,7 @@ local dataset_reader =  {
       "tokenizer": {
         // "type": "pretrained_transformer",
         "type": "qeb_pretrained_transformer",
-        "model_name": "gpt2",
+        "model_name": gpt2_dir,
         "start_tokens": ["@@@@"],
         "end_tokens": ["####"],
         // "do_lowercase": false,
@@ -34,7 +35,7 @@ local dataset_reader =  {
 
 local oracle = {
           "type": "gpt2_oracle",
-          "model_name": "gpt2",
+          "model_name": gpt2_dir,
           "batch_size": 16,
           "cuda_device": 0,
       };
@@ -42,7 +43,10 @@ local oracle = {
 local decoder_type = "lmpl_auto_regressive_seq_decoder";
 
 local distributed = std.extVar("DISTRIBUTED");
- local ngpu=std.parseInt(std.extVar("NUM_GPUS"));
+local ngpu=std.parseInt(std.extVar("NUM_GPUS"));
+
+local wandb_run_name=std.extVar("WANDB_RUN_NAME");
+local wandb_project_name=std.extVar("WANDB_PROJECT_NAME");
 
 local batch_size = 48;
 
@@ -62,6 +66,7 @@ local stringToBool(s) =
     "random_seed": null,
     "numpy_seed": null,
     "pytorch_seed": null,
+    // "dataset_reader": dataset_reader,
     "dataset_reader": {
       "type": "sharded",
       "base_reader": dataset_reader,
@@ -108,16 +113,16 @@ local stringToBool(s) =
         "start_token": "@@@@",
         "end_token": "####",
         "sample_rollouts": true,
-        "detokenizer": {
-          "type": "gpt2_detokenizer",
-          "model_name": "gpt2"
-        },
         // "token_based_metric": {
         //   "type": "oracle_likelihood",
         //   "oracle": oracle,
         //   "log_cost": true,
         // },
-      }
+      },
+      "detokenizer": {
+        "type": "gpt2_detokenizer",
+        "model_name": gpt2_dir,
+      },
   },
   "data_loader": {
     "batch_sampler": {
@@ -126,7 +131,7 @@ local stringToBool(s) =
       "sorting_keys": ["target_tokens"],
     },
     // "num_workers": 1,
-    "pin_memory": true,
+    // "pin_memory": true,
   },
   "trainer": {
     "num_epochs": 20,
@@ -138,8 +143,19 @@ local stringToBool(s) =
     "learning_rate_scheduler": learning_rate_scheduler,
     "patience": 5,
     "checkpointer": {
-      "num_serialized_models_to_keep": 20,
+      "keep_most_recent_by_count": 20,
     },
+    "callbacks": [{
+          "type": 'tensorboard',
+          // "project": wandb_project_name,
+          // "name": wandb_run_name,
+          "should_log_learning_rate": true,
+          "summary_interval": 10,
+          // "watch_model": false,
+          // "files_to_save": [],
+    }],
+    "num_gradient_accumulation_steps": 1,
+
   },
   "distributed":  if stringToBool(distributed) then { "cuda_devices": gpus(ngpu),} else null,
 }

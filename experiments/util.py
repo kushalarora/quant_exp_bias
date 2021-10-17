@@ -9,7 +9,8 @@ import re
 import sys
 import uuid
 import subprocess
-from comet_ml import Experiment, OfflineExperiment
+import wandb
+# from comet_ml import Experiment, OfflineExperiment
 
 from datetime import datetime
 from random import randint
@@ -75,7 +76,8 @@ def initialize_experiments(experiment_name: str,
     # ipython notebook.
     main_args = get_args(args=[])
 
-    experiment_id = datetime.now().strftime("%m_%d_%Y_%H_%M_%S")
+    id = datetime.now().strftime("%m_%d_%Y_%H_%M_%S")
+    experiment_id = f'{experiment_name}-{id}'
     serialization_dir = os.path.join(output_dir or main_args.output_dir, experiment_name, experiment_id)
     param_path = param_path or main_args.config
 
@@ -89,32 +91,42 @@ def initialize_experiments(experiment_name: str,
         random.seed(220488)
 
     workspace_name = 'qeb'
+    config = {'serialization_dir': serialization_dir,
+                'main_args': main_args,
+                'param_path': param_path,
+                'experiment_name': experiment_name,
+                'experiment_id': experiment_id}
 
-    try:
-        if offline:
-            raise ValueError
-        experiment = Experiment(api_key='2UIhYs7jRdE2DbJDAB5OysNqM',
-                                workspace=workspace_name,
-                                project_name=experiment_name,
-                                auto_metric_logging=False,
-                                auto_param_logging=False,
-                                )
-    except:
-        experiment = OfflineExperiment(
-            workspace=workspace_name,
-            project_name=experiment_name,
-            auto_metric_logging=False,
-            auto_param_logging=False,
-            offline_directory="./comet_exp/",
-        )
+    os.environ['WANDB_MODE'] = 'online'
+    if offline:
+        os.environ['WANDB_MODE'] = 'offline'
+
+    experiment = wandb.init(job_type=experiment_name,
+                            dir=serialization_dir,
+                            config=config,
+                            project=workspace_name,
+                            name=experiment_id,)
+    os.environ['WANDB_RUN_NAME'] = experiment_id
+    os.environ['WANDB_PROJECT_NAME'] = workspace_name
+
+    #     experiment = Experiment(api_key='2UIhYs7jRdE2DbJDAB5OysNqM',
+    #                             workspace=workspace_name,
+    #                             project_name=experiment_name,
+    #                             auto_metric_logging=False,
+    #                             auto_param_logging=False,
+    #                             )
+    # except:
+    #     experiment = OfflineExperiment(
+    #         workspace=workspace_name,
+    #         project_name=experiment_name,
+    #         auto_metric_logging=False,
+    #         auto_param_logging=False,
+    #         offline_directory="./comet_exp/",
+    #     )
     
     if experiment_text:
-        experiment.log_text(experiment_text)
+        experiment.log(experiment_text)
 
-    experiment.log_parameters({'serialization_dir': serialization_dir,
-                                'main_args': main_args,
-                                'param_path': param_path,
-                                'experiment_id': experiment_id})
     return main_args, serialization_dir, param_path, experiment_id, experiment
 
 
@@ -500,6 +512,8 @@ def get_experiment_args(experiment_type: str = 'artificial_language',
                             help='temperature for SEARNN experiments')
         parser.add_argument('--neighbors', type=int, default=6,
                             help='Number of neighbors to add for SEARNN experiments')
+    if experiment_name == 'error_accumulation_analysis':
+        parser.add_argument('--exp_dir', type=str, default=None, required=True, help='Experiment directory')
     return parser.parse_args(args)
 
 def calculate_ss_k(num_samples, batch_size, num_epochs, ss_type='exponential'):
@@ -534,7 +548,7 @@ def get_grammar_template_path(grammar_template: str):
         'grammar_3': ('grammar_templates/grammar_3.template', True),
     }[grammar_template]
 
-def get_grammar_iterator(experiment: Union[Experiment, OfflineExperiment], 
+def get_grammar_iterator(experiment, 
                             grammar_templates: List[str], 
                             vocab_distributions: List[str], 
                             num_runs: int):
@@ -558,19 +572,22 @@ def get_grammar_iterator(experiment: Union[Experiment, OfflineExperiment],
                     params)
 
 def get_result_iterator(run_metrics: Dict[str, Any]):
-    for exp_bias_idx, (exp_bias, df_p_q) in enumerate(zip(run_metrics['exp_biases'],
-                                                          run_metrics['df_p_qs'])):
+    for idx, (exp_bias, df_p_q) in enumerate(zip(run_metrics['exp_biases'],
+                                                 run_metrics['df_p_qs'])):
             sleep(randint(1, 10)/100.0)
             yield {
-                'exp_bias': exp_bias,
-                'Df_p_q': df_p_q,
-                'exp_bias_idx': exp_bias_idx,
+                'exp_bias/exp_bias': exp_bias,
+                'exp_bias/Df_p_q': df_p_q,
+                'exp_bias/exp_bias_idx': idx,
             }
 
 def get_mean_std_results(num_run:int,
                          num_samples:int,
-                         run_metrics: Dict[str, Any]):
-    return {
+                         run_metrics: Dict[str, Any], 
+                         extras: Dict[str, Any]):
+
+    prefix = 'exp_bias_mean'
+    output_dict =  {
         'num_run': num_run,
         'num_samples': num_samples,
         'val_ppl': run_metrics['best_validation_perplexity'],
@@ -590,6 +607,12 @@ def get_mean_std_results(num_run:int,
         # 'H_o_o_mean': run_metrics['H_o_o_mean'],
         # 'H_o_o_std': run_metrics['H_o_o_std'],
     }
+
+    output_dict.update(extras)
+    output_dict2 = {}
+    for key, val in output_dict.items():
+        output_dict2[f"{prefix}/{key}"] = val
+    return output_dict2
 
 def get_model_overrides_func(embed_dim: int, hidden_dim: int, num_layers: int):
     return lambda: json.dumps({

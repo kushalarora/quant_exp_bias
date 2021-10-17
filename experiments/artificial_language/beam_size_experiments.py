@@ -59,7 +59,6 @@ def beam_size_experiments(beam_sizes,
                             num_samples,
                             num_runs,
                           ):
-    step = 0
     # Setup variables needed later.
     orig_serialization_dir = serialization_dir
     def qeb_beam_size_overrides_func():
@@ -101,13 +100,12 @@ def beam_size_experiments(beam_sizes,
                             'val_ppl': run_metrics['best_validation_perplexity'],
                             'best_val_epoch': run_metrics['best_epoch'],
                             }
-                experiment.log_metrics(result, step=step)
-                step += 1
+                experiment.log(result)
                 sleep(randint(1,10)/10.0)
 
-            experiment.log_metric('exp_bias_mean', run_metrics['exp_bias_mean'], step=step)
-            experiment.log_metric('df_p_q_mean', run_metrics['df_p_q_mean'], step=step)
-            experiment.log_metric('df_q_p_mean', run_metrics['df_q_p_mean'], step=step)
+            experiment.log({'exp_bias_mean', run_metrics['exp_bias_mean'],
+                            'df_p_q_mean', run_metrics['df_p_q_mean'],
+                            'df_q_p_mean', run_metrics['df_q_p_mean']})
 
 if args.all:
     for num_samples, num_runs in num_samples_and_runs:

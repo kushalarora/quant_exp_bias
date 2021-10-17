@@ -41,7 +41,7 @@ class NaturalLanguageOracle(Oracle):
             self.device = torch.cuda.current_device()
         
         # Load pre-trained model tokenizer (vocabulary)
-        self.tokenizer = AutoTokenizer.from_pretrained('gpt2')
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.tokenizer.pad_token = self.tokenizer.eos_token
 
         # Load pre-trained model (weights)
@@ -50,9 +50,12 @@ class NaturalLanguageOracle(Oracle):
         self.batch_size = batch_size
         self.model.eval()
         self._start_token = start_token
-    
+        self._start_token_id = self.tokenizer.convert_tokens_to_ids(self._start_token)
+
         self._end_token = end_token
         self._end_token_id = self.tokenizer.convert_tokens_to_ids(self._end_token)
+        self._pad_token_id = self._end_token_id
+
         self._vocab_idxs = None
 
     def sample_training_set(self, num_samples: int):
@@ -61,24 +64,41 @@ class NaturalLanguageOracle(Oracle):
         """
         pass
 
-    def compute_sent_probs(self, sequences: List[List[str]]):
+    def compute_sent_probs(self, sequences: List[str], tokens: torch.LongTensor=None):
         # TODO (Kushal): Try to figure out how to do this efficiently
         # by batching the inputs.
         seq_batch_size = len(sequences)
         output = []
         batch_size = self.batch_size or seq_batch_size
-        
-        sequences = [self.tokenizer.convert_tokens_to_string(x) for x in sequences]
+
+        if tokens is not None:
+            start_token_idxs = tokens == self._start_token_id
+            end_token_idxs = tokens == self._end_token_id
+
+            tokens[start_token_idxs] = self.tokenizer.bos_token_id
+            tokens[end_token_idxs] = self.tokenizer.eos_token_id
+        else:
+            sequences = [f"{self.tokenizer.bos_token} {x} {self.tokenizer.eos_token}" \
+                                                                        for x in sequences]
+
         for i in range(0, seq_batch_size, batch_size):
-            batch = sequences[i:i + batch_size] \
-                        if i + batch_size < seq_batch_size \
-                            else sequences[i:seq_batch_size]
-            bsize = len(batch)
 
-            encoded_batch = self.tokenizer(batch, return_tensors='pt', padding=True)
+            if tokens is None:
+                batch = sequences[i:i + batch_size] \
+                            if i + batch_size < seq_batch_size \
+                                else sequences[i:seq_batch_size]
 
-            tensor_input = encoded_batch['input_ids'].to(torch.cuda.current_device())
-            attention_mask = encoded_batch['attention_mask'].to(torch.cuda.current_device())
+                encoded_batch = self.tokenizer(batch, return_tensors='pt', padding=True)
+
+                tensor_input = encoded_batch['input_ids'].to(torch.cuda.current_device())
+                attention_mask = encoded_batch['attention_mask'].to(torch.cuda.current_device())
+            else:
+                tensor_input = tokens[i:i + batch_size] \
+                                if i + batch_size < seq_batch_size \
+                                    else tokens[i:seq_batch_size]
+                attention_mask = tensor_input != self.tokenizer.pad_token_id
+
+            bsize = tensor_input.shape[0]
 
             with torch.no_grad():
                 results =  self.model(input_ids=tensor_input, 
@@ -86,23 +106,19 @@ class NaturalLanguageOracle(Oracle):
                                         attention_mask=attention_mask)
                 labels = tensor_input
                 logits = results[1]
-
-                loss_batch_seq = (torch.gather(F.log_softmax(logits[:, :-1], dim=-1), 
-                                                -1, 
-                                                tensor_input[:, 1:].unsqueeze(2)).squeeze(2)) * \
+                step_log_probs = F.log_softmax(logits[:, :-1], dim=-1)
+                loss_batch_seq = (torch.gather(step_log_probs, -1, 
+                                    tensor_input[:, 1:].unsqueeze(2)).squeeze(2)) * \
                                     attention_mask[:, 1:]
 
-                seq_sizes = attention_mask[:, 1:].sum(dim=-1)
-                loss_batch = loss_batch_seq.sum(dim=-1)/(seq_sizes + 1)
+                seq_sizes = attention_mask.sum(dim=-1)
+                loss_batch = loss_batch_seq.sum(dim=-1)/(seq_sizes)
                 
                 probs = torch.exp(loss_batch)
                 seq_probs = torch.exp(loss_batch_seq)
-                # Dummy first token. This is ignored while computing exposure bias.
-                start_tokens = torch.ones((bsize, 1), dtype=torch.float, device=self.device)
-                seq_probs = torch.cat([start_tokens, seq_probs], dim=-1)
 
                 for j in range(bsize):
-                    output.append((probs[j].item(), seq_probs[j].tolist(), seq_sizes[j]))
+                    output.append((probs[j].item(), seq_probs[j].tolist(), seq_sizes[j].item(), step_log_probs[j]))
         return output
 
     # TODO (Figure out how to support mixed rollout with this.)

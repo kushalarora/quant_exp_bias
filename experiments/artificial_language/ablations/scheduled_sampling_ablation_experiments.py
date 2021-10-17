@@ -43,7 +43,6 @@ def scheduled_sampling_ablation_experiments(scheduled_sampling_ratios,
                                             num_samples,
                                             num_runs,
                                            ):
-    step = 0
     orig_serialization_dir = serialization_dir
     for ss_type, ss_ratio, ss_k in scheduled_sampling_ratios:
         serialization_dir = os.path.join(orig_serialization_dir, f'{ss_type}_{ss_ratio}_{ss_k}')
@@ -73,8 +72,7 @@ def scheduled_sampling_ablation_experiments(scheduled_sampling_ratios,
             run_metrics = run_metrics[0]
 
             for result in get_result_iterator(run_metrics):
-                experiment.log_metrics(result, step=step)
-                step += 1
+                experiment.log(result)
 
             mean_results = get_mean_std_results(num_run, num_samples, run_metrics)
             mean_results.update(grammar_params)
@@ -85,7 +83,7 @@ def scheduled_sampling_ablation_experiments(scheduled_sampling_ratios,
                     'final_ss_ratio': run_metrics['validation_ss_ratio'],
                     'best_val_ss_ratio': run_metrics['best_validation_ss_ratio'],
             })
-            experiment.log_metrics(mean_results, step=step)
+            experiment.log(mean_results)
 
 if args.all:
     for num_samples, num_runs in num_samples_and_runs:

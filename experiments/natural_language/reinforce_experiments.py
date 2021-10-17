@@ -51,7 +51,6 @@ def reinforce_experiments(main_args,
         
         os.environ['WARM_START_MODEL'] = os.path.join(pretrained_model, 'training/')
     # Setup variables needed later.
-    step = 0
     orig_serialization_dir = serialization_dir
     serialization_dir = os.path.join(orig_serialization_dir)
     for num_run in range(num_runs):
@@ -74,11 +73,10 @@ def reinforce_experiments(main_args,
         run_metrics = run_metrics[0]
 
         for result in get_result_iterator(run_metrics):
-            experiment.log_metrics(result, step=step)
-            step += 1
+            experiment.log(result)
 
         mean_results = get_mean_std_results(num_run, num_samples, run_metrics)
-        experiment.log_metrics(mean_results, step=step)
+        experiment.log(mean_results)
 
 if args.all:
     for num_samples, num_runs in num_samples_and_runs:

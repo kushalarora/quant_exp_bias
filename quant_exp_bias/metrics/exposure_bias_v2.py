@@ -12,11 +12,13 @@ import random
 import math
 from functools import reduce, partial
 
+import torch.nn.functional as F
+
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
-@Metric.register("exp_bias")
-class ExposureBias(Metric):
+@Metric.register("exp_bias_v2")
+class ExposureBiasV2(Metric):
     """
     This :class:`Metric` breaks with the typical ``Metric`` API and just stores values that were
     computed in some fashion outside of a ``Metric``.  If you have some external code that computes
@@ -41,7 +43,10 @@ class ExposureBias(Metric):
     @overrides
     def __call__(self,
                  model_sampled_predictions: List[str],
+                 model_sampled_seq_lengths: List[int],
+                 model_sampled_tokens: torch.LongTensor,
                  model_sampled_model_seq_probs: torch.FloatTensor,
+                 model_sampled_step_log_probs: torch.FloatTensor,
                 ):
         """
         Parameters
@@ -56,28 +61,35 @@ class ExposureBias(Metric):
         df_p_qs = []
         df_p_q_count_total = 0
         model_sampled_oracle_probs = []
-        model_sampled_oracle_probs_and_seq_probs = self._oracle.compute_sent_probs(model_sampled_predictions)
+        model_sampled_oracle_probs_and_seq_probs = self._oracle.compute_sent_probs(
+                                                            model_sampled_predictions, 
+                                                            model_sampled_tokens)
+
         for i in range(model_sampled_batch_size):
-            
             if len(model_sampled_predictions[i]) == 0:
                 continue
 
             values = []
             prev_p_qs = []
-            seq_len = min(len(model_sampled_predictions[i]) + 1, 
-                            len(model_sampled_oracle_probs_and_seq_probs[i][1]),
-                                len(model_sampled_model_seq_probs[i]))
+            seq_len = model_sampled_seq_lengths[i]
+
+            assert model_sampled_seq_lengths[i] == model_sampled_oracle_probs_and_seq_probs[i][2]
 
             df_p_q_seq = 0
             df_p_q_count_seq = 0
-            import pdb; pdb.set_trace()
             for j in range(1, seq_len):
                 # Here model_sampled_model_prob is Q because the samples
                 # come from the model.
-                P = model_sampled_model_seq_probs[i][j].item()
-                O = model_sampled_oracle_probs_and_seq_probs[i][1][j]
+                P_0_j = model_sampled_model_seq_probs[i][:j] \
+                                        .log().sum(dim=-1).exp()
+                
+                model_sampled_oracle_step_prob = F.softmax(model_sampled_oracle_probs_and_seq_probs[i][-1][j], dim=-1)
+                model_sampled_step_log_prob = model_sampled_step_log_probs[i, j, :-2]
+                k_l = F.kl_div(model_sampled_step_log_prob, 
+                                model_sampled_oracle_step_prob,
+                                reduction='sum')
 
-                value = (np.log(P) - np.log(O))
+                value = k_l.item()
                 
                 values.append(value)
                 df_p_q_seq += value

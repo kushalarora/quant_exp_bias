@@ -46,7 +46,6 @@ def scheduled_sampling_ablation_experiments(scheduled_sampling_dict,
                                     num_runs,
                                     ss_configs,
                                   ):
-    step = 0
     orig_serialization_dir = serialization_dir
     for ss_config in ss_configs:
         ss_type, ss_ratio, ss_k = scheduled_sampling_dict[ss_config]
@@ -73,8 +72,7 @@ def scheduled_sampling_ablation_experiments(scheduled_sampling_dict,
             run_metrics = run_metrics[0]
 
             for result in get_result_iterator(run_metrics):
-                experiment.log_metrics(result, step=step)
-                step += 1
+                experiment.log(result)
 
             mean_results = get_mean_std_results(num_run, num_samples, run_metrics)
             mean_results.update({                        
@@ -85,7 +83,7 @@ def scheduled_sampling_ablation_experiments(scheduled_sampling_dict,
                     'final_ss_ratio': run_metrics['validation_ss_ratio'],
                     'best_val_ss_ratio': run_metrics['best_validation_ss_ratio'],
             })
-            experiment.log_metrics(mean_results, step=step)
+            experiment.log(mean_results)
 
 if args.all:
     for num_samples, num_runs in num_samples_and_runs:

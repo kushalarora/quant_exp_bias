@@ -4,7 +4,7 @@ from typing import List, Tuple
 from overrides import overrides
 from transformers import GPT2Tokenizer
 
-from allennlp.data.tokenizers.token import Token
+from allennlp.data.tokenizers.token_class import Token
 from allennlp.data.tokenizers.tokenizer import Tokenizer
 
 logger = logging.getLogger(__name__)
@@ -58,7 +58,5 @@ class PretrainedTransformerTokenizer(Tokenizer):
 
 
 def _guess_start_and_end_token_defaults(model_name: str) -> Tuple[List[str], List[str]]:
-    if 'bert' in model_name:
-        return (['[CLS]'], ['[SEP]'])
-    else:
-        return ([], [])
+    tokenizer = GPT2Tokenizer.from_pretrained(model_name)
+    return ([tokenizer.bos_token], [tokenizer.eos_token])

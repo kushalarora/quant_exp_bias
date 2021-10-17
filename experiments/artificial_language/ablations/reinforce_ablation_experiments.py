@@ -67,7 +67,6 @@ def reinforce_experiments(main_args,
     os.environ['WEIGHT_FILE_PATH'] = os.path.join(pretrained_model, 'training/best.th')
 
     # Setup variables needed later.
-    step = 0
     for cost_func, mixing_coeff in itertools.product(rollout_cost_funcs, mixing_coeffs):
         serialization_dir = os.path.join(orig_serialization_dir, f'{cost_func}_{mixing_coeff}')
         for grammars_and_vocabularies in get_grammar_iterator(experiment,
@@ -92,8 +91,7 @@ def reinforce_experiments(main_args,
             run_metrics = run_metrics[0]
 
             for result in get_result_iterator(run_metrics):
-                experiment.log_metrics(result, step=step)
-                step += 1
+                experiment.log(result)
 
             mean_results = get_mean_std_results(num_run, num_samples, run_metrics)
             mean_results.update(grammar_params)
@@ -101,7 +99,7 @@ def reinforce_experiments(main_args,
                 'cost_func': cost_func,
                 'mixing_coeff': mixing_coeff,
             })
-            experiment.log_metrics(mean_results, step=step)
+            experiment.log(mean_results)
 
 
 if args.all:

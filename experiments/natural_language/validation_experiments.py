@@ -37,7 +37,6 @@ def validation_experiments(main_args,
                             num_samples,
                             num_runs,
                            ):
-    step = 0
     overrides = json.dumps({'trainer': {'num_epochs': 20, 'patience': None}})
 
     for num_run in range(num_runs):
@@ -61,12 +60,11 @@ def validation_experiments(main_args,
             epoch = run_metrics['epoch']
 
             for result in get_result_iterator(run_metrics):
-                experiment.log_metrics(result, step=step)
-                step += 1
+                experiment.log(result)
 
             mean_results = get_mean_std_results(num_run, num_samples, run_metrics)
             mean_results['epoch'] = epoch
-            experiment.log_metrics(mean_results, step=step)
+            experiment.log(mean_results)
 
 if args.all:
     for num_samples, num_runs in num_samples_and_runs:

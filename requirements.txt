@@ -1,11 +1,10 @@
 setuptools
-git+https://github.com/kushalarora/LMPL#egg=lmpl-0.1.1
+git+https://github.com/kushalarora/LMPL
 cython==0.29.14
 comet_ml==3.1.11
-numpy==1.18.1
+numpy==1.20.3
 spacy==2.2.0
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-2.2.0/en_core_web_sm-2.2.0.tar.gz
-transformers==3.0.2
 sacrebleu==1.4.4
 torchvision
 fairseq==0.9.0

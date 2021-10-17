@@ -36,7 +36,7 @@ def vocabulary_size_experiments(grammar_vocab_size_and_dist,
                                 num_samples,
                                 num_runs,
                                ):
-    step = 0
+
     orig_serialization_dir = serialization_dir
     for grammar_template, size, dist in grammar_vocab_size_and_dist:
         vsexp_serialization_dir = os.path.join(orig_serialization_dir,  
@@ -58,8 +58,7 @@ def vocabulary_size_experiments(grammar_vocab_size_and_dist,
             run_metrics = run_metrics[0]
         
             for result in get_result_iterator(run_metrics):
-                experiment.log_metrics(result, step=step)
-                step += 1
+                experiment.log(result)
 
             mean_results = get_mean_std_results(num_run, num_samples, run_metrics)
             mean_results.update({
@@ -67,7 +66,7 @@ def vocabulary_size_experiments(grammar_vocab_size_and_dist,
                 'vocab_distribution': dist,
                 'vocab_size': size,
             })
-            experiment.log_metrics(mean_results, step=step)
+            experiment.log(mean_results)
 
 if args.all:
     for num_samples, num_runs in num_samples_and_runs:

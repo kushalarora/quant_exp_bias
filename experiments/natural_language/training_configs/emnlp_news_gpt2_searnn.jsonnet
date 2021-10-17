@@ -35,7 +35,7 @@ emnlp_gpt2_searnn_config + {
           "rollout_ratio": 0.33,
           "loss_criterion": loss_criterion,
           "include_first": true,
-          "include_last": false,
+          "include_last": true,
           "max_num_contexts": 20,
           // "add_noise_to_sampling": false,
           "max_sampling_noise": 1e-3,

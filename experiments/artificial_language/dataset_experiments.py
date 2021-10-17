@@ -43,12 +43,12 @@ def dataset_experiments(main_args, serialization_dir, param_path,
         run_metrics = run_metrics[0]
 
         for result in get_result_iterator(run_metrics):
-            experiment.log_metrics(result, step=step)
+            experiment.log(result)
             step += 1
 
         mean_results = get_mean_std_results(num_run, num_samples, run_metrics)
         mean_results.update(grammar_params)
-        experiment.log_metrics(mean_results, step=step)
+        experiment.log(mean_results)
     return run_serialization_dir
 
 if args.all:

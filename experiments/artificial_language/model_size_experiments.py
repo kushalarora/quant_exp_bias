@@ -35,7 +35,6 @@ def model_size_experiments(model_sizes,
                             num_samples,
                             num_runs,
                            ):
-    step = 0
     # Setup variables needed later.
     orig_serialization_dir = serialization_dir
     for model_size in model_sizes:
@@ -66,13 +65,12 @@ def model_size_experiments(model_sizes,
 
             for result in get_result_iterator(run_metrics):
                 result['model_size'] = model_size
-                experiment.log_metrics(result, step=step)
-                step += 1
+                experiment.log(result)
 
             mean_results = get_mean_std_results(num_run, num_samples, run_metrics)
             mean_results['model_size'] = model_size
             mean_results.update(grammar_params)
-            experiment.log_metrics(mean_results, step=step)
+            experiment.log(mean_results)
 
     experiment.log_asset_folder(serialization_dir, log_file_name=True, recursive=True)
 

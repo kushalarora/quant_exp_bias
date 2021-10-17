@@ -32,7 +32,6 @@ def searnn_experiments(rollin_rollout_configs,
                         num_runs,
                       ):
     # Setup variables needed later.
-    step = 0
     orig_serialization_dir = serialization_dir
     for rollin_policy, rollout_policy, cost_func, mixing_coeff in rollin_rollout_cost_func_configs:
         os.environ['rollin_mode'] = rollin_policy
@@ -63,8 +62,7 @@ def searnn_experiments(rollin_rollout_configs,
             run_metrics = run_metrics[0]
             
             for result in get_result_iterator(run_metrics):
-                experiment.log_metrics(result, step=step)
-                step += 1
+                experiment.log(result)
 
             mean_results = get_mean_std_results(num_run, num_samples, run_metrics)
             mean_results.update(grammar_params)
@@ -74,7 +72,7 @@ def searnn_experiments(rollin_rollout_configs,
                 'cost_func': cost_func,
                 'mixing_coeff': mixing_coeff,
             })
-            experiment.log_metrics(mean_results, step=step)
+            experiment.log(mean_results)
 
 if args.all:
     for num_samples, num_runs in num_samples_and_runs:

@@ -118,8 +118,10 @@ def sample_oracle(params: Params,
         # TODO (Kushal): Maybe consider moving this out.
         filesize = 0
         with open(dataset_filename) as dataset_file:
+            for line in dataset_file:
+                filesize += 1
 
-
+        with open(dataset_filename) as dataset_file:
             # Get 10% valid set or 1000 examples, whichever is less.
             num_samples += max(1000, int(0.1 * num_samples))
             oracle_sample_iterator = []

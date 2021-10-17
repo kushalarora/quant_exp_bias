@@ -30,7 +30,6 @@ def searnn_experiments(rollin_rollout_configs,
                             num_samples,
                             num_runs,
                       ):
-    step = 0
     # Setup variables needed later.
     orig_serialization_dir = serialization_dir
     for rollin_policy, rollout_policy in rollin_rollout_configs:
@@ -56,15 +55,14 @@ def searnn_experiments(rollin_rollout_configs,
             run_metrics = run_metrics[0]
             
             for result in get_result_iterator(run_metrics):
-                experiment.log_metrics(result, step=step)
-                step += 1
+                experiment.log(result)
 
             mean_results = get_mean_std_results(num_run, num_samples, run_metrics)
             mean_results.update({
                 'rollin_policy': rollin_policy,
                 'rollout_policy': rollout_policy,
             })
-            experiment.log_metrics(mean_results, step=step)
+            experiment.log(mean_results)
 
 if args.all:
     for num_samples, num_runs in num_samples_and_runs:
