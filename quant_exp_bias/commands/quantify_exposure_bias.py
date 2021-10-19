@@ -288,17 +288,15 @@ def quantify_exposure_bias(archive_file: str,
                 model_sampled_model_seq_probs = torch.exp(torch.gather(step_log_probs, -1,
                                                                         best_predictions[:,1:].unsqueeze(2)) \
                                                                 .squeeze(2))
-                try:
-                    import pdb; pdb.set_trace()
-                    exp_bias_output_dict = exposure_bias(
-                                            model_sampled_predictions=predictions,
-                                            model_sampled_seq_lengths=predicted_seq_lengths,
-                                            model_sampled_tokens=best_predictions,
-                                            model_sampled_model_seq_probs=model_sampled_model_seq_probs.data.cpu(),
-                                            model_sampled_step_log_probs=step_log_probs,
-                                        )
-                except:
-                    continue
+
+                exp_bias_output_dict = exposure_bias(
+                                        model_sampled_predictions=predictions,
+                                        model_sampled_seq_lengths=predicted_seq_lengths,
+                                        model_sampled_tokens=best_predictions,
+                                        model_sampled_model_seq_probs=model_sampled_model_seq_probs.data.cpu(),
+                                        model_sampled_step_log_probs=step_log_probs,
+                                    )
+
 
 
                 metric_trial = exposure_bias.get_metric(reset=True)

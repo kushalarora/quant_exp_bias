@@ -11,7 +11,8 @@ local optimizer = {
 
 local validation_metric = '-perplexity';
 
-local gpt2_dir="/home/karora/scratch/huggingface/gpt2/";
+// local gpt2_model="/home/karora/scratch/huggingface/gpt2/";
+local gpt2_model="gpt2";
 
 local dropout_ratio = 0.4;
 
@@ -26,7 +27,7 @@ local dataset_reader =  {
       "tokenizer": {
         // "type": "pretrained_transformer",
         "type": "qeb_pretrained_transformer",
-        "model_name": gpt2_dir,
+        "model_name": gpt2_model,
         "start_tokens": ["@@@@"],
         "end_tokens": ["####"],
         // "do_lowercase": false,
@@ -35,7 +36,7 @@ local dataset_reader =  {
 
 local oracle = {
           "type": "gpt2_oracle",
-          "model_name": gpt2_dir,
+          "model_name": gpt2_model,
           "batch_size": 16,
           "cuda_device": 0,
       };
@@ -45,7 +46,7 @@ local decoder_type = "lmpl_auto_regressive_seq_decoder";
 local distributed = std.extVar("DISTRIBUTED");
 local ngpu=std.parseInt(std.extVar("NUM_GPUS"));
 
-local wandb_run_name=std.extVar("WANDB_RUN_NAME");
+local wandb_group_name=std.extVar("WANDB_GROUP_NAME");
 local wandb_project_name=std.extVar("WANDB_PROJECT_NAME");
 
 local batch_size = 48;
@@ -121,7 +122,7 @@ local stringToBool(s) =
       },
       "detokenizer": {
         "type": "gpt2_detokenizer",
-        "model_name": gpt2_dir,
+        "model_name": gpt2_model,
       },
   },
   "data_loader": {
@@ -146,12 +147,12 @@ local stringToBool(s) =
       "keep_most_recent_by_count": 20,
     },
     "callbacks": [{
-          "type": 'tensorboard',
-          // "project": wandb_project_name,
-          // "name": wandb_run_name,
+          "type": 'wandb',
+          "project": wandb_project_name,
+          "group": wandb_group_name,
           "should_log_learning_rate": true,
           "summary_interval": 10,
-          // "watch_model": false,
+          "watch_model": true,
           // "files_to_save": [],
     }],
     "num_gradient_accumulation_steps": 1,

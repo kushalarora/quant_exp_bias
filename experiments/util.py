@@ -76,9 +76,9 @@ def initialize_experiments(experiment_name: str,
     # ipython notebook.
     main_args = get_args(args=[])
 
-    id = datetime.now().strftime("%m_%d_%Y_%H_%M_%S")
-    experiment_id = f'{experiment_name}-{id}'
-    serialization_dir = os.path.join(output_dir or main_args.output_dir, experiment_name, experiment_id)
+    experiment_id = datetime.now().strftime("%m_%d_%Y_%H_%M_%S")
+    serialization_dir = os.path.join(output_dir or main_args.output_dir, 
+                                            experiment_name, experiment_id)
     param_path = param_path or main_args.config
 
     os.makedirs(serialization_dir, exist_ok=True)
@@ -91,43 +91,15 @@ def initialize_experiments(experiment_name: str,
         random.seed(220488)
 
     workspace_name = 'qeb'
-    config = {'serialization_dir': serialization_dir,
-                'main_args': main_args,
-                'param_path': param_path,
-                'experiment_name': experiment_name,
-                'experiment_id': experiment_id}
-
     os.environ['WANDB_MODE'] = 'online'
     if offline:
         os.environ['WANDB_MODE'] = 'offline'
 
-    experiment = wandb.init(job_type=experiment_name,
-                            dir=serialization_dir,
-                            config=config,
-                            project=workspace_name,
-                            name=experiment_id,)
-    os.environ['WANDB_RUN_NAME'] = experiment_id
+
+    os.environ['WANDB_GROUP_NAME'] = f"{experiment_name}-{experiment_id}"
     os.environ['WANDB_PROJECT_NAME'] = workspace_name
-
-    #     experiment = Experiment(api_key='2UIhYs7jRdE2DbJDAB5OysNqM',
-    #                             workspace=workspace_name,
-    #                             project_name=experiment_name,
-    #                             auto_metric_logging=False,
-    #                             auto_param_logging=False,
-    #                             )
-    # except:
-    #     experiment = OfflineExperiment(
-    #         workspace=workspace_name,
-    #         project_name=experiment_name,
-    #         auto_metric_logging=False,
-    #         auto_param_logging=False,
-    #         offline_directory="./comet_exp/",
-    #     )
     
-    if experiment_text:
-        experiment.log(experiment_text)
-
-    return main_args, serialization_dir, param_path, experiment_id, experiment
+    return main_args, serialization_dir, param_path
 
 
 def default_overides_func():
@@ -136,16 +108,17 @@ def default_overides_func():
 
 def default_exp_bias_epochs_func(train_model_serialization_dir):
     epoch = -1
-    qeb_suffix = ''
+    qeb_suffix = 'best_epoch'
     metrics_filename = 'metrics.json'
-    return [(epoch, qeb_suffix, metrics_filename)]
+    model_filename = None
+    return [(epoch, qeb_suffix, metrics_filename, model_filename)]
 
 def last_exp_bias_epoch_func(train_model_serialization_dir):
-    epoch_files = glob.glob(os.path.join(train_model_serialization_dir + '/model_state_epoch_*.th'))
-    epochs = sorted([int(re.search('epoch_([0-9]+).th', fname).group(1)) for fname in epoch_files])
-    epoch = epochs[-1]
-    metrics_filename = f'metrics_epoch_{epoch}.json'
-    return [(-1, '', metrics_filename)]
+    epoch_files = glob.glob(os.path.join(train_model_serialization_dir + '/model_state_e*.th'))
+    epochs = sorted([(int(re.search('model_state_e([0-9]+)_.*.th', fname).group(1)), fname) for fname in epoch_files])
+    epoch, model_filename = epochs[-1]
+    metrics_filename = f'metrics_epoch_{epoch-1}.json'
+    return [(epoch-1, f'epoch-{epoch-1}', metrics_filename, model_filename)]
 
 
 def shard_file(filename: str):
@@ -273,21 +246,11 @@ def quantify_exposure_bias(metric_filepath: str,
     metrics['df_p_q_mean'] = df_p_q_mean
     metrics['df_p_q_std'] = df_p_q_std
 
-    # metrics['df_q_ps'] = df_q_ps
-    # metrics['df_q_p_mean'] = df_q_p_mean
-    # metrics['df_q_p_std'] = df_q_p_std
-
     metrics['H_m_m_mean'] = h_m_m_mean
     metrics['H_m_m_std'] =  h_m_m_std
 
     metrics['H_m_o_mean'] = h_m_o_mean
     metrics['H_m_o_std'] = h_m_o_std
-
-    # metrics['H_o_m_mean'] = h_o_m_mean
-    # metrics['H_o_m_std'] = h_o_m_std
-    
-    # metrics['H_o_o_mean'] = h_o_o_mean
-    # metrics['H_o_o_std'] = h_o_o_std
 
     return metrics
 
@@ -379,19 +342,35 @@ def one_exp_run(serialization_dir: str = None,
 
     metric_list = []
     if not donot_quantify:
+        experiment_name = os.environ['WANDB_GROUP_NAME']
+        workspace_name = os.environ['WANDB_PROJECT_NAME']
+
+        config = {'run_serialization_dir': run_serialization_dir,
+                    'num_samples': num_samples,
+                    "run_num": run,
+                    'param_path': param_path,
+                    'experiment_name': experiment_name,
+                    'experiment_id': id, 
+                    'qeb_num_trials': num_trials,
+                    'qeb_num_length_samples': num_length_samples,
+                    'qeb_num_samples_per_length': num_samples_per_length,
+                    'only_quantify': only_quantify,
+                }
+
+        experiment = wandb.init(
+                            dir=train_model_serialization_dir,
+                            config=config,
+                            project=workspace_name,
+                            reinit=True,
+                            group=experiment_name)
+
         # This is only needed when doing validation experiments.
-        for epoch, qeb_suffix, metric_filename in exp_bias_epochs_func(train_model_serialization_dir):
+        for epoch, qeb_suffix, metric_filename, weights_file in exp_bias_epochs_func(train_model_serialization_dir):
             qeb_output_dir = os.path.join(run_serialization_dir, 
-                                        'exp_bias', 
-                                        qeb_suffix)
+                                            'exp_bias', qeb_suffix)
 
             metrics_filepath = os.path.join(train_model_serialization_dir, 
                                                 metric_filename)
-            weights_file = None
-            if epoch != -1:
-                weights_file = os.path.join(train_model_serialization_dir, 
-                                            f'model_state_epoch_{epoch}.th')
-
             metrics = quantify_exposure_bias(metric_filepath=metrics_filepath,
                                             archive_file=archive_file, 
                                             oracle_config=oracle_config,
@@ -402,6 +381,14 @@ def one_exp_run(serialization_dir: str = None,
                                             num_length_samples=num_length_samples,
                                             num_samples_per_length=num_samples_per_length)
             metrics['run_serialization_dir'] = run_serialization_dir
+
+            prefix=f'exp_bias/{run}/epochs/{qeb_suffix}'
+            for metric in get_result_iterator(metrics, prefix=prefix):
+                experiment.log(metric)
+
+            prefix=f'exp_bias/{run}/epochs/{qeb_suffix}-mean'
+            experiment.log(get_mean_std_results(run, num_samples, metrics, 
+                                                prefix=prefix))
             metric_list.append(metrics)
 
         for key, value, qeb_overides in exp_bias_inference_funcs():
@@ -424,6 +411,14 @@ def one_exp_run(serialization_dir: str = None,
                                             overrides=qeb_overides)
             metrics[key] = value
             metrics['run_serialization_dir'] = run_serialization_dir
+            
+            prefix=f'exp_bias/{run}/inference/{qeb_suffix}'
+            for metric in get_result_iterator(metrics, prefix=prefix):
+                experiment.log(metric)
+
+            prefix=f'exp_bias/{run}/inference/{qeb_suffix}-mean/'
+            experiment.log(get_mean_std_results(run, num_samples, metrics, 
+                                                prefix=prefix))
             metric_list.append(metrics)
     return metric_list, run_serialization_dir
 
@@ -571,48 +566,40 @@ def get_grammar_iterator(experiment,
                     shall_generate_grammar_file, 
                     params)
 
-def get_result_iterator(run_metrics: Dict[str, Any]):
+def get_result_iterator(run_metrics: Dict[str, Any], prefix='exp_bias'):
     for idx, (exp_bias, df_p_q) in enumerate(zip(run_metrics['exp_biases'],
                                                  run_metrics['df_p_qs'])):
-            sleep(randint(1, 10)/100.0)
             yield {
-                'exp_bias/exp_bias': exp_bias,
-                'exp_bias/Df_p_q': df_p_q,
-                'exp_bias/exp_bias_idx': idx,
+                f'{prefix}/exp_bias': exp_bias,
+                f'{prefix}/Df_p_q': df_p_q,
+                f'{prefix}/exp_bias_idx': idx,
             }
 
-def get_mean_std_results(num_run:int,
+def get_mean_std_results(run_num:int,
                          num_samples:int,
-                         run_metrics: Dict[str, Any], 
-                         extras: Dict[str, Any]):
+                         run_metrics: Dict[str, Any],
+                         prefix:str ='exp_bias', 
+                         extras:Dict[str, Any]={}):
 
-    prefix = 'exp_bias_mean'
     output_dict =  {
-        'num_run': num_run,
-        'num_samples': num_samples,
-        'val_ppl': run_metrics['best_validation_perplexity'],
-        'best_val_epoch': run_metrics['best_epoch'],
-        'exp_bias_mean': run_metrics['exp_bias_mean'],
-        'exp_bias_std': run_metrics['exp_bias_std'],
-        'df_p_q_mean': run_metrics['df_p_q_mean'],
-        'df_p_q_std': run_metrics['df_p_q_std'],
-        # 'df_q_p_mean': run_metrics['df_q_p_mean'],
-        # 'df_q_p_std': run_metrics['df_q_p_std'],
-        'H_m_m_mean': run_metrics['H_m_m_mean'],
-        'H_m_m_std': run_metrics['H_m_m_std'],
-        'H_m_o_mean': run_metrics['H_m_o_mean'],
-        'H_m_o_std': run_metrics['H_m_o_std'],
-        # 'H_o_m_mean': run_metrics['H_o_m_mean'],
-        # 'H_o_m_std': run_metrics['H_o_m_std'],
-        # 'H_o_o_mean': run_metrics['H_o_o_mean'],
-        # 'H_o_o_std': run_metrics['H_o_o_std'],
+        f'{prefix}/run_num': run_num,
+        f'{prefix}/num_samples': num_samples,
+        f'{prefix}/val_ppl': run_metrics['best_validation_perplexity'],
+        f'{prefix}/best_val_epoch': run_metrics['best_epoch'],
+        f'{prefix}/exp_bias_mean': run_metrics['exp_bias_mean'],
+        f'{prefix}/exp_bias_std': run_metrics['exp_bias_std'],
+        f'{prefix}/df_p_q_mean': run_metrics['df_p_q_mean'],
+        f'{prefix}/df_p_q_std': run_metrics['df_p_q_std'],
+        f'{prefix}/H_m_m_mean': run_metrics['H_m_m_mean'],
+        f'{prefix}/H_m_m_std': run_metrics['H_m_m_std'],
+        f'{prefix}/H_m_o_mean': run_metrics['H_m_o_mean'],
+        f'{prefix}/H_m_o_std': run_metrics['H_m_o_std'],
     }
-
-    output_dict.update(extras)
-    output_dict2 = {}
-    for key, val in output_dict.items():
-        output_dict2[f"{prefix}/{key}"] = val
-    return output_dict2
+    extras_ = {}
+    for key, val in extras.items():
+        extras_[f'{prefix}/{key}'] = val
+    output_dict.update(extras_)
+    return output_dict
 
 def get_model_overrides_func(embed_dim: int, hidden_dim: int, num_layers: int):
     return lambda: json.dumps({
